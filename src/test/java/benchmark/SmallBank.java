@@ -66,6 +66,13 @@ public class SmallBank {
         return oPath + currTime;
     }
 
+    private String genStringWithTimestamp() {
+        return LocalDateTime
+                .now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))
+                .trim();
+    }
+
     private String getStrategyName(CCType type) {
         return switch (type) {
             case SER -> "SER";
@@ -95,10 +102,10 @@ public class SmallBank {
     @Test
     void TestScalability() throws IOException {
         // figure1: strategy + terminals
-        String resultPath = resultPrefix + "scalability/";
+        String resultPath = resultPrefix + "scalability/" + genStringWithTimestamp() + "/";
         String configPath = configPrefix + "sample.xml";
 
-        int[] terminalList = new int[]{4, 8, 16, 32, 64};
+        int[] terminalList = new int[]{4, 8, 16, 32, 64, 128, 256};
         CCType[] types = new CCType[]{CCType.SER,
                 CCType.SI_ELT, CCType.SI_FOR_UPDATE,
                 CCType.RC_ELT, CCType.RC_FOR_UPDATE,
@@ -108,7 +115,7 @@ public class SmallBank {
             TriStar.setType_(type.getName());
             for (int t: terminalList) {
                 TriStar.setTerminals_(t);
-                String resultDir = genResultPathWithTimestamp(resultPath, "terminals_" + t + "_" + typeName);
+                String resultDir = resultPath + String.format("terminals_%03d_", t) + typeName;
                 String[] args = {"-c", configPath,
                         "-b smallbank",
                         "--execute=true",
@@ -121,11 +128,11 @@ public class SmallBank {
     @Test
     void TestHotspot() throws IOException {
         // figure2: strategy + hotspot + percentage
-        String resultPath = resultPrefix + "hotspot-16/";
+        String resultPath = resultPrefix + "hotspot-64/" + genStringWithTimestamp() + "/";
         String configPath = configPrefix + "sample.xml";
 
         // default variable
-        int terminal = 16;
+        int terminal = 64;
         TriStar.setTerminals_(terminal);
         // flexible variable
         int[] hotspots = new int[]{10, 100, 1000, 10000};
@@ -140,8 +147,8 @@ public class SmallBank {
                 TriStar.setHotspotProbability_(p);
                 for (CCType type: types) {
                     TriStar.setType_(type.getName());
-                    String caseName = "hotspot_" + h + "_pro_" + p + "_" + type.getName();
-                    String resultDir = genResultPathWithTimestamp(resultPath, caseName);
+                    String caseName = String.format("hotspot_%05d_pro_%05.2f_", h, p) + type.getName();
+                    String resultDir = resultPath + caseName;
                     String[] args = {"-c", configPath,
                             "-b smallbank",
                             "--execute=true",
