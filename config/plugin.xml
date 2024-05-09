@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<plugins>
+    <plugin name="smallbank">org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankBenchmark</plugin>
+    <plugin name="tpcc">org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCBenchmark</plugin>
+</plugins>

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<tristar>
+    <databaseName>smallbank</databaseName>
+    <relations>
+        <relation>
+            <name>accounts</name>
+            <attributes>custid, name</attributes>
+            <primary>custid</primary>
+        </relation>
+        <relation>
+            <name>savings</name>
+            <attributes>custid, bal</attributes>
+            <primary>custid</primary>
+        </relation>
+        <relation>
+            <name>checking</name>
+            <attributes>custid, bal</attributes>
+            <primary>custid</primary>
+        </relation>
+    </relations>
+</tristar>

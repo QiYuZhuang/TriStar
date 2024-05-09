@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+<tristar>
+    <workload>smallbank</workload>
+    <databaseName>smallbank</databaseName>
+    <transactionTemplates>
+        <transactionTemplate>
+            <name>Balance</name>
+            <operations>
+                <operation>
+                    <type>READ</type>
+                    <relationName>accounts</relationName>
+                    <attributes>custid, name</attributes>
+                </operation>
+                <operation>
+                    <type>READ</type>
+                    <relationName>savings</relationName>
+                    <attributes>custid, bal</attributes>
+                </operation>
+                <operation>
+                    <type>READ</type>
+                    <relationName>checking</relationName>
+                    <attributes>custid, bal</attributes>
+                </operation>
+            </operations>
+        </transactionTemplate>
+        <transactionTemplate>
+            <name>DepositChecking</name>
+            <operations>
+                <operation>
+                    <type>READ</type>
+                    <relationName>accounts</relationName>
+                    <attributes>custid, name</attributes>
+                </operation>
+                <operation>
+                    <type>UPDATE</type>
+                    <relationName>checking</relationName>
+                    <attributes>custid, bal</attributes>
+                    <updateAttributes>B</updateAttributes>
+                </operation>
+            </operations>
+        </transactionTemplate>
+        <transactionTemplate>
+            <name>TransactSavings</name>
+            <operations>
+                <operation>
+                    <type>READ</type>
+                    <relationName>accounts</relationName>
+                    <attributes>custid, name</attributes>
+                </operation>
+                <operation>
+                    <type>UPDATE</type>
+                    <relationName>savings</relationName>
+                    <attributes>custid, bal</attributes>
+                    <updateAttributes>bal</updateAttributes>
+                </operation>
+            </operations>
+        </transactionTemplate>
+        <transactionTemplate>
+            <name>Amalgamate</name>
+            <operations>
+                <operation>
+                    <type>READ</type>
+                    <relationName>accounts</relationName>
+                    <attributes>custid, name</attributes>
+                    <count>2</count>
+                </operation>
+                <operation>
+                    <type>UPDATE</type>
+                    <relationName>savings</relationName>
+                    <attributes>custid, bal</attributes>
+                    <updateAttributes>bal</updateAttributes>
+                </operation>
+                <operation>
+                    <type>UPDATE</type>
+                    <relationName>checking</relationName>
+                    <attributes>custid, bal</attributes>
+                    <updateAttributes>bal</updateAttributes>
+                    <count>2</count>
+                </operation>
+            </operations>
+        </transactionTemplate>
+        <transactionTemplate>
+            <name>WriteCheck</name>
+            <operations>
+                <operation>
+                    <type>READ</type>
+                    <relationName>accounts</relationName>
+                    <attributes>custid, name</attributes>
+                </operation>
+                <operation>
+                    <type>READ</type>
+                    <relationName>savings</relationName>
+                    <attributes>custid, bal</attributes>
+                </operation>
+                <operation>
+                    <type>READ</type>
+                    <relationName>checking</relationName>
+                    <attributes>custid, bal</attributes>
+                </operation>
+                <operation>
+                    <type>UPDATE</type>
+                    <relationName>checking</relationName>
+                    <attributes>custid, bal</attributes>
+                    <updateAttributes>bal</updateAttributes>
+                </operation>
+            </operations>
+        </transactionTemplate>
+    </transactionTemplates>
+</tristar>
