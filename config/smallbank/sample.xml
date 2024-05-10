@@ -21,11 +21,11 @@
     <scalefactor>10</scalefactor>
 
     <!-- The workload -->
-    <terminals>8</terminals>
+    <terminals>32</terminals>
     <works>
         <work>
-            <warmup>20</warmup>
-            <time>60</time>
+            <warmup>10</warmup>
+            <time>30</time>
             <rate>unlimited</rate>
             <weights>20,20,20,0,20,20</weights>
         </work>

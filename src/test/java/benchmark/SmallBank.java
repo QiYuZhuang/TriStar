@@ -1,22 +1,24 @@
 package benchmark;
 
-import jdk.jfr.Category;
-import org.dbiir.tristar.TriStar;
-import org.dbiir.tristar.common.CCType;
-import org.junit.jupiter.api.Test;
-
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.stream.Collectors;
+
+import org.dbiir.tristar.TriStar;
+import org.dbiir.tristar.common.CCType;
+import org.junit.jupiter.api.Test;
 
 public class SmallBank {
     private String configPrefix = "config/smallbank/";
     private String resultPrefix = "results/smallbank/";
 
     private void testCase(String[] args, String resultPath, String caseName) throws IOException {
-        String stdoutPath = resultPath + "stdout.log";
+        String stdoutPath = resultPath + "/stdout.log";
         createFileIfNotExist(stdoutPath);
         File outputFile = new File(stdoutPath);
         FileOutputStream fileOutputStream = new FileOutputStream(outputFile);
@@ -26,6 +28,11 @@ public class SmallBank {
             TriStar.main(args);
             System.setOut(System.out);
             System.out.printf("Execute {%30s} with no exception!%n", caseName);
+            Runtime runtime = Runtime.getRuntime();
+            long totalMemory = runtime.totalMemory(); // JVM的总内存
+            long freeMemory = runtime.freeMemory(); // JVM的空闲内存
+            long usedMemory = totalMemory - freeMemory; // 使用的内存
+            System.out.println("used memory: " + usedMemory * 1.0 / 1024 / 1024 / 1024);
         } catch (Exception e) {
             System.setOut(System.out);
             e.printStackTrace();
@@ -128,15 +135,16 @@ public class SmallBank {
     @Test
     void TestHotspot() throws IOException {
         // figure2: strategy + hotspot + percentage
-        String resultPath = resultPrefix + "hotspot-64/" + genStringWithTimestamp() + "/";
+        String resultPath = resultPrefix + "hotspot-128/" + genStringWithTimestamp() + "/";
         String configPath = configPrefix + "sample.xml";
 
         // default variable
-        int terminal = 64;
+        int terminal = 128;
         TriStar.setTerminals_(terminal);
+        TriStar.setZipFain_(-1);
         // flexible variable
-        int[] hotspots = new int[]{10, 100, 1000, 10000};
-        double[] percentages = new double[]{0.2, 0.4, 0.6, 0.8, 1.0};
+        int[] hotspots = new int[]{1000};
+        double[] percentages = new double[]{0.1, 0.3, 0.5, 0.7, 0.9};
         CCType[] types = new CCType[]{CCType.SER,
                 CCType.SI_ELT, CCType.SI_FOR_UPDATE,
                 CCType.RC_ELT, CCType.RC_FOR_UPDATE,
@@ -147,7 +155,7 @@ public class SmallBank {
                 TriStar.setHotspotProbability_(p);
                 for (CCType type: types) {
                     TriStar.setType_(type.getName());
-                    String caseName = String.format("hotspot_%05d_pro_%05.2f_", h, p) + type.getName();
+                    String caseName = String.format("hotspot_%05d_pro_%05.2f_", h, p) + getStrategyName(type);;
                     String resultDir = resultPath + caseName;
                     String[] args = {"-c", configPath,
                             "-b smallbank",
@@ -162,6 +170,32 @@ public class SmallBank {
     @Test
     void TestZipFain() throws IOException {
         // figure2: strategy + skew
+        String resultPath = resultPrefix + "skew-128/" + genStringWithTimestamp() + "/";
+        String configPath = configPrefix + "sample.xml";
+
+        // default variable
+        int terminal = 128;
+        TriStar.setTerminals_(terminal);
+        TriStar.setHotspotNum_(-1);
+        // flexible variable
+        double[] skews = new double[]{0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3};
+        CCType[] types = new CCType[]{CCType.SER,
+                CCType.SI_ELT, CCType.SI_FOR_UPDATE,
+                CCType.RC_ELT, CCType.RC_FOR_UPDATE,
+                CCType.SI_TAILOR};
+        for (double s: skews) {
+            TriStar.setZipFain_(s);
+            for (CCType type: types) {
+                TriStar.setType_(type.getName());
+                String caseName = String.format("skew_%03.2f_", s) + getStrategyName(type);;
+                String resultDir = resultPath + caseName;
+                String[] args = {"-c", configPath,
+                        "-b smallbank",
+                        "--execute=true",
+                        "-d", resultDir};
+                testCase(args, resultDir, caseName);
+            }
+        }
     }
 
     @Test

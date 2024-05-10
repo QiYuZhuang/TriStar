@@ -107,6 +107,11 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
     if (LOG.isDebugEnabled()) {
       LOG.debug(String.format("Accounts: %s", Arrays.toString(this.custIdsBuffer)));
     }
+    if (needsTwoAccts && this.custIdsBuffer[0] < this.custIdsBuffer[1]) {
+      long temp = custIdsBuffer[0];
+      custIdsBuffer[0] = custIdsBuffer[1];
+      custIdsBuffer[1] = temp;
+    }
   }
 
   private long genIds() {

@@ -16,6 +16,9 @@
       </list>
     </option>
   </component>
+  <component name="Black">
+    <option name="sdkName" value="Python 3.9 (tristar)" />
+  </component>
   <component name="ExternalStorageConfigurationManager" enabled="true" />
   <component name="MavenProjectsManager">
     <option name="originalFiles">
