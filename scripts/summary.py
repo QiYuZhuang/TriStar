@@ -49,6 +49,13 @@ class Summary(object):
         self.p95_latency = latency_distribution["95th Percentile Latency (microseconds)"] / 1000
         self.p99_latency = latency_distribution["99th Percentile Latency (microseconds)"] / 1000
 
+    def __lt__(self, other):
+        if self.cc_type < other.cc_type:
+            return True
+        elif self.cc_type == other.cc_type:
+            return self.terminals < other.terminals
+        return False
+
 
 class HotspotSummary(Summary):
     hotspot: int
@@ -58,10 +65,23 @@ class HotspotSummary(Summary):
         filename = filepath.split("/")[-2]
         tokens = filename.split("_")
         h_idx, p_idx = tokens.index("hotspot"), tokens.index("pro")
-        self.hotspot = int(tokens[h_idx+1])
-        self.percentage = float(tokens[p_idx+1])
-        super().__init__(filepath, '_'.join(tokens[p_idx+2:]))
+        self.hotspot = int(tokens[h_idx + 1])
+        self.percentage = float(tokens[p_idx + 1])
+        super().__init__(filepath, '_'.join(tokens[p_idx + 2:]))
         print("read hotspot summary: {", self.hotspot, self.percentage, self.cc_type, "}")
+
+    def __lt__(self, other):
+        if self.cc_type < other.cc_type:
+            return True
+        elif self.cc_type == other.cc_type:
+            if self.hotspot < other.hotspot:
+                return True
+            elif self.hotspot == other.hotspot:
+                if self.terminals < other.terminals:
+                    return True
+                elif self.terminals == other.terminals:
+                    return self.percentage < other.percentage
+        return False
 
 
 class SkewSummary(Summary):
@@ -71,6 +91,14 @@ class SkewSummary(Summary):
         filename = filepath.split("/")[-2]
         tokens = filename.split("_")
         s_idx = tokens.index("skew")
-        self.skew = float(tokens[s_idx+1])
-        super().__init__(filepath, '_'.join(tokens[s_idx+2:]))
+        self.skew = float(tokens[s_idx + 1])
+        super().__init__(filepath, '_'.join(tokens[s_idx + 2:]))
         print("read skew summary: {", self.skew, self.cc_type, "}")
+
+    def __lt__(self, other):
+        if self.cc_type < other.cc_type:
+            return True
+        elif self.cc_type == other.cc_type:
+            if self.skew < other.skew:
+                return True
+        return False

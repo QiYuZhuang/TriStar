@@ -177,7 +177,7 @@ public class TriStar {
         wrkld.setScaleFactor(xmlConfig.getDouble("scalefactor", 1.0));
         wrkld.setDataDir(xmlConfig.getString("datadir", "."));
         wrkld.setDDLPath(xmlConfig.getString("ddlpath", null));
-        String type = !type_.equals("default") ? type_ : xmlConfig.getString("CCType", "SERIALIZABLE");
+        String type = !type_.equals("default") ? type_ : xmlConfig.getString("concurrencyControlType", "SERIALIZABLE");
         wrkld.setConcurrencyControlType(type);
 
         double selectivity = -1;

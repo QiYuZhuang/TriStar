@@ -16,7 +16,13 @@
     SI_FOR_UPDATE, RC_FOR_UPDATE,
     SI_TAILOR, RC_TAILOR, RC_TAILOR_LOCK, DYNAMIC
     -->
-    <concurencyControlType>SERIALIZABLE</concurencyControlType>
+    <concurrencyControlType>SERIALIZABLE</concurrencyControlType>
+    <!--  hotspot  -->
+<!--    <hotspotNumber>1000</hotspotNumber>-->
+<!--    <hotspotPercentage>0.1</hotspotPercentage>-->
+    <!--  zipfain  -->
+    <zipf>0.3</zipf>
+
 
     <scalefactor>10</scalefactor>
 
@@ -25,7 +31,7 @@
     <works>
         <work>
             <warmup>10</warmup>
-            <time>30</time>
+            <time>10</time>
             <rate>unlimited</rate>
             <weights>20,20,20,0,20,20</weights>
         </work>
