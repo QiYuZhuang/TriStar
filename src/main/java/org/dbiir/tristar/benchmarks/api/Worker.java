@@ -24,6 +24,7 @@ import org.dbiir.tristar.benchmarks.types.TransactionStatus;
 import org.dbiir.tristar.benchmarks.util.Histogram;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
 import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
+import org.dbiir.tristar.common.CCType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,6 +70,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private final Histogram<TransactionType> txtRetryDifferent = new Histogram<>();
 
   private boolean seenDone = false;
+  CCType ccType = CCType.NUM_CC;
 
   public Worker(T benchmark, int id) {
     this.id = id;
@@ -109,6 +111,24 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       Procedure proc = e.getValue();
       this.name_procedures.put(e.getKey().getName(), proc);
       this.class_procedures.put(proc.getClass(), proc);
+    }
+  }
+
+  private void setIsolation(Connection conn) throws SQLException {
+    switch (benchmark.getCCType()) {
+      case RC_ELT:
+      case RC_FOR_UPDATE:
+      case RC_TAILOR:
+      case RC_TAILOR_LOCK:
+        conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        break;
+      case SI_ELT:
+      case SI_FOR_UPDATE:
+      case SI_TAILOR:
+        conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        break;
+      case SER:
+        conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
     }
   }
 
@@ -431,7 +451,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             }
             this.conn = this.benchmark.makeConnection();
             this.conn.setAutoCommit(false);
-//            this.conn.setTransactionIsolation(this.configuration.getIsolationMode());
+            setIsolation(this.conn);
           } catch (SQLException ex) {
             if (LOG.isDebugEnabled()) {
               LOG.debug(String.format("%s failed to open a connection...", this));

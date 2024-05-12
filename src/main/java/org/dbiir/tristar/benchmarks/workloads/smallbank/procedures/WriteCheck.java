@@ -156,7 +156,7 @@ public class WriteCheck extends Procedure {
           if (Math.abs(savingsBalance - savingsNow) > 1e-5) {
             String msg =
                     String.format("Validation failed for customer #%d, savings, WriteCheck", custId);
-            throw new UserAbortException(msg);
+            throw new SQLException(msg);
           }
         }
       }
@@ -168,7 +168,7 @@ public class WriteCheck extends Procedure {
             if (Math.abs(checkingBalance - checkingNow) > 1e-5) {
               String msg =
                       String.format("Validation failed for customer #%d, checking, WriteCheck", custId);
-              throw new UserAbortException(msg);
+              throw new SQLException(msg);
             }
           }
         }

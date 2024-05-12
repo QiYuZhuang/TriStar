@@ -138,7 +138,7 @@ def sb_zip_fain(terminal=128):
     dir_name = "../config/smallbank/skew-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "SI_TAILOR"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
     weight = [20, 20, 20, 0, 20, 20]
 

@@ -47,6 +47,7 @@ def create_output_file(filepath: str):
     sys.stdout = open(file_path, 'w')
 
     print("create new file: " + file_path)
+    return file_path
 
 
 def refresh_output_channel():
@@ -76,10 +77,10 @@ def run_once(f: str):
     for conf_file in traverse_dir(config_path):
         result_dir = result_prefix + f + "/" + unique_ts + "/"
         case_name = os.path.splitext(os.path.basename(conf_file))[0]
-        create_output_file(result_dir + case_name)
+        output_file = create_output_file(result_dir + case_name)
         print("Run config - { " + case_name + " }")
-        java_cmd = (prefix_cmd + "-b " + args.wl + " -c " + config_path + case_name +
-                    " --execute=true -d " + result_dir + case_name)
+        java_cmd = (prefix_cmd + "-b " + args.wl + " -c " + config_path + case_name + ".xml" +
+                    " --execute=true -d " + result_dir + case_name + " > " + output_file)
         exec_cmd(java_cmd)
         print("Finish config - { " + case_name + " }")
         # time.sleep(5)

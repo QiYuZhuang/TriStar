@@ -495,7 +495,7 @@ public class TriStar {
         }
 
         System.out.println(SINGLE_LINE);
-        System.out.println("Workload Histograms:\n{%s}".formatted(sb));
+        System.out.printf("Workload Histograms:\n{%s}%n", sb);
         System.out.println(SINGLE_LINE);
     }
 
