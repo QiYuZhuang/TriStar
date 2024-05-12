@@ -46,14 +46,21 @@ public class Balance extends Procedure {
       new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_SAVINGS + " WHERE custid = ?");
 
   public final SQLStmt GetSavingsBalanceForUpdate =
-          new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_SAVINGS + " WHERE custid = ? FOR UPDATE");
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
+                  " AS new SET bal = old.bal FROM " +
+                  SmallBankConstants.TABLENAME_SAVINGS +
+                  " AS old WHERE new.custid = ? " +
+                  " AND old.custid=new.custid RETURNING old.bal");
 
   public final SQLStmt GetCheckingBalance =
       new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_CHECKING + " WHERE custid = ?");
 
   public final SQLStmt GetCheckingBalanceForUpdate =
-          new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_CHECKING + " WHERE custid = ? FOR UPDATE");
-
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
+                  " AS new SET bal = old.bal FROM " +
+                  SmallBankConstants.TABLENAME_CHECKING +
+                  " AS old WHERE new.custid = ? " +
+                  " AND old.custid=new.custid RETURNING old.bal");
 
   public double run(Connection conn, String custName, CCType type) throws SQLException {
     // First convert the acctName to the acctId
@@ -111,6 +118,28 @@ public class Balance extends Procedure {
         }
 
         checkingBalance = balRes1.getDouble(1);
+      }
+    }
+
+    if (type == CCType.RC_TAILOR) {
+      try (PreparedStatement balStmt0 = this.getPreparedStatement(conn, GetSavingsBalance, custId)) {
+        try (ResultSet balRes0 = balStmt0.executeQuery()) {
+          double savingsNow = balRes0.getDouble(1);
+          if (Math.abs(savingsBalance - savingsNow) > 1e-5) {
+            String msg = String.format("Validation failed for customer #%d, savings, Balance", custId);
+            throw new UserAbortException(msg);
+          }
+        }
+      }
+
+      try (PreparedStatement balStmt1 = this.getPreparedStatement(conn, GetCheckingBalance, custId)) {
+        try (ResultSet balRes1 = balStmt1.executeQuery()) {
+          double checkingNow = balRes1.getDouble(1);
+          if (Math.abs(checkingBalance  - checkingNow) < 1e-5) {
+            String msg = String.format("Validation failed for customer #%d, checking, Balance", custId);
+            throw new UserAbortException(msg);
+          }
+        }
       }
     }
 

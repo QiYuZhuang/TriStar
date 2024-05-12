@@ -51,14 +51,23 @@ public class WriteCheck extends Procedure {
   public final SQLStmt GetSavingsBalance =
       new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_SAVINGS + " WHERE custid = ?");
 
+  /*  */
   public final SQLStmt GetSavingsBalanceForUpdate =
-          new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_SAVINGS + " WHERE custid = ? FOR UPDATE");
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
+                  " AS new SET bal = old.bal FROM " +
+                  SmallBankConstants.TABLENAME_SAVINGS +
+                  " AS old WHERE new.custid = ? " +
+                  " AND old.custid=new.custid RETURNING old.bal");
 
   public final SQLStmt GetCheckingBalance =
       new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_CHECKING + " WHERE custid = ?");
 
   public final SQLStmt GetCheckingBalanceForUpdate =
-          new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_CHECKING + " WHERE custid = ? FOR UPDATE");
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
+                  " AS new SET bal = old.bal FROM " +
+                  SmallBankConstants.TABLENAME_CHECKING +
+                  " AS old WHERE new.custid = ? " +
+                  " AND old.custid=new.custid RETURNING old.bal");
 
   public final SQLStmt UpdateCheckingBalanceDel =
       new SQLStmt(
@@ -139,21 +148,28 @@ public class WriteCheck extends Procedure {
       }
     }
 
-    if (type == CCType.SI_TAILOR) {
+    if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       // may have some bug
       try (PreparedStatement balStmt = this.getPreparedStatement(conn, GetSavingsBalance, custId)) {
         try (ResultSet balRes = balStmt.executeQuery()) {
-          if (!balRes.next()) {
+          double savingsNow = balRes.getDouble(1);
+          if (Math.abs(savingsBalance - savingsNow) > 1e-5) {
             String msg =
-                    String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId);
+                    String.format("Validation failed for customer #%d, savings, WriteCheck", custId);
             throw new UserAbortException(msg);
           }
+        }
+      }
 
-          double savingsNow = balRes.getDouble(1);
-          if ((savingsBalance - savingsNow) > 1e-5) {
-            String msg =
-                    String.format("Validation failed for customer #%d, savings", custId);
-            throw new UserAbortException(msg);
+      if (type == CCType.RC_TAILOR) {
+        try (PreparedStatement balStmt = this.getPreparedStatement(conn, GetCheckingBalance, custId)) {
+          try (ResultSet balRes = balStmt.executeQuery()) {
+            double checkingNow = balRes.getDouble(1);
+            if (Math.abs(checkingBalance - checkingNow) > 1e-5) {
+              String msg =
+                      String.format("Validation failed for customer #%d, checking, WriteCheck", custId);
+              throw new UserAbortException(msg);
+            }
           }
         }
       }

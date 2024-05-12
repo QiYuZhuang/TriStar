@@ -174,15 +174,15 @@ public class Amalgamate extends Procedure {
     // assert(total >= 0);
 
     // Update Balance Information
-    try (PreparedStatement updateStmt0 =
-        this.getPreparedStatement(conn, ZeroCheckingBalance, custId0)) {
-      updateStmt0.executeUpdate();
-    }
-
-    try (PreparedStatement updateStmt0 =
-                 this.getPreparedStatement(conn, ZeroSavingsBalance, custId0)) {
-      updateStmt0.executeUpdate();
-    }
+//    try (PreparedStatement updateStmt0 =
+//        this.getPreparedStatement(conn, ZeroCheckingBalance, custId0)) {
+//      updateStmt0.executeUpdate();
+//    }
+//
+//    try (PreparedStatement updateStmt0 =
+//                 this.getPreparedStatement(conn, ZeroSavingsBalance, custId0)) {
+//      updateStmt0.executeUpdate();
+//    }
 
     try (PreparedStatement updateStmt1 =
         this.getPreparedStatement(conn, UpdateSavingsBalance, total, custId1)) {

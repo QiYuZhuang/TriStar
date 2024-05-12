@@ -145,6 +145,9 @@ public class TriStar {
 
         if (targetBenchmark.contains("smallbank")) {
             // load smallbank variables
+            zipFain_ = zipFain_ > 0 ? zipFain_ : xmlConfig.getDouble("zipf", -1.0);
+            hotspotNum_ = hotspotNum_ > 0 ? hotspotNum_ : xmlConfig.getInt("hotspotNumber", -1);
+            hotspotProbability_ = hotspotProbability_ > 0 ? hotspotProbability_ : xmlConfig.getDouble("hotspotPercentage", -1.0);
             if (hotspotNum_ > 0) {
                 wrkld.setHotspotUseFixedSize(true);
                 wrkld.setHotspotFixedSize(hotspotNum_);
@@ -491,9 +494,9 @@ public class TriStar {
                     .append(r.getAbortMessages());
         }
 
-        logger.info(SINGLE_LINE);
-        logger.info("Workload Histograms:\n{%s}".formatted(sb));
-        logger.info(SINGLE_LINE);
+        System.out.println(SINGLE_LINE);
+        System.out.println("Workload Histograms:\n{%s}".formatted(sb));
+        System.out.println(SINGLE_LINE);
     }
 
     private static String writeJSONHistograms(Results r) {

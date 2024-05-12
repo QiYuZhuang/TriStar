@@ -110,8 +110,8 @@ def sb_scalability():
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     terminals = [4, 8, 16, 32, 64, 128, 256]
-    # "RC_TAILOR", "RC_TAILOR_LOCK", "DYNAMIC"
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "SI_TAILOR"]
+    # , "RC_TAILOR_LOCK", "DYNAMIC"
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     # weight = list(default_weight_by_dis_ration(dis_ratio))
     weight = [20, 20, 20, 0, 20, 20]
 
@@ -124,7 +124,7 @@ def sb_hotspot(terminal=128):
     dir_name = "../config/smallbank/hotspot-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "SI_TAILOR"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     hsn_list = [10, 100, 1000]
     hsp_list = [0.1, 0.3, 0.5, 0.7, 0.9]
     weight = [20, 20, 20, 0, 20, 20]
@@ -152,5 +152,5 @@ if __name__ == '__main__':
         os.mkdir("../config")
 
     sb_scalability()
-    sb_hotspot(128)
-    sb_zip_fain(128)
+    sb_hotspot(256)
+    sb_zip_fain(256)
