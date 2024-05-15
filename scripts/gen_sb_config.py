@@ -32,7 +32,7 @@ cc_map = {
 
 
 def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zipf=-0.1, rate="unlimited",
-                          dir="../config"):
+                          dir="../config", case_name=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
@@ -71,6 +71,9 @@ def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zip
         filename += "_zipf_{:03.2f}".format(zipf)
     elif hsn > 0 and hsp > 0:
         filename += "_hsn_{:05d}_hsp_{:03.2f}".format(hsn, hsp)
+
+    if len(case_name) is not 0:
+        filename += "_" + case_name + "_" + '-'.join(["{:02d}".format(w) for w in weight])
 
     filename += "_cc_" + cc_map[cc_type]
 
@@ -145,6 +148,36 @@ def sb_zip_fain(terminal=128):
     experiments = product(cc, skew_list)
     for exp in experiments:
         generate_pg_sb_config(exp[0], terminals=terminal, weight=weight, zipf=exp[1], dir=dir_name)
+
+
+def sb_bal_ratio(terminal=128):
+    dir_name = "../config/smallbank/bal_ratio-" + str(terminal) + "/postgresql"
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",
+          "RC_TAILOR_LOCK"]
+    skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
+    weights = [[20, 20, 20, 0, 20, 20], [15, 40, 15, 0, 15, 15], [10, 60, 10, 0, 10, 10], [5, 80, 5, 0, 5, 5],
+               [0, 100, 0, 0, 0, 0]]
+
+    experiments = product(cc, weights, skew_list)
+    for exp in experiments:
+        generate_pg_sb_config(exp[0], terminals=terminal, weight=exp[1], zipf=exp[2], dir=dir_name, case_name="Balance")
+
+
+def sb_vc_ratio(terminal=128):
+    dir_name = "../config/smallbank/wc_ratio-" + str(terminal) + "/postgresql"
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",
+          "RC_TAILOR_LOCK"]
+    skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
+    weights = [[20, 20, 20, 0, 20, 20], [15, 15, 15, 0, 15, 40], [10, 10, 10, 0, 10, 60], [5, 5, 5, 0, 5, 80],
+               [0, 0, 0, 0, 0, 100]]
+
+    experiments = product(cc, weights, skew_list)
+    for exp in experiments:
+        generate_pg_sb_config(exp[0], terminals=terminal, weight=exp[1], zipf=exp[2], dir=dir_name, case_name="WriteCheck")
 
 
 if __name__ == '__main__':

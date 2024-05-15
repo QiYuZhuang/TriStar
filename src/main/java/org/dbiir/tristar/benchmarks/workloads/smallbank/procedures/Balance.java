@@ -141,6 +141,12 @@ public class Balance extends Procedure {
     if (type == CCType.RC_TAILOR) {
       try (PreparedStatement balStmt0 = this.getPreparedStatement(conn, GetSavingsBalance, custId)) {
         try (ResultSet balRes0 = balStmt0.executeQuery()) {
+          if (!balRes0.next()) {
+            String msg =
+                    String.format(
+                            "No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId);
+            throw new UserAbortException(msg);
+          }
           double savingsNow = balRes0.getDouble(1);
           if (Math.abs(savingsBalance - savingsNow) > 1e-5) {
             String msg = String.format("Validation failed for customer #%d, savings, Balance", custId);
@@ -151,6 +157,12 @@ public class Balance extends Procedure {
 
       try (PreparedStatement balStmt1 = this.getPreparedStatement(conn, GetCheckingBalance, custId)) {
         try (ResultSet balRes1 = balStmt1.executeQuery()) {
+          if (!balRes1.next()) {
+            String msg =
+                    String.format(
+                            "No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
+            throw new UserAbortException(msg);
+          }
           double checkingNow = balRes1.getDouble(1);
           if (Math.abs(checkingBalance  - checkingNow) < 1e-5) {
             String msg = String.format("Validation failed for customer #%d, checking, Balance", custId);

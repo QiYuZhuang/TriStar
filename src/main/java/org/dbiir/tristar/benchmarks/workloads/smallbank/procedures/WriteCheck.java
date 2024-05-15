@@ -167,7 +167,7 @@ public class WriteCheck extends Procedure {
           if (!balRes.next()) {
             String msg =
                     String.format(
-                            "No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
+                            "No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId);
             throw new UserAbortException(msg);
           }
           double savingsNow = balRes.getDouble(1);
