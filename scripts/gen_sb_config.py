@@ -4,7 +4,7 @@ from xml.etree import ElementTree
 import xml.dom.minidom as minidom
 from itertools import product
 
-scaleFactor = 10
+scaleFactor = 4
 warmupTime = 20
 execTime = 60  # ms
 maxRetry = 16

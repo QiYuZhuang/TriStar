@@ -164,6 +164,12 @@ public class WriteCheck extends Procedure {
       // may have some bug
       try (PreparedStatement balStmt = this.getPreparedStatement(conn, GetSavingsBalance, custId)) {
         try (ResultSet balRes = balStmt.executeQuery()) {
+          if (!balRes.next()) {
+            String msg =
+                    String.format(
+                            "No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
+            throw new UserAbortException(msg);
+          }
           double savingsNow = balRes.getDouble(1);
           if (Math.abs(savingsBalance - savingsNow) > 1e-5) {
             String msg =
@@ -176,6 +182,12 @@ public class WriteCheck extends Procedure {
       if (type == CCType.RC_TAILOR) {
         try (PreparedStatement balStmt = this.getPreparedStatement(conn, GetCheckingBalance, custId)) {
           try (ResultSet balRes = balStmt.executeQuery()) {
+            if (!balRes.next()) {
+              String msg =
+                      String.format(
+                              "No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
+              throw new UserAbortException(msg);
+            }
             double checkingNow = balRes.getDouble(1);
             if (Math.abs(checkingBalance - checkingNow) > 1e-5) {
               String msg =

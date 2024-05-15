@@ -750,8 +750,14 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     // ------------------
     // POSTGRES: https://www.postgresql.org/docs/current/errcodes-appendix.html
     // ------------------
-    // Postgres serialization_failure
-    return errorCode == 0 && sqlState.equals("40001");
+    if (errorCode == 0 && sqlState.equals("40001")) {
+      // Postgres serialization_failure
+      return true;
+    } else if (errorCode == 0 && sqlState.equals("55P03")) {
+      // Postgres lockwait timeout
+      return true;
+    }
+    return false;
   }
 
   /**

@@ -64,7 +64,7 @@ class HotspotSummary(Summary):
     def __init__(self, filepath: str):
         filename = filepath.split("/")[-2]
         tokens = filename.split("_")
-        h_idx, p_idx = tokens.index("hotspot"), tokens.index("pro")
+        h_idx, p_idx = tokens.index("hsn"), tokens.index("hsp")
         self.hotspot = int(tokens[h_idx + 1])
         self.percentage = float(tokens[p_idx + 1])
         super().__init__(filepath, '_'.join(tokens[p_idx + 2:]))
@@ -90,7 +90,7 @@ class SkewSummary(Summary):
     def __init__(self, filepath: str):
         filename = filepath.split("/")[-2]
         tokens = filename.split("_")
-        s_idx = tokens.index("skew")
+        s_idx = tokens.index("zipf")
         self.skew = float(tokens[s_idx + 1])
         super().__init__(filepath, '_'.join(tokens[s_idx + 2:]))
         print("read skew summary: {", self.skew, self.cc_type, "}")
