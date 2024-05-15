@@ -16,12 +16,12 @@ functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256"
 
 def exec_cmd(cmd: str):
     print("command: " + cmd)
-    # exit_status = os.system(cmd)
-    #
-    # if exit_status == 0:
-    #     print("Command executed successfully")
-    # else:
-    #     print(f"Command failed with exit status {exit_status}")
+    exit_status = os.system(cmd)
+
+    if exit_status == 0:
+        print("Command executed successfully")
+    else:
+        print(f"Command failed with exit status {exit_status}")
 
 
 def traverse_dir(dir_name: str) -> list:

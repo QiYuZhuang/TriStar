@@ -1,10 +1,15 @@
 package org.dbiir.tristar.transaction.concurrency;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.dbiir.tristar.common.LockType;
 
+import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -24,96 +29,80 @@ public class XNORLock {
         lock = new ReentrantLock();
     }
 
-    public Iterator<LockEntry> RequestLockDebug(String transactionId, LockType type) {
+    public boolean requestLock(long transactionId, LockType type) throws SQLException {
         lock.lock();
         try {
-            if (!waitList.isEmpty() || (type != LockType.NoneType && this.type != type)) {
-                waitList.add(new LockEntry(transactionId, type));
-                return null;
+            if (!waitList.isEmpty() || (this.type != LockType.NoneType && tolerate(this.type, type))) {
+                if (!admitByWaitDieStrategy(transactionId)) {
+                    lock.unlock();
+                    String msg = "Abort due to wait die, transaction id: " + transactionId;
+                    throw new SQLException(msg);
+                }
+                LockEntry entry = new LockEntry(transactionId, type);
+                waitList.add(entry);
+                lock.unlock();
+                while (!entry.isGrantee()) {
+                    Thread.sleep(0, 1000);
+                }
             } else {
-//                count++;
                 this.type = type;
-                lockList.add(new LockEntry(transactionId, type));
-                return lockList.listIterator(lockList.size());
+                lockList.add(new LockEntry(transactionId, type, true));
+                lock.unlock();
             }
-        } finally {
-            lock.unlock();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
+        return true;
     }
 
-    public boolean RequestLock(String transactionId, LockType type) {
+    public boolean releaseLock(long tid) {
         lock.lock();
         try {
-            if (!waitList.isEmpty() || (type != LockType.NoneType && this.type != type)) {
-                waitList.add(new LockEntry(transactionId, type));
-                return false;
-            } else {
-                count++;
-                return true;
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public boolean ReleaseLockDebug(Iterator<LockEntry> lockEntry) {
-        lock.lock();
-        try {
-            count--;
-            if (count > 0)
+            lockList.removeIf(entry -> entry.transactionId == tid);
+            if (!lockList.isEmpty())
                 return true;
 
-            if (waitList.isEmpty()) {
-                this.type = LockType.NoneType;
-                return true;
-            } else {
-                this.type = waitList.get(0).lockType;
+            this.type = LockType.NoneType;
+            if (!waitList.isEmpty()) {
                 Iterator<LockEntry> waitListIterator = waitList.iterator();
                 while (waitListIterator.hasNext()) {
                     LockEntry llock = waitListIterator.next();
-                    if (llock.lockType == this.type) {
+                    if (tolerate(this.type, llock.lockType)) {
                         lockList.add(llock);
                         waitListIterator.remove();
-                        // TODO: invoke
+                        llock.setGrantee(true);
                     } else {
                         break;
                     }
                 }
-                return true;
             }
+            return true;
         } finally {
             lock.unlock();
         }
     }
 
-    public boolean ReleaseLock(Iterator<LockEntry> lockEntry) {
-        lock.lock();
-        try {
-            count--;
-            if (count > 0)
-                return true;
+    private boolean tolerate(LockType type1, LockType type2) {
+        if (type1 == LockType.NoneType || type2 == LockType.NoneType)
+            return true;
+        if (type1 == LockType.EX || type2 == LockType.EX)
+            return false;
+        return type1 == type2;
+    }
 
-            if (waitList.isEmpty()) {
-                this.type = LockType.NoneType;
-                return true;
-            } else {
-                this.type = waitList.get(0).lockType;
-                Iterator<LockEntry> waitListIterator = waitList.iterator();
-                while (waitListIterator.hasNext()) {
-                    LockEntry llock = waitListIterator.next();
-                    if (llock.lockType == this.type) {
-                        count++;
-                        waitListIterator.remove();
-                        // TODO: invoke
-                    } else {
-                        break;
-                    }
-                }
-                return true;
-            }
-        } finally {
-            lock.unlock();
+    private boolean admitByWaitDieStrategy(long tid) {
+        for (LockEntry entry: lockList) {
+            assert (tid != entry.transactionId);
+            if (tid > entry.transactionId)
+                return false;
         }
+
+        for (LockEntry entry: waitList) {
+            assert (tid != entry.transactionId);
+            if (tid > entry.transactionId)
+                return false;
+        }
+        return true;
     }
 
     public String toString() {
@@ -132,14 +121,25 @@ public class XNORLock {
     }
 
     public class LockEntry {
-        private final String transactionId;
+        private final long transactionId;
         private final LockType lockType;
+        @Getter
+        @Setter
+        private boolean grantee;
         private final long enterTime;
 
-        public LockEntry(String transactionId, LockType type) {
+        public LockEntry(long transactionId, LockType type) {
             this.transactionId = transactionId;
             this.lockType = type;
             this.enterTime = System.currentTimeMillis();
+            this.grantee = false;
+        }
+
+        public LockEntry(long transactionId, LockType type, boolean grantee) {
+            this.transactionId = transactionId;
+            this.lockType = type;
+            this.enterTime = System.currentTimeMillis();
+            this.grantee = grantee;
         }
 
         public boolean Timeout() {

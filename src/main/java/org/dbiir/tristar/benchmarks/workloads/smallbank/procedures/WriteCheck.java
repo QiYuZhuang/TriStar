@@ -29,6 +29,8 @@ import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 import java.lang.reflect.Type;
 import java.sql.Connection;
@@ -78,6 +80,7 @@ public class WriteCheck extends Procedure {
 
   public void run(Connection conn, String custName, double amount, CCType type) throws SQLException {
     // First convert the custName to the custId
+    long tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
     long custId;
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
@@ -102,7 +105,9 @@ public class WriteCheck extends Procedure {
 
     // Then get their account balances
     double savingsBalance;
-
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid, LockType.SH);
+    }
     try (PreparedStatement balStmt0 = switch (type) {
       case RC_FOR_UPDATE, SI_FOR_UPDATE -> this.getPreparedStatement(conn, GetSavingsBalanceForUpdate, custId);
         default -> this.getPreparedStatement(conn, GetSavingsBalance, custId);
@@ -119,6 +124,9 @@ public class WriteCheck extends Procedure {
     }
 
     double checkingBalance;
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId), tid, LockType.EX);
+    }
     try (PreparedStatement balStmt1 = switch (type) {
       case RC_FOR_UPDATE -> this.getPreparedStatement(conn, GetCheckingBalanceForUpdate, custId);
       default -> this.getPreparedStatement(conn, GetCheckingBalance, custId);
@@ -148,6 +156,10 @@ public class WriteCheck extends Procedure {
       }
     }
 
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid);
+    }
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       // may have some bug
       try (PreparedStatement balStmt = this.getPreparedStatement(conn, GetSavingsBalance, custId)) {

@@ -29,6 +29,8 @@ import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -64,6 +66,7 @@ public class Balance extends Procedure {
 
   public double run(Connection conn, String custName, CCType type) throws SQLException {
     // First convert the acctName to the acctId
+    long tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
     long custId;
     if (type == CCType.RC_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
@@ -72,7 +75,6 @@ public class Balance extends Procedure {
             String msg = "Invalid account '" + custName + "'";
             throw new UserAbortException(msg);
           }
-          custId = r0.getLong(1);
         }
       }
     }
@@ -81,10 +83,15 @@ public class Balance extends Procedure {
       try (ResultSet r0 = stmt0.executeQuery()) {
         if (!r0.next()) {
           String msg = "Invalid account '" + custName + "'";
+          System.out.println("UserAbortException: " + msg);
           throw new UserAbortException(msg);
         }
         custId = r0.getLong(1);
       }
+    }
+
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid, LockType.SH);
     }
 
     // Then get their account balances
@@ -98,12 +105,16 @@ public class Balance extends Procedure {
         if (!balRes0.next()) {
           String msg =
               String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId);
+          System.out.println("UserAbortException: " + msg);
           throw new UserAbortException(msg);
         }
         savingsBalance = balRes0.getDouble(1);
       }
     }
 
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId), tid, LockType.SH);
+    }
     double checkingBalance;
     try (PreparedStatement balStmt1 = switch (type) {
       case RC_FOR_UPDATE -> this.getPreparedStatement(conn, GetCheckingBalanceForUpdate, custId);
@@ -114,11 +125,17 @@ public class Balance extends Procedure {
           String msg =
               String.format(
                   "No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
+          System.out.println("UserAbortException: " + msg);
           throw new UserAbortException(msg);
         }
 
         checkingBalance = balRes1.getDouble(1);
       }
+    }
+
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid);
     }
 
     if (type == CCType.RC_TAILOR) {

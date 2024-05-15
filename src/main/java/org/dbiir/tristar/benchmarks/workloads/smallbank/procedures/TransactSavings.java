@@ -29,6 +29,8 @@ import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -62,6 +64,7 @@ public class TransactSavings extends Procedure {
 
   public void run(Connection conn, String custName, double amount, CCType type) throws SQLException {
     // First convert the custName to the acctId
+    long tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
     long custId;
 
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
@@ -115,9 +118,15 @@ public class TransactSavings extends Procedure {
 //    }
 
     // Then update their savings balance
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid, LockType.EX);
+    }
     try (PreparedStatement stmt =
         this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
       stmt.executeUpdate();
+    }
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid);
     }
   }
 }

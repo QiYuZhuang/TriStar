@@ -29,6 +29,8 @@ import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -102,6 +104,7 @@ public class Amalgamate extends Procedure {
                           + " WHERE custid = ?");
 
   public void run(Connection conn, long custId0, long custId1, CCType type) throws SQLException {
+    long tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
     if (type == CCType.RC_ELT) {
       try (PreparedStatement stmtc0 = this.getPreparedStatement(conn, writeConflict, custId0)) {
         try (ResultSet r0 = stmtc0.executeQuery()) {
@@ -141,6 +144,9 @@ public class Amalgamate extends Procedure {
     }
 
     // Get Balance Information
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId0), tid, LockType.EX);
+    }
     double savingsBalance;
     try (PreparedStatement balStmt0 =
                  this.getPreparedStatement(conn, GetAndZeroSavingsBalance, custId0)) {
@@ -155,6 +161,9 @@ public class Amalgamate extends Procedure {
       }
     }
 
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId0), tid, LockType.EX);
+    }
     double checkingBalance;
     try (PreparedStatement balStmt1 =
         this.getPreparedStatement(conn, GetAndZeroCheckingBalance, custId0)) {
@@ -183,10 +192,18 @@ public class Amalgamate extends Procedure {
 //                 this.getPreparedStatement(conn, ZeroSavingsBalance, custId0)) {
 //      updateStmt0.executeUpdate();
 //    }
-
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId1), tid, LockType.EX);
+    }
     try (PreparedStatement updateStmt1 =
         this.getPreparedStatement(conn, UpdateSavingsBalance, total, custId1)) {
       updateStmt1.executeUpdate();
+    }
+
+    if (type == CCType.RC_TAILOR_LOCK) {
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId1), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId0), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId0), tid);
     }
   }
 }

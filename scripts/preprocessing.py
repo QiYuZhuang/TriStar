@@ -52,7 +52,7 @@ def read_skews(case_name: str, ts=""):
     return results
 
 
-def process_summary(summarys: list[Summary]):
+def process_summary(summarys: List[Summary]):
     d: dict[str, str] = {}
     for r in summarys:
         if isinstance(r, HotspotSummary):
