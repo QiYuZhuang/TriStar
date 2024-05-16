@@ -164,7 +164,7 @@ public class Balance extends Procedure {
             throw new UserAbortException(msg);
           }
           double checkingNow = balRes1.getDouble(1);
-          if (Math.abs(checkingBalance  - checkingNow) < 1e-5) {
+          if (Math.abs(checkingBalance  - checkingNow) > 1e-5) {
             String msg = String.format("Validation failed for customer #%d, checking, Balance", custId);
             throw new SQLException(msg);
           }

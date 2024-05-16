@@ -2,6 +2,7 @@ package org.dbiir.tristar.transaction.concurrency;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.dbiir.tristar.common.LockStrategy;
 import org.dbiir.tristar.common.LockType;
 
 import java.sql.SQLException;
@@ -20,6 +21,8 @@ public class XNORLock {
     private final List<LockEntry> lockList;
     private int count;
     private final Lock lock;
+    private final LockStrategy strategy; // 1 for no-wait, 2 for wait-die
+    static private long lockWaitTimeout = 10;
 
     public XNORLock() {
         this.type = LockType.NoneType;
@@ -27,22 +30,36 @@ public class XNORLock {
         this.lockList = new LinkedList<>();
         this.count = 0;
         lock = new ReentrantLock();
+        strategy = LockStrategy.NO_WAIT;
     }
 
     public boolean requestLock(long transactionId, LockType type) throws SQLException {
         lock.lock();
         try {
-            if (!waitList.isEmpty() || (this.type != LockType.NoneType && tolerate(this.type, type))) {
+            if (!waitList.isEmpty() || !tolerate(this.type, type)) {
+                if (strategy == LockStrategy.NO_WAIT) {
+                    lock.unlock();
+                    String msg = "Abort due to no wait, transaction id: " + transactionId;
+                    throw new SQLException(msg, "500");
+                }
                 if (!admitByWaitDieStrategy(transactionId)) {
                     lock.unlock();
                     String msg = "Abort due to wait die, transaction id: " + transactionId;
-                    throw new SQLException(msg);
+                    throw new SQLException(msg, "500");
                 }
                 LockEntry entry = new LockEntry(transactionId, type);
                 waitList.add(entry);
                 lock.unlock();
+                long startTime = System.currentTimeMillis();
                 while (!entry.isGrantee()) {
                     Thread.sleep(0, 1000);
+                    if (System.currentTimeMillis() - startTime > 10) {
+                        lock.lock();
+                        waitList.removeIf(e -> e.transactionId == transactionId);
+                        lock.unlock();
+                        String msg = "Abort due to wait die and timeout, transaction id: " + transactionId;
+                        throw new SQLException(msg, "500");
+                    }
                 }
             } else {
                 this.type = type;
@@ -85,8 +102,8 @@ public class XNORLock {
     private boolean tolerate(LockType type1, LockType type2) {
         if (type1 == LockType.NoneType || type2 == LockType.NoneType)
             return true;
-        if (type1 == LockType.EX || type2 == LockType.EX)
-            return false;
+//        if (type1 == LockType.EX || type2 == LockType.EX)
+//            return false;
         return type1 == type2;
     }
 

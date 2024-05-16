@@ -31,7 +31,7 @@ cc_map = {
 }
 
 
-def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zipf=-0.1, rate="unlimited",
+def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zipf=-0.1, rate: str="",
                           dir="../config", case_name=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
@@ -55,7 +55,11 @@ def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zip
     ElementTree.SubElement(root, "terminals").text = str(terminals)
 
     works = ElementTree.SubElement(root, "works")
-    generate_work(works, rate, weight)
+    if len(rate) == 0:
+        generate_work(works, weight, "unlimited")
+    else:
+        generate_work(works, weight, rate)
+
     transactions = ElementTree.SubElement(root, "transactiontypes")
     generate_transation(transactions)
 
@@ -72,7 +76,9 @@ def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zip
     elif hsn > 0 and hsp > 0:
         filename += "_hsn_{:05d}_hsp_{:03.2f}".format(hsn, hsp)
 
-    if len(case_name) is not 0:
+    if len(rate):
+        filename += "_rate_" + str(rate)
+    if len(case_name) > 0:
         filename += "_" + case_name + "_" + '-'.join(["{:02d}".format(w) for w in weight])
 
     filename += "_cc_" + cc_map[cc_type]
@@ -82,7 +88,7 @@ def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zip
     f.close()
 
 
-def generate_work(root: ElementTree, rate, weights):
+def generate_work(root: ElementTree, weights, rate="unlimited"):
     work = ElementTree.SubElement(root, "work")
     ElementTree.SubElement(work, "warmup").text = str(warmupTime)
     ElementTree.SubElement(work, "time").text = str(execTime)
@@ -165,7 +171,7 @@ def sb_bal_ratio(terminal=128):
         generate_pg_sb_config(exp[0], terminals=terminal, weight=exp[1], zipf=exp[2], dir=dir_name, case_name="Balance")
 
 
-def sb_vc_ratio(terminal=128):
+def sb_wc_ratio(terminal=128):
     dir_name = "../config/smallbank/wc_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
@@ -180,6 +186,22 @@ def sb_vc_ratio(terminal=128):
         generate_pg_sb_config(exp[0], terminals=terminal, weight=exp[1], zipf=exp[2], dir=dir_name, case_name="WriteCheck")
 
 
+def sb_rate(terminal=128):
+    dir_name = "../config/smallbank/rate-" + str(terminal) + "/postgresql"
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",
+          "RC_TAILOR_LOCK"]
+    hsn_list = [10, 100, 1000]
+    hsp_list = [0.5]
+    rates = [5000, 10000, 15000, "unlimited"]
+    weight = [20, 20, 20, 0, 20, 20]
+
+    experiments = product(cc, hsn_list, hsp_list, rates)
+    for exp in experiments:
+        generate_pg_sb_config(exp[0], terminals=terminal, weight=weight, hsn=exp[1], hsp=exp[2], rate=str(exp[3]), dir=dir_name)
+
+
 if __name__ == '__main__':
     if not os.path.exists("../config"):
         os.mkdir("../config")
@@ -187,3 +209,6 @@ if __name__ == '__main__':
     sb_scalability()
     sb_hotspot(256)
     sb_zip_fain(256)
+    sb_bal_ratio(256)
+    sb_wc_ratio(256)
+    sb_rate(256)

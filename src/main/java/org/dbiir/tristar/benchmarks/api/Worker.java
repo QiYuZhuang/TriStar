@@ -756,6 +756,8 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     } else if (errorCode == 0 && sqlState.equals("55P03")) {
       // Postgres lockwait timeout
       return true;
+    } else if (errorCode == 0 && sqlState.equals("500")) {
+      return true;
     }
     return false;
   }
