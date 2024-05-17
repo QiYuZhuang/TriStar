@@ -164,6 +164,12 @@ public class WorkloadConfiguration {
       case "DYNAMIC":
         this.concurrencyControlType = CCType.DYNAMIC;
         break;
+      case "RC":
+        this.concurrencyControlType = CCType.RC;
+        break;
+      case "SI":
+        this.concurrencyControlType = CCType.SI;
+        break;
       default:
         this.concurrencyControlType = CCType.NUM_CC;
     }

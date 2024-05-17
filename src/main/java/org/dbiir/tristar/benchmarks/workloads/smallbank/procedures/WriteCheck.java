@@ -78,7 +78,7 @@ public class WriteCheck extends Procedure {
               + "   SET bal = bal - ? "
               + " WHERE custid = ?");
 
-  public void run(Connection conn, String custName, double amount, CCType type) throws SQLException {
+  public void run(Connection conn, String custName, double amount, CCType type, Connection conn2) throws SQLException {
     // First convert the custName to the custId
     long tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
     long custId;
@@ -162,7 +162,7 @@ public class WriteCheck extends Procedure {
     }
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       // may have some bug
-      try (PreparedStatement balStmt = this.getPreparedStatement(conn, GetSavingsBalance, custId)) {
+      try (PreparedStatement balStmt = this.getPreparedStatement(conn2, GetSavingsBalance, custId)) {
         try (ResultSet balRes = balStmt.executeQuery()) {
           if (!balRes.next()) {
             String msg =

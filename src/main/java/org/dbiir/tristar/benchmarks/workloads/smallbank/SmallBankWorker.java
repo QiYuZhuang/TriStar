@@ -166,9 +166,9 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
 
       // WriteCheck
     } else if (procClass.equals(WriteCheck.class)) {
-      this.generateCustIds(false);
+      this.generateCustIds(true);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
-      this.procWriteCheck.run(conn, custName, SmallBankConstants.PARAM_WRITE_CHECK_AMOUNT, getBenchmark().getCCType());
+      this.procWriteCheck.run(conn, custName, SmallBankConstants.PARAM_WRITE_CHECK_AMOUNT, getBenchmark().getCCType(), conn2);
     }
 
     return TransactionStatus.SUCCESS;

@@ -56,6 +56,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private final int id;
   private final T benchmark;
   protected Connection conn = null;
+  protected Connection conn2 = null;
   protected final WorkloadConfiguration configuration;
   protected final TransactionTypes transactionTypes;
   protected final Map<TransactionType, Procedure> procedures = new HashMap<>();
@@ -85,12 +86,14 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
         this.conn = this.benchmark.makeConnection();
         this.conn.setAutoCommit(false);
         switch (benchmark.getCCType()) {
+          case RC:
           case RC_ELT:
           case RC_FOR_UPDATE:
           case RC_TAILOR:
           case RC_TAILOR_LOCK:
             this.conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
             break;
+          case SI:
           case SI_ELT:
           case SI_FOR_UPDATE:
           case SI_TAILOR:
@@ -99,6 +102,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           case SER:
             this.conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
         }
+        // read the lasted version
+        this.conn2 = this.benchmark.makeConnection();
+        this.conn2.setAutoCommit(true);
+        this.conn2.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+
 //        this.conn.setTransactionIsolation(this.configuration.getIsolationMode());
       } catch (SQLException ex) {
         throw new RuntimeException("Failed to connect to database", ex);
@@ -116,12 +124,14 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
   private void setIsolation(Connection conn) throws SQLException {
     switch (benchmark.getCCType()) {
+      case RC:
       case RC_ELT:
       case RC_FOR_UPDATE:
       case RC_TAILOR:
       case RC_TAILOR_LOCK:
         conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
         break;
+      case SI:
       case SI_ELT:
       case SI_FOR_UPDATE:
       case SI_TAILOR:

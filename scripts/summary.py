@@ -131,7 +131,7 @@ class ScalabilitySummary(Summary):
         tokens = filename.split("_")
         t_idx, c_idx = tokens.index("terminal"), tokens.index("cc")
         self.terminal = float(tokens[t_idx + 1])
-        super().__init__(filepath, tokens[c_idx + 1:])
+        super().__init__(filepath, '_'.join(tokens[c_idx + 1:]))
         print("read scalability summary: {", self.terminal, self.cc_type, "}")
 
     def __lt__(self, other):
@@ -155,7 +155,7 @@ class BalanceSummary(Summary):
         self.skew = float(tokens[s_idx + 1])
         bal_idx = tokens.index(self.txn_name)
         self.bal_ratio = int(str(tokens[bal_idx + 1]).split("-")[transactionType.index(self.txn_name)])
-        super().__init__(filepath, tokens[c_idx + 1:])
+        super().__init__(filepath, '_'.join(tokens[c_idx + 1:]))
         print("read balance summary: {", self.bal_ratio, self.cc_type, "}")
 
     def __lt__(self, other):
@@ -180,9 +180,9 @@ class WriteCheckSummary(Summary):
         s_idx, c_idx = tokens.index("zipf"), tokens.index("cc")
         self.skew = float(tokens[s_idx + 1])
         bal_idx = tokens.index(self.txn_name)
-        self.bal_ratio = int(str(tokens[bal_idx + 1]).split("-")[transactionType.index(self.txn_name)])
-        super().__init__(filepath, tokens[c_idx + 1:])
-        print("read balance summary: {", self.bal_ratio, self.cc_type, "}")
+        self.wc_ratio = int(str(tokens[bal_idx + 1]).split("-")[transactionType.index(self.txn_name)])
+        super().__init__(filepath, '_'.join(tokens[c_idx + 1:]))
+        print("read balance summary: {", self.wc_ratio, self.cc_type, "}")
 
     def __lt__(self, other):
         if self.cc_type < other.cc_type:
@@ -206,7 +206,7 @@ class RateSummary(Summary):
         h_idx, p_idx, c_idx = tokens.index("hsn"), tokens.index("hsp"), tokens.index("cc")
         self.hotspot = int(tokens[h_idx + 1])
         self.percentage = float(tokens[p_idx + 1])
-        super().__init__(filepath, tokens[c_idx + 1:])
+        super().__init__(filepath, '_'.join(tokens[c_idx + 1:]))
         print("read rate summary: {", self.hotspot, self.percentage, self.cc_type, "}")
 
     def __lt__(self, other):

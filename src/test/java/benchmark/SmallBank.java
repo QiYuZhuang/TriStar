@@ -91,6 +91,8 @@ public class SmallBank {
             case RC_TAILOR -> "RC+TV";
             case RC_TAILOR_LOCK -> "RC+TL";
             case DYNAMIC -> "DYNAMIC";
+            case RC -> "RC";
+            case SI -> "SI";
             case NUM_CC -> null;
         };
     }

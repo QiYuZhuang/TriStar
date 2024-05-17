@@ -16,7 +16,7 @@
     SI_FOR_UPDATE, RC_FOR_UPDATE,
     SI_TAILOR, RC_TAILOR, RC_TAILOR_LOCK, DYNAMIC
     -->
-    <concurrencyControlType>RC_TAILOR</concurrencyControlType>
+    <concurrencyControlType>SI_TAILOR</concurrencyControlType>
     <!--  hotspot  -->
 <!--    <hotspotNumber>1000</hotspotNumber>-->
 <!--    <hotspotPercentage>0.1</hotspotPercentage>-->
@@ -24,7 +24,7 @@
     <zipf>0.1</zipf>
 
 
-    <scalefactor>4</scalefactor>
+    <scalefactor>1</scalefactor>
 
     <!-- The workload -->
     <terminals>32</terminals>
@@ -33,8 +33,8 @@
             <warmup>10</warmup>
             <time>10</time>
             <rate>unlimited</rate>
-<!--            <weights>20,20,20,0,20,20</weights>-->
-            <weights>0,0,0,0,0,100</weights>
+            <weights>20,20,20,0,20,20</weights>
+<!--            <weights>0,0,0,0,0,100</weights>-->
         </work>
     </works>
 
