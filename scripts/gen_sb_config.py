@@ -160,9 +160,8 @@ def sb_bal_ratio(terminal=128):
     dir_name = "../config/smallbank/bal_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",
-          "RC_TAILOR_LOCK"]
-    skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",]
+    skew_list = [0.1, 0.7, 1.3]
     weights = [[20, 20, 20, 0, 20, 20], [15, 40, 15, 0, 15, 15], [10, 60, 10, 0, 10, 10], [5, 80, 5, 0, 5, 5],
                [0, 100, 0, 0, 0, 0]]
 
@@ -175,9 +174,8 @@ def sb_wc_ratio(terminal=128):
     dir_name = "../config/smallbank/wc_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",
-          "RC_TAILOR_LOCK"]
-    skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",]
+    skew_list = [0.1, 0.7, 1.3]
     weights = [[20, 20, 20, 0, 20, 20], [15, 15, 15, 0, 15, 40], [10, 10, 10, 0, 10, 60], [5, 5, 5, 0, 5, 80],
                [0, 0, 0, 0, 0, 100]]
 
@@ -190,8 +188,7 @@ def sb_rate(terminal=128):
     dir_name = "../config/smallbank/rate-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",
-          "RC_TAILOR_LOCK"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR",]
     hsn_list = [10, 100, 1000]
     hsp_list = [0.5]
     rates = [5000, 10000, 15000, "unlimited"]
@@ -207,8 +204,8 @@ if __name__ == '__main__':
         os.mkdir("../config")
 
     sb_scalability()
-    sb_hotspot(256)
-    sb_zip_fain(256)
-    sb_bal_ratio(256)
-    sb_wc_ratio(256)
-    sb_rate(256)
+    sb_hotspot(128)
+    sb_zip_fain(128)
+    sb_bal_ratio(128)
+    sb_wc_ratio(128)
+    sb_rate(128)
