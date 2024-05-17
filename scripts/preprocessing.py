@@ -4,8 +4,24 @@ from typing import List
 import numpy as np
 import pandas as pd
 import os
+import sys
 from datetime import datetime
 from summary import *
+
+
+def create_output_file(filepath: str):
+    file_name = "summary.res"
+    file_path = os.path.join(filepath, file_name)
+    open(file_path, 'w').close()
+
+    sys.stdout = open(file_path, 'w')
+
+    return file_path
+
+
+def refresh_output_channel():
+    sys.stdout.close()
+    sys.stdout = sys.__stdout__
 
 
 def read_files(case_name: str, ts=""):
@@ -40,7 +56,7 @@ def read_files(case_name: str, ts=""):
                     results.append(RateSummary(f.path))
                 else:
                     print("can not find Summary class for " + case_name)
-    return results
+    return results, case_dir
 
 
 def process_summary(summaries: List[Summary]):
@@ -56,8 +72,8 @@ def process_summary(summaries: List[Summary]):
             d3[r.cc_type] += (", " + str(r.p95_latency))
         else:
             d1[r.cc_type] = "[" + str(r.good_throughput)
-            d2[r.cc_type] += (", " + str(r.p50_latency))
-            d3[r.cc_type] += (", " + str(r.p95_latency))
+            d2[r.cc_type] = "[" + str(r.p50_latency)
+            d3[r.cc_type] = "[" + str(r.p95_latency)
 
     print("=" * 20 + " performance " + "=" * 20)
     for key, value in d1.items():
@@ -80,23 +96,29 @@ def print_key(summaries: List[Summary]):
     idx: int = 0
     for r in summaries:
         if isinstance(r, HotspotSummary):
-            res += r.hotspot + "-" + r.percentage + ", "
+            res += str(r.hotspot) + "-" + str(r.percentage) + ", "
         elif isinstance(r, SkewSummary):
-            res += r.skew + ", "
+            res += str(r.skew) + ", "
         elif isinstance(r, BalanceSummary):
-            res += r.bal_ratio + ", "
+            res += str(r.bal_ratio) + ", "
         elif isinstance(r, WriteCheckSummary):
-            res += r.wc_ratio + ", "
+            res += str(r.wc_ratio) + ", "
         elif isinstance(r, RateSummary):
-            res += r.rate + ", "
+            res += str(r.rate) + ", "
         idx += 1
         if idx % 10 == 0:
-            res += "\n\r"
+            res += "\n"
     print(res)
 
 
 if __name__ == "__main__":
-    path = "../results/smallbank/hotspot-64"
-    res = read_files(path)
+    path = "../results/skew-128"
+    args = sys.argv[1:]
+    if len(args) > 0:
+        path = args[0]
+
+    res, case_path = read_files(path)
     res.sort()
+    create_output_file(case_path)
     process_summary(res)
+    refresh_output_channel()

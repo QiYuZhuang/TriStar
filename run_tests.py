@@ -12,7 +12,7 @@ result_prefix = "results/"
 workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
-             "rate-256"]
+             "rate-256", "bal_ratio-128", "rate-128"]
 
 
 def exec_cmd(cmd: str):
@@ -86,6 +86,9 @@ def run_once(f: str):
         print("Finish config - { " + case_name + " }")
         # time.sleep(5)
         refresh_output_channel()
+
+    preprocess_cmd = "./scripts/preprocessing.py " + result_prefix + f + "/"
+    exec_cmd(preprocess_cmd)
 
 
 def run_cnt(f: str, cnt: int):
