@@ -53,7 +53,7 @@ public class XNORLock {
                 long startTime = System.currentTimeMillis();
                 while (!entry.isGrantee()) {
                     Thread.sleep(0, 1000);
-                    if (System.currentTimeMillis() - startTime > 10) {
+                    if (System.currentTimeMillis() - startTime > lockWaitTimeout) {
                         lock.lock();
                         waitList.removeIf(e -> e.transactionId == transactionId);
                         lock.unlock();

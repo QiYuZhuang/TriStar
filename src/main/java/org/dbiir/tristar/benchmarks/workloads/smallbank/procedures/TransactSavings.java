@@ -36,6 +36,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.concurrent.locks.Lock;
 
 /**
  * TransactSavings Procedure Original version by Mohammad Alomari and Michael Cahill
@@ -59,12 +60,12 @@ public class TransactSavings extends Procedure {
       new SQLStmt(
           "UPDATE "
               + SmallBankConstants.TABLENAME_SAVINGS
-              + "   SET bal = bal + ? "
-              + " WHERE custid = ?");
+              + "   SET bal = bal + ?, tid = tid + 1 "
+              + " WHERE custid = ? "
+              + " RETURNING tid");
 
-  public void run(Connection conn, String custName, double amount, CCType type) throws SQLException {
+  public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the acctId
-    long tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
     long custId;
 
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
@@ -123,10 +124,30 @@ public class TransactSavings extends Procedure {
     }
     try (PreparedStatement stmt =
         this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
-      stmt.executeUpdate();
+      // TODO: return the savings version for validation
+      try (ResultSet res = stmt.executeQuery()) {
+        if (!res.next()) {
+          String msg = "can not find the checking version for customer #%d".formatted(custId);
+          throw new UserAbortException(msg);
+        }
+        versions[0] = res.getLong(1);
+      }
     }
+
+    if (type == CCType.SI_TAILOR) {
+      LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId, LockType.EX, type);
+    }
+  }
+
+  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
+    if (!success)
+      return;
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid);
+    }
+    if (type == CCType.SI_TAILOR) {
+      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId, LockType.EX);
+      LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId, versions[0]);
     }
   }
 }

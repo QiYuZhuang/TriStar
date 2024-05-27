@@ -100,4 +100,10 @@ public final class TPCCWorker extends Worker<TPCCBenchmark> {
 
     return thinkTime;
   }
+
+  @Override
+  protected void executeAfterWork(TransactionType txnType, boolean success)
+          throws UserAbortException, SQLException {
+
+  }
 }

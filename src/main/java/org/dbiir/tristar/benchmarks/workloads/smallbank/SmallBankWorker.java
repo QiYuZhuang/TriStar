@@ -61,6 +61,8 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
   private int hotspotFixedSize = 1000;
   private double zipFainTheta = -1.0;
   private final ZipfianGenerator custidInZipf;
+  private final long[] versionBuffer = new long[5];
+  private long tid;
 
   public SmallBankWorker(SmallBankBenchmark benchmarkModule, int id) {
     super(benchmarkModule, id);
@@ -124,28 +126,37 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
     }
   }
 
+  private void genSavingsCustId() {
+    if (hotspotUseFixedSize) {
+      if (custIdsBuffer[1] < hotspotFixedSize)
+        custIdsBuffer[1] += hotspotFixedSize;
+    } else if (zipFainTheta > 0) {
+      custIdsBuffer[1] = rng.nextLong();
+    }
+  }
+
   @Override
   protected TransactionStatus executeWork(Connection conn, TransactionType txnType)
       throws UserAbortException, SQLException {
     Class<? extends Procedure> procClass = txnType.getProcedureClass();
-
+    this.tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
     // Amalgamate
     if (procClass.equals(Amalgamate.class)) {
       this.generateCustIds(true);
-      this.procAmalgamate.run(conn, this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType());
+      this.procAmalgamate.run(conn, this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), versionBuffer, tid);
 
       // Balance
     } else if (procClass.equals(Balance.class)) {
       this.generateCustIds(false);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
-      this.procBalance.run(conn, custName, getBenchmark().getCCType());
+      this.procBalance.run(conn, custName, getBenchmark().getCCType(), versionBuffer, tid);
 
       // DepositChecking
     } else if (procClass.equals(DepositChecking.class)) {
       this.generateCustIds(false);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
       this.procDepositChecking.run(
-          conn, custName, SmallBankConstants.PARAM_DEPOSIT_CHECKING_AMOUNT, getBenchmark().getCCType());
+          conn, custName, SmallBankConstants.PARAM_DEPOSIT_CHECKING_AMOUNT, getBenchmark().getCCType(), versionBuffer, tid);
 
       // SendPayment
     } else if (procClass.equals(SendPayment.class)) {
@@ -162,15 +173,45 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
       this.generateCustIds(false);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
       this.procTransactSavings.run(
-          conn, custName, SmallBankConstants.PARAM_TRANSACT_SAVINGS_AMOUNT, getBenchmark().getCCType());
+          conn, custName, SmallBankConstants.PARAM_TRANSACT_SAVINGS_AMOUNT, getBenchmark().getCCType(), versionBuffer, tid);
 
       // WriteCheck
     } else if (procClass.equals(WriteCheck.class)) {
       this.generateCustIds(true);
+      this.genSavingsCustId();
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
-      this.procWriteCheck.run(conn, custName, SmallBankConstants.PARAM_WRITE_CHECK_AMOUNT, getBenchmark().getCCType(), conn2);
+      this.procWriteCheck.run(conn, custName, custIdsBuffer[1], SmallBankConstants.PARAM_WRITE_CHECK_AMOUNT, getBenchmark().getCCType(), conn2, versionBuffer, tid);
     }
 
     return TransactionStatus.SUCCESS;
+  }
+
+  @Override
+  protected void executeAfterWork(TransactionType txnType, boolean success)
+          throws UserAbortException, SQLException {
+    Class<? extends Procedure> procClass = txnType.getProcedureClass();
+
+    // Amalgamate
+    if (procClass.equals(Amalgamate.class)) {
+      this.procAmalgamate.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), success, versionBuffer, tid);
+
+      // Balance
+    } else if (procClass.equals(Balance.class)) {
+      this.procBalance.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid);
+
+      // DepositChecking
+    } else if (procClass.equals(DepositChecking.class)) {
+      this.procDepositChecking.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid);
+
+      // SendPayment
+    } else if (procClass.equals(SendPayment.class)) {
+      // TransactSavings
+    } else if (procClass.equals(TransactSavings.class)) {
+      this.procTransactSavings.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid);
+
+      // WriteCheck
+    } else if (procClass.equals(WriteCheck.class)) {
+      this.procWriteCheck.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), success, versionBuffer, tid);
+    }
   }
 }

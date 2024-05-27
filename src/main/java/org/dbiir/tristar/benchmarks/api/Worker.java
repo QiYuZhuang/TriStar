@@ -24,7 +24,9 @@ import org.dbiir.tristar.benchmarks.types.TransactionStatus;
 import org.dbiir.tristar.benchmarks.util.Histogram;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
 import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankBenchmark;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -651,6 +653,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             break;
           }
         } finally {
+          if (status == TransactionStatus.SUCCESS) {
+            executeAfterWork(transactionType, true);
+          } else {
+            executeAfterWork(transactionType, false);
+          }
+
           if (this.configuration.getNewConnectionPerTxn() && this.conn != null) {
             try {
               this.conn.close();
@@ -785,6 +793,9 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
    */
   protected abstract TransactionStatus executeWork(Connection conn, TransactionType txnType)
       throws UserAbortException, SQLException;
+
+  protected abstract void executeAfterWork(TransactionType txnType, boolean success)
+          throws UserAbortException, SQLException;
 
   /** Called at the end of the test to do any clean up that may be required. */
   public void tearDown() {

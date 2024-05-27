@@ -3,6 +3,7 @@ import os
 from xml.etree import ElementTree
 import xml.dom.minidom as minidom
 from itertools import product
+import random
 
 scaleFactor = 4
 warmupTime = 20
@@ -79,7 +80,7 @@ def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zip
     if len(rate):
         filename += "_rate_" + str(rate)
     if len(case_name) > 0:
-        filename += "_" + case_name + "_" + '-'.join(["{:02d}".format(w) for w in weight])
+        filename += "_" + case_name + "_" + '-'.join(["{:03.1f}".format(w) for w in weight])
 
     filename += "_cc_" + cc_map[cc_type]
 
@@ -101,17 +102,6 @@ def generate_transation(root: ElementTree):
     for entry in transactionType:
         transaction = ElementTree.SubElement(root, "transactiontype")
         ElementTree.SubElement(transaction, "name").text = entry
-
-
-def default_weight_by_dis_ration(ratio: float):
-    weights = [0] * len(transactionType)
-    read_write_record_weight = int(ratio * 100)
-    read_record_weight = (100 - read_write_record_weight) // 2
-    update_record_weight = 100 - read_record_weight - read_write_record_weight
-    weights[transactionType.index("ReadWriteRecord")] = read_write_record_weight
-    weights[transactionType.index("ReadRecord")] = read_record_weight
-    weights[transactionType.index("UpdateRecord")] = update_record_weight
-    return list(weights)
 
 
 def sb_scalability():
@@ -148,7 +138,7 @@ def sb_zip_fain(terminal=128):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
-    skew_list = [0.1, 0.5, 0.9, 1.3]
+    skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [20, 20, 20, 0, 20, 20]
 
     experiments = product(cc, skew_list)
@@ -162,8 +152,10 @@ def sb_bal_ratio(terminal=128):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
     skew_list = [0.1, 0.7, 1.3]
-    weights = [[20, 20, 20, 0, 20, 20], [15, 40, 15, 0, 15, 15], [10, 60, 10, 0, 10, 10], [5, 80, 5, 0, 5, 5],
-               [0, 100, 0, 0, 0, 0]]
+    # weights = [[20, 20, 20, 0, 20, 20], [15, 40, 15, 0, 15, 15], [10, 60, 10, 0, 10, 10], [5, 80, 5, 0, 5, 5],
+    #            [0, 90, 0, 0, 0, 0]]
+    weights = [[22.5, 10, 22.5, 0, 22.5, 22.5], [17.5, 30, 17.5, 0, 17.5, 17.5], [12.5, 50, 12.5, 0, 12.5, 12.5], [7.5, 70, 7.5, 0, 7.5, 7.5],
+               [2.5, 90, 2.5, 0, 2.5, 2.5]]
 
     experiments = product(cc, weights, skew_list)
     for exp in experiments:
@@ -176,8 +168,10 @@ def sb_wc_ratio(terminal=128):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
     skew_list = [0.1, 0.7, 1.3]
-    weights = [[20, 20, 20, 0, 20, 20], [15, 15, 15, 0, 15, 40], [10, 10, 10, 0, 10, 60], [5, 5, 5, 0, 5, 80],
-               [0, 0, 0, 0, 0, 100]]
+    # weights = [[20, 20, 20, 0, 20, 20], [15, 15, 15, 0, 15, 40], [10, 10, 10, 0, 10, 60], [5, 5, 5, 0, 5, 80],
+    #            [0, 0, 0, 0, 0, 100]]
+    weights = [[22.5, 22.5, 22.5, 0, 22.5, 10], [17.5, 17.5, 17.5, 0, 17.5, 30], [12.5, 12.5, 12.5, 0, 12.5, 50], [7.5, 7.5, 7.5, 0, 7.5, 70],
+               [2.5, 2.5, 2.5, 0, 2.5, 90]]
 
     experiments = product(cc, weights, skew_list)
     for exp in experiments:
@@ -199,13 +193,57 @@ def sb_rate(terminal=128):
         generate_pg_sb_config(exp[0], terminals=terminal, weight=weight, hsn=exp[1], hsp=exp[2], rate=str(exp[3]), dir=dir_name)
 
 
+def sb_random(terminal=128, cnt=80):
+    dir_name = "../config/smallbank/random-" + str(terminal) + "/postgresql"
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
+    for i in range(cnt):
+        rf1, rf2 = random.uniform(0, 1), random.uniform(0, 1)
+        skew = random.uniform(0.1, 1.3)
+        hsn = random.randint(10, 5000)
+        hsp = random.uniform(0.1, 0.9)
+        rate = random.randint(5000, 20000)
+        if rf2 < 0.75:
+            rate = "unlimited"
+        weight = rand_weight()
+        if rf1 < 0.5:
+            # skew
+            for c in cc:
+                generate_pg_sb_config(c, terminals=terminal, weight=weight, zipf=skew, rate=str(rate), dir=dir_name, case_name="R")
+        else:
+            # hotspot
+            for c in cc:
+                generate_pg_sb_config(c, terminals=terminal, weight=weight, hsn=hsn, hsp=hsp, rate=str(rate), dir=dir_name, case_name="R")
+
+
+def rand_weight() -> list:
+    r_weight = []
+    total = 100
+    for i in range(4):
+        r_int = random.randint(0, total)
+        r_weight.append(r_int)
+        total -= r_int
+
+    r_weight.append(total)
+    random.shuffle(r_weight)
+    r_weight.insert(3, 0)
+    return r_weight
+
+
 if __name__ == '__main__':
     if not os.path.exists("../config"):
         os.mkdir("../config")
 
+    # warmupTime = 10
+    # execTime = 30
     sb_scalability()
+    warmupTime = 20
+    execTime = 60
     sb_hotspot(128)
     sb_zip_fain(128)
     sb_bal_ratio(128)
     sb_wc_ratio(128)
     sb_rate(128)
+

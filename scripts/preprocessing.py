@@ -59,36 +59,76 @@ def read_files(case_name: str, ts=""):
     return results, case_dir
 
 
-def process_summary(summaries: List[Summary]):
+def process_summary(summaries: List[Summary], case_name: str):
+    d: dict[str, List[Summary]] = {}
     d1: dict[str, str] = {}
     d2: dict[str, str] = {}
     d3: dict[str, str] = {}
 
-    print_key(summaries)
     for r in summaries:
-        if d1.get(r.cc_type) is not None:
-            d1[r.cc_type] += (", " + str(r.good_throughput))
-            d2[r.cc_type] += (", " + str(r.p50_latency))
-            d3[r.cc_type] += (", " + str(r.p95_latency))
+        if d.get(r.cc_type) is not None:
+            d[r.cc_type].append(r)
         else:
-            d1[r.cc_type] = "[" + str(r.good_throughput)
-            d2[r.cc_type] = "[" + str(r.p50_latency)
-            d3[r.cc_type] = "[" + str(r.p95_latency)
+            d[r.cc_type] = [r]
+
+    group_per_case = group_num(case_name)
+    for key, rs in d.items():
+        num_per_case = len(rs) // group_per_case
+        idx = 0
+        if d1.get(key) is None:
+            d1[key] = "["
+            d2[key] = "["
+            d3[key] = "["
+        for r in rs:
+            if idx % num_per_case == 0:
+                d1[key] += "[" + str(r.good_throughput)
+                d2[key] += "[" + str(r.p50_latency)
+                d3[key] += "[" + str(r.p95_latency)
+            else:
+                d1[key] += (", " + str(r.good_throughput))
+                d2[key] += (", " + str(r.p50_latency))
+                d3[key] += (", " + str(r.p95_latency))
+
+            idx += 1
+            if idx % num_per_case == 0:
+                d1[key] += "], "
+                d2[key] += "], "
+                d3[key] += "], "
+        d1[key] += "]"
+        d2[key] += "]"
+        d3[key] += "]"
 
     print("=" * 20 + " performance " + "=" * 20)
     for key, value in d1.items():
-        value += "]"
-        print("\"" + key + "\"", ": ", value)
+        value += ","
+        print("\"" + key + "\"", ":", value)
 
     print("=" * 20 + " p50 " + "=" * 20)
     for key, value in d2.items():
-        value += "]"
-        print("\"" + key + "\"", ": ", value)
+        value += ","
+        print("\"" + key + "\"", ":", value)
 
     print("=" * 20 + " p95 " + "=" * 20)
     for key, value in d3.items():
-        value += "]"
-        print("\"" + key + "\"", ": ", value)
+        value += ","
+        print("\"" + key + "\"", ":", value)
+
+
+def group_num(case_name: str) -> int:
+    if case_name.__contains__("scalability"):
+        return 1
+    elif case_name.__contains__("skew"):
+        return 1
+    elif case_name.__contains__("hotspot"):
+        return 3
+    elif case_name.__contains__("bal_ratio"):
+        return 3
+    elif case_name.__contains__("wc_ratio"):
+        return 3
+    elif case_name.__contains__("rate"):
+        return 3
+    else:
+        return 1
 
 
 def print_key(summaries: List[Summary]):
@@ -120,5 +160,5 @@ if __name__ == "__main__":
     res, case_path = read_files(path)
     res.sort()
     create_output_file(case_path)
-    process_summary(res)
+    process_summary(res, path)
     refresh_output_channel()

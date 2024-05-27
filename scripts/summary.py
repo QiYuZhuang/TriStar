@@ -144,7 +144,7 @@ class ScalabilitySummary(Summary):
 
 
 class BalanceSummary(Summary):
-    bal_ratio: int
+    bal_ratio: float
     skew: float
     txn_name = "Balance"
 
@@ -154,7 +154,7 @@ class BalanceSummary(Summary):
         s_idx, c_idx = tokens.index("zipf"), tokens.index("cc")
         self.skew = float(tokens[s_idx + 1])
         bal_idx = tokens.index(self.txn_name)
-        self.bal_ratio = int(str(tokens[bal_idx + 1]).split("-")[transactionType.index(self.txn_name)])
+        self.bal_ratio = float(str(tokens[bal_idx + 1]).split("-")[transactionType.index(self.txn_name)])
         super().__init__(filepath, '_'.join(tokens[c_idx + 1:]))
         print("read balance summary: {", self.bal_ratio, self.cc_type, "}")
 
@@ -170,7 +170,7 @@ class BalanceSummary(Summary):
 
 
 class WriteCheckSummary(Summary):
-    wc_ratio: int
+    wc_ratio: float
     skew: float
     txn_name = "WriteCheck"
 
@@ -180,7 +180,7 @@ class WriteCheckSummary(Summary):
         s_idx, c_idx = tokens.index("zipf"), tokens.index("cc")
         self.skew = float(tokens[s_idx + 1])
         bal_idx = tokens.index(self.txn_name)
-        self.wc_ratio = int(str(tokens[bal_idx + 1]).split("-")[transactionType.index(self.txn_name)])
+        self.wc_ratio = float(str(tokens[bal_idx + 1]).split("-")[transactionType.index(self.txn_name)])
         super().__init__(filepath, '_'.join(tokens[c_idx + 1:]))
         print("read balance summary: {", self.wc_ratio, self.cc_type, "}")
 
@@ -203,11 +203,45 @@ class RateSummary(Summary):
     def __init__(self, filepath: str):
         filename = filepath.split("/")[-2]
         tokens = filename.split("_")
-        h_idx, p_idx, c_idx = tokens.index("hsn"), tokens.index("hsp"), tokens.index("cc")
+        h_idx, p_idx, c_idx, r_idx = tokens.index("hsn"), tokens.index("hsp"), tokens.index("cc"), tokens.index("rate")
         self.hotspot = int(tokens[h_idx + 1])
         self.percentage = float(tokens[p_idx + 1])
+        self.rate = 100000 if tokens[r_idx + 1] == "unlimited" else int(tokens[r_idx + 1])
         super().__init__(filepath, '_'.join(tokens[c_idx + 1:]))
         print("read rate summary: {", self.hotspot, self.percentage, self.cc_type, "}")
+
+    def __lt__(self, other):
+        if self.cc_type < other.cc_type:
+            return True
+        elif self.cc_type == other.cc_type:
+            if self.hotspot < other.hotspot:
+                return True
+            elif self.hotspot == other.hotspot:
+                if self.percentage < other.percentage:
+                    return True
+                elif abs(self.percentage - other.percentage) < 1e-5:
+                    return self.rate < other.rate
+        return False
+
+
+class RandomSummary(Summary):
+    rate: str
+    hotspot: int = -1
+    percentage: float = -1.0
+    skew: float = -1.0
+    weight: str
+
+    def __init__(self, filepath: str):
+        filename = filepath.split("/")[-2]
+        tokens = filename.split("_")
+        self.hotspot = int(tokens[tokens.index("hsn") + 1]) if "hsn" in tokens else -1
+        self.percentage = float(tokens[tokens.index("hsp") + 1]) if "hsp" in tokens else -1.0
+        self.skew = float(tokens[tokens.index("zipf") + 1]) if "zipf" in tokens else -1.0
+        self.rate = str(tokens[tokens.index("rate") + 1])
+        self.weight = str(tokens[tokens.index("R") + 1])
+        c_idx = tokens.index("cc")
+        super().__init__(filepath, '_'.join(tokens[c_idx + 1:]))
+        # print("read random summary: {", self.hotspot, self.percentage, self.cc_type, "}")
 
     def __lt__(self, other):
         if self.cc_type < other.cc_type:
@@ -219,5 +253,11 @@ class RateSummary(Summary):
                 if self.hotspot < other.hotspot:
                     return True
                 elif self.hotspot == other.hotspot:
-                    return self.percentage < other.percentage
+                    if self.percentage < other.percentage:
+                        return True
+                    elif abs(self.percentage - other.percentage) < 1e-5:
+                        if self.skew < other.skew:
+                            return True
+                        elif abs(self.skew - other.skew):
+                            return self.weight < other.weight
         return False

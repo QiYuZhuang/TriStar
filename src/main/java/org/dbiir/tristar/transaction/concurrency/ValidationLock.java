@@ -1,0 +1,124 @@
+package org.dbiir.tristar.transaction.concurrency;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockStrategy;
+import org.dbiir.tristar.common.LockType;
+
+import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+
+public class ValidationLock {
+    private LockType type; // SH for read validation, EX for write commit check
+    private final Lock lock;
+    private int count;
+    private long maxTid;
+    private long maxWriteWaitTid;
+    private long minWriteWaitTid;
+    @Getter
+    private final long id;
+    @Getter
+    long version;
+
+    public ValidationLock(long id) {
+        this.lock = new ReentrantLock();
+        this.type = LockType.NoneType;
+        this.count = 0;
+        this.maxTid = 0;
+        this.maxWriteWaitTid = 0;
+        this.minWriteWaitTid = 0;
+        this.id = id;
+        this.version = -1;
+    }
+
+    synchronized public void updateVersion(long v) {
+        version = v > version ? v : version;
+    }
+
+    /*
+     * @return result. 1 for success, 0 means the transaction manager can wait, -1 for abort
+     */
+    public int tryLock(long tid, LockType lockType, CCType ccType) {
+        int result = -2;
+        this.lock.lock();
+        if (this.type == LockType.NoneType) {
+            this.type = lockType;
+            assert (this.count == 0);
+            count++;
+            if (lockType == LockType.EX) {
+                minWriteWaitTid = 0;
+                maxWriteWaitTid = 0;
+            }
+            this.maxTid = tid;
+            result = 1;
+        } else if (this.type == LockType.SH) {
+            // this type is SH
+            if (lockType == LockType.SH) {
+                if (minWriteWaitTid != 0 && tid > minWriteWaitTid) {
+                    // an old transaction wants to read the entry, abort
+                    result = -1;
+                } else {
+                    count++;
+                    this.maxTid = Math.max(this.maxTid, tid);
+                    result = 1;
+                }
+            } else {
+                if (minWriteWaitTid != 0) {
+                    // it wants to acquire a write lock, while there is a concurrent write send commit before it
+                    if (ccType == CCType.SI_TAILOR) {
+                        result = -1;
+                    } else if (ccType == CCType.RC_TAILOR) {
+                        minWriteWaitTid = Math.min(minWriteWaitTid, tid);
+                        result = 0;
+                    }
+                } else {
+                    minWriteWaitTid = tid;
+                    result = 0;
+                }
+            }
+        } else {
+            // this type is EX
+            if (lockType == LockType.SH) {
+                result = -1;
+            } else {
+                if (ccType == CCType.SI_TAILOR) {
+                    result = -1;
+                } else if (ccType == CCType.RC_TAILOR) {
+                    // concurrent update is allowed under RC, only need to keep the rw order
+                    count++;
+                    this.maxTid = Math.max(this.maxTid, tid);
+                    result = 1;
+                }
+            }
+        }
+        this.lock.unlock();
+//        if (result == 1) {
+//            assert (this.type == lockType);
+//            System.out.println("acquire id: " + id + " " + this.type + ", count: " + (count));
+//        }
+        assert (result != -2);
+        return result;
+    }
+
+    public void releaseLock(LockType lockType) {
+        this.lock.lock();
+//        System.out.println("release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
+//        if (this.type != lockType) {
+//            System.out.println("failure-release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
+//        }
+        assert (this.type == lockType);
+        count--;
+        if (count == 0) {
+            this.type = LockType.NoneType;
+            this.maxTid = 0;
+        }
+        this.lock.unlock();
+    }
+
+    public boolean free() {
+        return this.type == LockType.NoneType;
+    }
+}

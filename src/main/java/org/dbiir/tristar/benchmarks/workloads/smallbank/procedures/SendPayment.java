@@ -28,6 +28,7 @@ package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.common.CCType;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -110,5 +111,10 @@ public class SendPayment extends Procedure {
         this.getPreparedStatement(conn, UpdateCheckingBalance, amount, destAcct)) {
       updateStmt.executeUpdate();
     }
+  }
+
+  public void doAfterCommit(long custId0, long custId1, CCType type) {
+    if (type != CCType.SI_TAILOR && type != CCType.RC_TAILOR)
+      return;
   }
 }

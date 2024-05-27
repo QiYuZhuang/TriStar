@@ -7,12 +7,12 @@ import sys
 
 
 prefix_cmd = "java -cp target/tristar/tristar/lib/ -jar target/tristar/tristar/tristar.jar "
-              # "-b tpcc -c config/postgres/sample_tpcc_config.xml --execute=true"
+# "-b tpcc -c config/postgres/sample_tpcc_config.xml --execute=true"
 result_prefix = "results/"
 workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
-             "rate-256", "bal_ratio-128", "rate-128"]
+             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128"]
 
 
 def exec_cmd(cmd: str):
