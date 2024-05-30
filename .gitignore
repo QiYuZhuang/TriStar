@@ -40,4 +40,4 @@ build/
 ### Custom ###
 results/
 targets/
-config/smallbank/
+config/

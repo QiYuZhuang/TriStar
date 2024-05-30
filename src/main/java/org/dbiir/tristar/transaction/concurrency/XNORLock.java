@@ -22,6 +22,8 @@ public class XNORLock {
     private int count;
     private final Lock lock;
     private final LockStrategy strategy; // 1 for no-wait, 2 for wait-die
+    @Getter
+    private final long key;
     static private long lockWaitTimeout = 10;
 
     public XNORLock() {
@@ -29,11 +31,22 @@ public class XNORLock {
         this.waitList = new LinkedList<>();
         this.lockList = new LinkedList<>();
         this.count = 0;
+        this.key = 0;
         lock = new ReentrantLock();
         strategy = LockStrategy.NO_WAIT;
     }
 
-    public boolean requestLock(long transactionId, LockType type) throws SQLException {
+    public XNORLock(long key) {
+        this.type = LockType.NoneType;
+        this.waitList = new LinkedList<>();
+        this.lockList = new LinkedList<>();
+        this.count = 0;
+        this.key = key;
+        lock = new ReentrantLock();
+        strategy = LockStrategy.NO_WAIT;
+    }
+
+    public boolean tryLock(long transactionId, LockType type) throws SQLException {
         lock.lock();
         try {
             if (!waitList.isEmpty() || !tolerate(this.type, type)) {
@@ -120,6 +133,17 @@ public class XNORLock {
                 return false;
         }
         return true;
+    }
+
+    public boolean free() {
+        if (lock.tryLock())
+            return false;
+        if (lockList.isEmpty() && waitList.isEmpty()) {
+            lock.unlock();
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public String toString() {

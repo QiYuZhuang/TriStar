@@ -2,4 +2,5 @@
 <plugins>
     <plugin name="smallbank">org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankBenchmark</plugin>
     <plugin name="tpcc">org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCBenchmark</plugin>
+    <plugin name="ycsb">org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBBenchmark</plugin>
 </plugins>

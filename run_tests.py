@@ -12,7 +12,8 @@ result_prefix = "results/"
 workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
-             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128"]
+             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
+             "ycsb-wr-128", "ycsb-scalability", "ycsb-skew"]
 
 
 def exec_cmd(cmd: str):
@@ -76,7 +77,7 @@ def run_once(f: str):
     print("config_path: " + config_path)
     unique_ts = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     for conf_file in traverse_dir(config_path):
-        result_dir = result_prefix + f + "/" + unique_ts + "/"
+        result_dir = result_prefix + args.wl + "/" + f + "/" + unique_ts + "/"
         case_name = os.path.splitext(os.path.basename(conf_file))[0]
         output_file = create_output_file(result_dir + case_name)
         print("Run config - { " + case_name + " }")
@@ -87,7 +88,7 @@ def run_once(f: str):
         # time.sleep(5)
         refresh_output_channel()
 
-    preprocess_cmd = "./scripts/preprocessing.py " + result_prefix + f + "/"
+    preprocess_cmd = "./scripts/preprocessing.py " + result_prefix + args.wl + "/" + f + "/"
     exec_cmd(preprocess_cmd)
 
 

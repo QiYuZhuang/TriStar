@@ -44,6 +44,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
 
   private final char[] data;
   private final String[] params = new String[YCSBConstants.NUM_FIELDS];
+  private final String[][] fixParams = new String[10][YCSBConstants.NUM_FIELDS];
   private final String[] results = new String[YCSBConstants.NUM_FIELDS];
 
   private final UpdateRecord procUpdateRecord;
@@ -52,13 +53,30 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   private final ReadModifyWriteRecord procReadModifyWriteRecord;
   private final InsertRecord procInsertRecord;
   private final DeleteRecord procDeleteRecord;
+  private final ReadWriteRecord procReadWriteRecord;
+  private final int totalRequest = 10;
+  private final double ratio1;
+  private final double ratio2;
+  private final long[] versionBuffer;
+  private int[] keynames = new int[totalRequest];
+  private long tid;
+
 
   public YCSBWorker(YCSBBenchmark benchmarkModule, int id, int init_record_count) {
     super(benchmarkModule, id);
     this.data = new char[benchmarkModule.fieldSize];
-    this.readRecord =
-        new ZipfianGenerator(
-            rng(), init_record_count, benchmarkModule.skewFactor); // pool for read keys
+    this.ratio1 = benchmarkModule.wrtxn;
+    this.ratio2 = benchmarkModule.wrtup;
+    this.readRecord = new ZipfianGenerator(rng(), init_record_count, benchmarkModule.zipf); // pool for read keys
+    versionBuffer = new long[totalRequest];
+    for (int i = 0; i < totalRequest; i++) {
+      for (int j = 0; j < this.params.length; j++) {
+        this.fixParams[i][j] = new String(TextGenerator.randomFastChars(rng(), this.data));
+        this.fixParams[i][j] = this.fixParams[i][j].replaceAll(";", "!");
+        this.fixParams[i][j] = this.fixParams[i][j].replaceAll("\"", ".");
+        this.fixParams[i][j] = this.fixParams[i][j].replaceAll("'", "~");
+      }
+    }
 
     synchronized (YCSBWorker.class) {
       // We must know where to start inserting
@@ -76,11 +94,13 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     this.procReadModifyWriteRecord = this.getProcedure(ReadModifyWriteRecord.class);
     this.procInsertRecord = this.getProcedure(InsertRecord.class);
     this.procDeleteRecord = this.getProcedure(DeleteRecord.class);
+    this.procReadWriteRecord = this.getProcedure(ReadWriteRecord.class);
   }
 
   @Override
   protected TransactionStatus executeWork(Connection conn, TransactionType nextTrans)
       throws Procedure.UserAbortException, SQLException {
+    this.tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
     Class<? extends Procedure> procClass = nextTrans.getProcedureClass();
 
     if (procClass.equals(DeleteRecord.class)) {
@@ -95,12 +115,19 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       scanRecord(conn);
     } else if (procClass.equals(UpdateRecord.class)) {
       updateRecord(conn);
+    } else if (procClass.equals(ReadWriteRecord.class)) {
+      readWriteRead(conn);
     }
     return (TransactionStatus.SUCCESS);
   }
 
   @Override
   protected void executeAfterWork(TransactionType txnType, boolean success) throws Procedure.UserAbortException, SQLException {
+    Class<? extends Procedure> procClass = txnType.getProcedureClass();
+    if (procClass.equals(ReadWriteRecord.class)) {
+      // release validation locks if needs
+      this.procReadWriteRecord.doAfterCommit(keynames, getBenchmark().getCCType(), success, versionBuffer, tid);
+    }
 
   }
 
@@ -138,9 +165,34 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     this.procDeleteRecord.run(conn, keyname);
   }
 
+  private boolean isDuplicatedKey(int key, int slot, int[] keyNames) {
+    for (int i = 0; i < slot; i++) {
+      if (key == keyNames[i])
+        return true;
+    }
+    return false;
+  }
+
+  private void readWriteRead(Connection conn) throws SQLException {
+    for (int i = 0; i < totalRequest; i++) {
+      int keyname = 0;
+
+      do {
+        keyname = readRecord.nextInt();
+      } while (isDuplicatedKey(keyname, i, keynames));
+
+      keynames[i] = keyname;
+    }
+
+    this.procReadWriteRecord.run(conn, keynames, fixParams, ratio1, ratio2, tid, versionBuffer, getBenchmark().getCCType());
+  }
+
   private void buildParameters() {
     for (int i = 0; i < this.params.length; i++) {
       this.params[i] = new String(TextGenerator.randomFastChars(rng(), this.data));
+      this.params[i] = this.params[i].replaceAll(";", "!");
+      this.params[i] = this.params[i].replaceAll("\"", ".");
+      this.params[i] = this.params[i].replaceAll("'", "~");
     }
   }
 }

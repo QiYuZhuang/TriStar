@@ -132,6 +132,8 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
         custIdsBuffer[1] += hotspotFixedSize;
     } else if (zipFainTheta > 0) {
       custIdsBuffer[1] = rng.nextLong();
+    } else {
+      custIdsBuffer[1] = custIdsBuffer[1] % 1000;
     }
   }
 

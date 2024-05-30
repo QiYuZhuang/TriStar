@@ -147,7 +147,7 @@ public class Amalgamate extends Procedure {
     // Get Balance Information
     int phase = 0;
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId0), tid, LockType.EX);
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid, LockType.EX);
       phase = 1;
     }
     double savingsBalance;
@@ -166,7 +166,7 @@ public class Amalgamate extends Procedure {
 
     if (type == CCType.RC_TAILOR_LOCK) {
       try {
-        LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId0), tid, LockType.EX);
+        LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid, LockType.EX);
         phase = 2;
       } catch (SQLException ex) {
         releaseTailorLock(phase, custId0, custId1, tid);
@@ -203,7 +203,7 @@ public class Amalgamate extends Procedure {
 //    }
     if (type == CCType.RC_TAILOR_LOCK) {
       try {
-        LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId1), tid, LockType.EX);
+        LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid, LockType.EX);
         phase = 3;
       } catch (SQLException ex) {
         releaseTailorLock(phase, custId0, custId1, tid);
@@ -248,14 +248,14 @@ public class Amalgamate extends Procedure {
 
   private void releaseTailorLock(int phase, long custId0, long custId1, long tid) {
     if (phase == 1) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId0), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid);
     } else if (phase == 2) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId0), tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId0), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid);
     } else if (phase == 3) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId1), tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId0), tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId0), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId1, tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid);
     }
   }
 
@@ -277,9 +277,9 @@ public class Amalgamate extends Procedure {
       return;
 
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId1), tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId0), tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId0), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid);
     }
     if (type == CCType.RC_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId1, LockType.EX);

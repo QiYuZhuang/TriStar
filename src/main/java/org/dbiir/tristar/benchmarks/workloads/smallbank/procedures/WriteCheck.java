@@ -108,7 +108,7 @@ public class WriteCheck extends Procedure {
     double savingsBalance;
     int phase = 0; // the phase of RC_TAILOR_LOCK
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId1), tid, LockType.SH);
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid, LockType.SH);
       phase = 1;
     }
     try (PreparedStatement balStmt0 = switch (type) {
@@ -131,7 +131,7 @@ public class WriteCheck extends Procedure {
 
     double checkingBalance;
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId), tid, LockType.EX);
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
     }
     phase = 2;
     try (PreparedStatement balStmt1 = switch (type) {
@@ -229,10 +229,10 @@ public class WriteCheck extends Procedure {
 
   private void releaseTailorLock(int phase, long custId0, long custId1, long tid) {
     if (phase == 1) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId1), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid);
     } else if (phase == 2) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId0), tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId1), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid);
     }
   }
 
@@ -245,8 +245,8 @@ public class WriteCheck extends Procedure {
       return;
 
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId0), tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId1), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid);
     }
 
     if (type == CCType.RC_TAILOR) {

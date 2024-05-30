@@ -85,7 +85,7 @@ public class DepositChecking extends Procedure {
 
     // Then update their checking balance
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId), tid, LockType.EX);
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
     }
     try (PreparedStatement stmt1 =
         this.getPreparedStatement(conn, UpdateCheckingBalance, amount, custId)) {
@@ -105,7 +105,7 @@ public class DepositChecking extends Procedure {
     if (!success)
       return;
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, String.valueOf(custId), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid);
     }
     if (type == CCType.RC_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId, LockType.EX);

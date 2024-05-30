@@ -120,7 +120,7 @@ public class TransactSavings extends Procedure {
 
     // Then update their savings balance
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid, LockType.EX);
+      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid, LockType.EX);
     }
     try (PreparedStatement stmt =
         this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
@@ -134,7 +134,7 @@ public class TransactSavings extends Procedure {
       }
     }
 
-    if (type == CCType.SI_TAILOR) {
+    if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId, LockType.EX, type);
     }
   }
@@ -143,9 +143,9 @@ public class TransactSavings extends Procedure {
     if (!success)
       return;
     if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, String.valueOf(custId), tid);
+      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid);
     }
-    if (type == CCType.SI_TAILOR) {
+    if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId, LockType.EX);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId, versions[0]);
     }

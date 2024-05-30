@@ -78,6 +78,10 @@ public class ValidationLock {
                     minWriteWaitTid = tid;
                     result = 0;
                 }
+
+                if (result == 0 && maxTid > tid) {
+                    result = -1;
+                }
             }
         } else {
             // this type is EX

@@ -21,7 +21,7 @@
 <!--    <hotspotNumber>1000</hotspotNumber>-->
 <!--    <hotspotPercentage>0.1</hotspotPercentage>-->
     <!--  zipfain  -->
-    <zipf>0.9</zipf>
+<!--    <zipf>0.9</zipf>-->
 
 
     <scalefactor>1</scalefactor>

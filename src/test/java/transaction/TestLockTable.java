@@ -15,50 +15,44 @@ public class TestLockTable {
     void TestSHLock() {
         String tableName = "savings";
         try {
-            LockTable.getInstance().tryLock(tableName, "1", 1, LockType.SH);
+            LockTable.getInstance().tryLock(tableName, 1, 1, LockType.SH);
         } catch (SQLException ex) {
 
         }
 
-        LockTable.getInstance().releaseLock(tableName, "1", 1);
+        LockTable.getInstance().releaseLock(tableName, 1, 1);
     }
 
     @Test
     void TestEXLock() {
         String tableName = "savings";
-        boolean entry1, entry2, entry3;
         try {
-            entry1 = LockTable.getInstance().tryLock(tableName, "1", 1, LockType.EX);
-            assert entry1;
+            LockTable.getInstance().tryLock(tableName, 1, 1, LockType.EX);
         } catch (SQLException ex) {
 
         }
 
-        LockTable.getInstance().releaseLock(tableName, "1", 1);
+        LockTable.getInstance().releaseLock(tableName, 1, 1);
     }
 
     @Test
     void TestEXLock2() {
         String tableName = "savings";
-        boolean entry1, entry2, entry3;
         try {
-            entry1 = LockTable.getInstance().tryLock(tableName, "1", 1, LockType.EX);
-            assert entry1;
-            entry2 = LockTable.getInstance().tryLock(tableName, "1", 2, LockType.EX);
-            assert entry2;
+            LockTable.getInstance().tryLock(tableName, 1, 1, LockType.EX);
+            LockTable.getInstance().tryLock(tableName, 1, 2, LockType.EX);
         } catch (SQLException ex) {
 
         }
 
-        LockTable.getInstance().releaseLock(tableName, "1", 1);
-        LockTable.getInstance().releaseLock(tableName, "1", 2);
+        LockTable.getInstance().releaseLock(tableName, 1, 1);
+        LockTable.getInstance().releaseLock(tableName, 1, 2);
 
         try {
-            entry2 = LockTable.getInstance().tryLock(tableName, "1", 3, LockType.SH);
-            assert entry2;
+            LockTable.getInstance().tryLock(tableName, 1, 3, LockType.SH);
         } catch (SQLException ex) {
 
         }
-        LockTable.getInstance().releaseLock(tableName, "1", 3);
+        LockTable.getInstance().releaseLock(tableName, 1, 3);
     }
 }

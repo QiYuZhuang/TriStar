@@ -23,6 +23,7 @@ import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.procedures.InsertRecord;
 import org.dbiir.tristar.benchmarks.catalog.Table;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,8 +44,13 @@ public final class YCSBBenchmark extends BenchmarkModule {
   /** The constant used in the zipfian distribution (to modify the skew) */
   protected final double skewFactor;
 
-  public YCSBBenchmark(WorkloadConfiguration workConf) {
+  protected final double wrtup;
+  protected final double wrtxn;
+  protected final double zipf;
+
+  public YCSBBenchmark(WorkloadConfiguration workConf) throws SQLException {
     super(workConf);
+    LockTable.getInstance().initHotspot("ycsb", makeConnection());
 
     int fieldSize = YCSBConstants.MAX_FIELD_SIZE;
     if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("fieldSize")) {
@@ -64,6 +70,24 @@ public final class YCSBBenchmark extends BenchmarkModule {
       }
     }
     this.skewFactor = skewFactor;
+
+    if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("zipf")) {
+      this.zipf = workConf.getXmlConfig().getDouble("zipf");
+    } else {
+      this.zipf = 0.1;
+    }
+
+    if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("wrtup")) {
+      this.wrtup = workConf.getXmlConfig().getDouble("wrtup");
+    } else {
+      this.wrtup = 0.5;
+    }
+
+    if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("wrtxn")) {
+      this.wrtxn = workConf.getXmlConfig().getDouble("wrtxn");
+    } else {
+      this.wrtxn = 0.5;
+    }
   }
 
   @Override
@@ -78,13 +102,13 @@ public final class YCSBBenchmark extends BenchmarkModule {
       try (Connection metaConn = this.makeConnection();
           Statement stmt = metaConn.createStatement();
           ResultSet res = stmt.executeQuery(userCount)) {
-        int init_record_count = 0;
-        while (res.next()) {
-          init_record_count = res.getInt(1);
-        }
+        int init_record_count = (int)(workConf.getScaleFactor() * 1000);
+//        while (res.next()) {
+//          init_record_count = res.getInt(1);
+//        }
 
         for (int i = 0; i < workConf.getTerminals(); ++i) {
-          workers.add(new YCSBWorker(this, i, init_record_count + 1));
+          workers.add(new YCSBWorker(this, i, init_record_count));
         }
       }
     } catch (SQLException e) {
