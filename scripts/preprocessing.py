@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import datetime
 from summary import *
+from YCSBSummary import *
 
 
 def create_output_file(filepath: str):
@@ -39,25 +40,44 @@ def read_files(case_name: str, ts=""):
         if d.is_dir():
             exps.append(d)
 
+    return generate_summary(exps=exps, case_name=case_name), case_dir
+
+
+def generate_summary(exps: List, case_name: str) -> List[Summary]:
+    results = []
+    ycsb_case: bool = False
+    if case_name.__contains__("ycsb"):
+        ycsb_case = True
+
     for e in exps:
         for f in os.scandir(e):
             if f.name.__contains__("summary"):
                 if case_name.__contains__("scalability"):
-                    results.append(ScalabilitySummary(f.path))
+                    if ycsb_case:
+                        results.append(YCSBBaseSummary(f.path))
+                    else:
+                        results.append(ScalabilitySummary(f.path))
                 elif case_name.__contains__("skew"):
-                    results.append(SkewSummary(f.path))
+                    if ycsb_case:
+                        results.append(YCSBBaseSummary(f.path))
+                    else:
+                        results.append(SkewSummary(f.path))
                 elif case_name.__contains__("hotspot"):
                     results.append(HotspotSummary(f.path))
                 elif case_name.__contains__("bal_ratio"):
                     results.append(BalanceSummary(f.path))
                 elif case_name.__contains__("wc_ratio"):
                     results.append(WriteCheckSummary(f.path))
+                elif case_name.__contains__("wr_ratio"):
+                    results.append(YCSBBaseSummary(f.path))
                 elif case_name.__contains__("rate"):
-                    results.append(RateSummary(f.path))
+                    if ycsb_case:
+                        results.append(YCSBRateSummary(f.path))
+                    else:
+                        results.append(RateSummary(f.path))
                 else:
                     print("can not find Summary class for " + case_name)
-    return results, case_dir
-
+    return results
 
 def process_summary(summaries: List[Summary], case_name: str):
     d: dict[str, List[Summary]] = {}
@@ -125,7 +145,7 @@ def group_num(case_name: str) -> int:
         return 3
     elif case_name.__contains__("wc_ratio"):
         return 3
-    elif case_name.__contains__("rate"):
+    elif case_name.__contains__("rate") and not case_name.__contains__("ycsb"):
         return 3
     else:
         return 1
