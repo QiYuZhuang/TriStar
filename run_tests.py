@@ -4,6 +4,8 @@ from datetime import datetime
 import time
 import argparse
 import sys
+import subprocess
+import signal
 
 
 prefix_cmd = "java -cp target/tristar/tristar/lib/ -jar target/tristar/tristar/tristar.jar "
@@ -13,7 +15,18 @@ workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
              "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
-             "ycsb-wr-128", "ycsb-scalability", "ycsb-skew"]
+             "wr_ratio-128"]
+
+
+def run_shell_command(cmd: str, timeout):
+    process = subprocess.Popen(cmd, shell=True, preexec_fn=os.setsid)
+    try:
+        process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.communicate()
+        print("Command timed out and was killed.")
+    return process.returncode
 
 
 def exec_cmd(cmd: str):
@@ -83,7 +96,7 @@ def run_once(f: str):
         print("Run config - { " + case_name + " }")
         java_cmd = (prefix_cmd + "-b " + args.wl + " -c " + config_path + case_name + ".xml" +
                     " --execute=true -d " + result_dir + case_name + " > " + output_file)
-        exec_cmd(java_cmd)
+        run_shell_command(java_cmd, 300)
         print("Finish config - { " + case_name + " }")
         # time.sleep(5)
         refresh_output_channel()

@@ -93,6 +93,13 @@ public class WorkloadConfiguration {
   @Getter
   @Setter
   private double zipFainTheta = -1.0;
+  // TPCC workload params
+  @Getter
+  @Setter
+  private boolean customerSkew = false;
+  @Getter
+  @Setter
+  private boolean warehouseSkew = false;
 
   /**
    * -- GETTER --

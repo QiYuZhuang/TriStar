@@ -32,6 +32,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 public final class YCSBBenchmark extends BenchmarkModule {
@@ -50,7 +51,9 @@ public final class YCSBBenchmark extends BenchmarkModule {
 
   public YCSBBenchmark(WorkloadConfiguration workConf) throws SQLException {
     super(workConf);
-    LockTable.getInstance().initHotspot("ycsb", makeConnection());
+    List<Connection> connectionList = new LinkedList<>();
+    makeConnections(connectionList);
+    LockTable.getInstance().initHotspot("ycsb", connectionList);
 
     int fieldSize = YCSBConstants.MAX_FIELD_SIZE;
     if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("fieldSize")) {

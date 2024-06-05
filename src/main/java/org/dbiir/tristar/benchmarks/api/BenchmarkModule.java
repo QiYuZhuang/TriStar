@@ -92,6 +92,19 @@ public abstract class BenchmarkModule {
     }
   }
 
+  public final void makeConnections(List<Connection> connectionList) throws SQLException {
+    if (StringUtils.isEmpty(workConf.getUsername())) {
+      for (int i = 0; i < 16; i++) {
+        connectionList.add(DriverManager.getConnection(workConf.getUrl()));
+      }
+    } else {
+      for (int i = 0; i < 16; i++) {
+        connectionList.add(DriverManager.getConnection(
+                workConf.getUrl(), workConf.getUsername(), workConf.getPassword()));
+      }
+    }
+  }
+
   private String afterLoadScriptPath = null;
 
   public final void setAfterLoadScriptPath(String scriptPath) {
