@@ -1,8 +1,5 @@
 package org.dbiir.tristar.transaction.concurrency;
 
-import lombok.Getter;
-import lombok.Setter;
-import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
@@ -13,16 +10,18 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class LockTable {
     private static final LockTable INSTANCE;
-    private static final int SMALL_BANK_HASH_SIZE = 10000;
+    private static final int SMALL_BANK_HASH_SIZE = 4000000;
     private static final int YCSB_HASH_SIZE = 1000000;
+    private int LOAD_THREAD = 16;
     private int HASH_SIZE;
     private HashMap<String, LinkedList<XNORLock>[]> ccLocks = new HashMap<>(4);
     private HashMap<String, ReentrantReadWriteLock[]> ccBucketLocks = new HashMap<>(4);
@@ -46,9 +45,10 @@ public class LockTable {
 
     }
 
-    public void initHotspot(String workload, Connection connection) throws SQLException {
+    public void initHotspot(String workload, List<Connection> connections) throws SQLException {
         if (workload.equals("smallbank")) {
             this.HASH_SIZE = SMALL_BANK_HASH_SIZE;
+            this.LOAD_THREAD = connections.size();
             ccLocks.put("savings", new LinkedList[HASH_SIZE]);
             ccLocks.put("checking", new LinkedList[HASH_SIZE]);
             ccBucketLocks.put("savings", new ReentrantReadWriteLock[HASH_SIZE]);
@@ -74,32 +74,53 @@ public class LockTable {
                 validationBucketLocks.get("savings")[i] = new ReentrantReadWriteLock();
                 validationBucketLocks.get("checking")[i] = new ReentrantReadWriteLock();
             }
-            PreparedStatement getSavings = connection.prepareStatement(GetSavingsBalance.getSQL());
-            PreparedStatement getChecking = connection.prepareStatement(GetCheckingBalance.getSQL());
 
-            for (int i= 0; i < HASH_SIZE; i++) {
-               if (!validationLocks.get("savings")[i].isEmpty()) {
-                   getSavings.setLong(1, i);
-                   try (ResultSet res = getSavings.executeQuery()) {
-                       if (!res.next()) {
-                           String msg = "Invalid custid #%d".formatted(i);
-                           throw new RuntimeException(msg);
-                       }
-                       updateHotspotVersion("savings", i, res.getLong(1));
-                   }
-               }
+            ExecutorService executor = Executors.newFixedThreadPool(LOAD_THREAD);
 
-                if (!validationLocks.get("checking")[i].isEmpty()) {
-                    getChecking.setLong(1, i);
-                    try (ResultSet res = getChecking.executeQuery()) {
-                        if (!res.next()) {
-                            String msg = "Invalid custid #%d".formatted(i);
-                            throw new RuntimeException(msg);
-                        }
-                        updateHotspotVersion("checking", i, res.getLong(1));
+            for (int i = 0; i < LOAD_THREAD; i++) {
+                int index = i;
+
+                executor.submit(() -> {
+                    PreparedStatement getSavings = null;
+                    PreparedStatement getChecking = null;
+                    try {
+                        getSavings = connections.get(index).prepareStatement(GetSavingsBalance.getSQL());
+                        getChecking = connections.get(index).prepareStatement(GetCheckingBalance.getSQL());
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
                     }
-                }
+
+                    for (int j = index; j < HASH_SIZE; j += LOAD_THREAD) {
+                        try {
+                            if (!validationLocks.get("savings")[j].isEmpty()) {
+                                getSavings.setLong(1, index);
+                                try (ResultSet res = getSavings.executeQuery()) {
+                                    if (!res.next()) {
+                                        String msg = "Invalid custid #%d".formatted(j);
+                                        throw new RuntimeException(msg);
+                                    }
+                                    updateHotspotVersion("savings", j, res.getLong(1));
+                                }
+                            }
+
+                            if (!validationLocks.get("checking")[j].isEmpty()) {
+                                getChecking.setLong(1, j);
+                                try (ResultSet res = getChecking.executeQuery()) {
+                                    if (!res.next()) {
+                                        String msg = "Invalid custid #%d".formatted(j);
+                                        throw new RuntimeException(msg);
+                                    }
+                                    updateHotspotVersion("checking", j, res.getLong(1));
+                                }
+                            }
+                        } catch (SQLException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
+                });
             }
+
+            executor.shutdown();
         } else if (workload.equals("ycsb")) {
             this.HASH_SIZE = YCSB_HASH_SIZE;
             ccLocks.put("usertable", new LinkedList[HASH_SIZE]);
@@ -115,21 +136,39 @@ public class LockTable {
                 validationLocks.get("usertable")[i].add(new ValidationLock(i));
                 validationBucketLocks.get("usertable")[i] = new ReentrantReadWriteLock();
             }
-            PreparedStatement getUserTable = connection.prepareStatement(GetUserTable.getSQL());
-            for (int i = 0; i < HASH_SIZE; i++) {
-                if (!validationLocks.get("usertable")[i].isEmpty()) {
-                    getUserTable.setInt(1, i);
-                    try (ResultSet rs = getUserTable.executeQuery()) {
-                        if (!rs.next()) {
-                            String msg = "Invalid ycsb key: #" + i;
-                            throw new RuntimeException(msg);
+            ExecutorService executor = Executors.newFixedThreadPool(LOAD_THREAD);
+
+            for (int i = 0; i < LOAD_THREAD; i++) {
+                int index = i;
+
+                executor.submit(() -> {
+                    PreparedStatement getUserTable = null;
+                    try {
+                        getUserTable = connections.get(index).prepareStatement(GetUserTable.getSQL());
+                        for (int j = index; j < HASH_SIZE; j += LOAD_THREAD) {
+                            if (!validationLocks.get("usertable")[j].isEmpty()) {
+                                getUserTable.setInt(1, j);
+                                try (ResultSet rs = getUserTable.executeQuery()) {
+                                    if (!rs.next()) {
+                                        String msg = "Invalid ycsb key: #" + j;
+                                        throw new RuntimeException(msg);
+                                    }
+                                    updateHotspotVersion("usertable", j, rs.getLong(1));
+                                }
+                            }
                         }
-                        updateHotspotVersion("usertable", i, rs.getLong(1));
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
                     }
-                }
+                });
             }
+            executor.shutdown();
         } else if (workload.equals("tpcc")) {
             throw new SQLException("not implemented", "501");
+        }
+
+        for (int i = 0; i < LOAD_THREAD; i++) {
+            connections.get(i).close();
         }
     }
 
@@ -246,14 +285,14 @@ public class LockTable {
         List<XNORLock> lockList = ccLocks.get(table)[bucketNum];
         for (XNORLock lock: lockList) {
             if (lock.getKey() == key) {
-                if (lock.tryLock(tid, type)) {
+                try {
+                    lock.tryLock(tid, type);
                     ccBucketLocks.get(table)[bucketNum].readLock().unlock();
                     return true;
-                } else {
+                } catch (SQLException ex){
                     // can not keep the sequence of read and write
-                    String msg = "can not acquire the lock";
                     ccBucketLocks.get(table)[bucketNum].readLock().unlock();
-                    throw new SQLException(msg, "500");
+                    throw ex;
                 }
             }
         }
@@ -267,14 +306,14 @@ public class LockTable {
         List<XNORLock> lockList = ccLocks.get(table)[bucketNum];
         for (XNORLock lock: lockList) {
             if (lock.getKey() == key) {
-                if (lock.tryLock(tid, type)) {
+                try {
+                    lock.tryLock(tid, type);
                     ccBucketLocks.get(table)[bucketNum].readLock().unlock();
                     return;
-                } else {
+                } catch (SQLException ex){
                     // can not keep the sequence of read and write
-                    String msg = "can not acquire the lock";
                     ccBucketLocks.get(table)[bucketNum].readLock().unlock();
-                    throw new SQLException(msg, "500");
+                    throw ex;
                 }
             }
         }

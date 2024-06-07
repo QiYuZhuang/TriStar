@@ -6,11 +6,9 @@ import org.dbiir.tristar.common.LockStrategy;
 import org.dbiir.tristar.common.LockType;
 
 import java.sql.SQLException;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -46,7 +44,7 @@ public class XNORLock {
         strategy = LockStrategy.NO_WAIT;
     }
 
-    public boolean tryLock(long transactionId, LockType type) throws SQLException {
+    public void tryLock(long transactionId, LockType type) throws SQLException {
         lock.lock();
         try {
             if (!waitList.isEmpty() || !tolerate(this.type, type)) {
@@ -82,7 +80,6 @@ public class XNORLock {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return true;
     }
 
     public boolean releaseLock(long tid) {

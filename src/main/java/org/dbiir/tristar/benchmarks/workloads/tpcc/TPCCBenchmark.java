@@ -69,6 +69,10 @@ public final class TPCCBenchmark extends BenchmarkModule {
       numWarehouses = 1;
     }
 
+    double zipf = workConf.getZipFainTheta();
+    boolean warehouseSkew = workConf.isWarehouseSkew();
+    // TODO: generate skewed warehouse
+
     int numTerminals = workConf.getTerminals();
 
     // We distribute terminals evenly across the warehouses

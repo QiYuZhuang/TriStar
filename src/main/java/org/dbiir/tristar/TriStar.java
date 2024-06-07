@@ -170,6 +170,12 @@ public class TriStar {
         wrkld.setNewConnectionPerTxn(xmlConfig.getBoolean("newConnectionPerTxn", false));
         wrkld.setReconnectOnConnectionFailure(
                 xmlConfig.getBoolean("reconnectOnConnectionFailure", false));
+        if (xmlConfig.containsKey("warehouseSkew")) {
+            wrkld.setWarehouseSkew(xmlConfig.getBoolean("warehouseSkew", false));
+        }
+        if (xmlConfig.containsKey("customerSkew")) {
+            wrkld.setWarehouseSkew(xmlConfig.getBoolean("customerSkew", false));
+        }
 
         int terminals = terminals_ > 0 ? terminals_ : xmlConfig.getInt("terminals", 0);
         wrkld.setTerminals(terminals);
