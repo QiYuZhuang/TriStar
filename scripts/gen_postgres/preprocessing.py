@@ -11,7 +11,7 @@ from YCSBSummary import *
 
 
 def create_output_file(filepath: str):
-    file_name = "summary.res"
+    file_name = "summary.res" + str
     file_path = os.path.join(filepath, file_name)
     open(file_path, 'w').close()
 

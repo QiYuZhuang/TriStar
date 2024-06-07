@@ -37,16 +37,18 @@ def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zip
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
-    ElementTree.SubElement(root, 'type').text = "POSTGRES"
-    ElementTree.SubElement(root, 'driver').text = "org.postgresql.Driver"
-    ElementTree.SubElement(root, "url").text = ("jdbc:postgresql://localhost:5432/osprey?sslmode=disable&amp"
-                                                ";ApplicationName=smallbank&amp;reWriteBatchedInserts=true")
-    ElementTree.SubElement(root, "username").text = "postgres"
+    ElementTree.SubElement(root, 'type').text = "MYSQL"
+    ElementTree.SubElement(root, 'driver').text = "com.mysql.cj.jdbc.Driver"
+    ElementTree.SubElement(root, "url").text = ("jdbc:mysql://localhost:3306/mysql?useSSL=false&amp"
+                                                ";reWriteBatchedInserts=true")
+    ElementTree.SubElement(root, "username").text = "shardingsphere"
     ElementTree.SubElement(root, "password").text = "Ss123!@#"
     ElementTree.SubElement(root, "isolation").text = "TRANSACTION_SERIALIZABLE"
     ElementTree.SubElement(root, "batchsize").text = "128"
     ElementTree.SubElement(root, "concurrencyControlType").text = cc_type
-
+    <url>jdbc:mysql://localhost:3306/smallbank?rewriteBatchedStatements=true&amp;allowPublicKeyRetrieval=True&amp;sslMode=DISABLED</url>
+    <username>shardingsphere</username>
+    <password>Ss123!@#</password>
     if zipf > 0:
         ElementTree.SubElement(root, "zipf").text = str(zipf)
     if hsn > 0 and hsp > 0:
@@ -105,7 +107,7 @@ def generate_transation(root: ElementTree):
 
 
 def sb_scalability():
-    dir_name = "../config/smallbank/scalability/postgresql"
+    dir_name = "../config/smallbank/scalability/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     terminals = [4, 8, 16, 32, 64, 128, 256, 512]
@@ -120,7 +122,7 @@ def sb_scalability():
 
 
 def sb_hotspot(terminal=128):
-    dir_name = "../config/smallbank/hotspot-" + str(terminal) + "/postgresql"
+    dir_name = "../config/smallbank/hotspot-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -134,7 +136,7 @@ def sb_hotspot(terminal=128):
 
 
 def sb_zip_fain(terminal=128):
-    dir_name = "../config/smallbank/skew-" + str(terminal) + "/postgresql"
+    dir_name = "../config/smallbank/skew-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -147,7 +149,7 @@ def sb_zip_fain(terminal=128):
 
 
 def sb_bal_ratio(terminal=128):
-    dir_name = "../config/smallbank/bal_ratio-" + str(terminal) + "/postgresql"
+    dir_name = "../config/smallbank/bal_ratio-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -163,7 +165,7 @@ def sb_bal_ratio(terminal=128):
 
 
 def sb_wc_ratio(terminal=128):
-    dir_name = "../config/smallbank/wc_ratio-" + str(terminal) + "/postgresql"
+    dir_name = "../config/smallbank/wc_ratio-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -179,7 +181,7 @@ def sb_wc_ratio(terminal=128):
 
 
 def sb_rate(terminal=128):
-    dir_name = "../config/smallbank/rate-" + str(terminal) + "/postgresql"
+    dir_name = "../config/smallbank/rate-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -194,7 +196,7 @@ def sb_rate(terminal=128):
 
 
 def sb_random(terminal=128, cnt=80):
-    dir_name = "../config/smallbank/random-" + str(terminal) + "/postgresql"
+    dir_name = "../config/smallbank/random-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 

@@ -73,22 +73,7 @@ def parse_args():
 
 def run_once(f: str):
     # traverse the dir
-    config_path = "config/" + args.wl + "/" + f + "/" + args.engine + "/"
-    print("config_path: " + config_path)
-    unique_ts = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    for conf_file in traverse_dir(config_path):
-        result_dir = result_prefix + args.wl + "/" + f + "/" + unique_ts + "/"
-        case_name = os.path.splitext(os.path.basename(conf_file))[0]
-        output_file = create_output_file(result_dir + case_name)
-        print("Run config - { " + case_name + " }")
-        java_cmd = (prefix_cmd + "-b " + args.wl + " -c " + config_path + case_name + ".xml" +
-                    " --execute=true -d " + result_dir + case_name + " > " + output_file)
-        exec_cmd(java_cmd)
-        print("Finish config - { " + case_name + " }")
-        # time.sleep(5)
-        refresh_output_channel()
-
-    preprocess_cmd = "./scripts/preprocessing.py " + result_prefix + args.wl + "/" + f + "/"
+    preprocess_cmd = "python3 ./scripts/preprocessing.py " + result_prefix + args.wl + "/" + f + "/"
     exec_cmd(preprocess_cmd)
 
 
