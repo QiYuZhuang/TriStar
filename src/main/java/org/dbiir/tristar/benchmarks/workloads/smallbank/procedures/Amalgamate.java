@@ -153,8 +153,16 @@ public class Amalgamate extends Procedure {
     double savingsBalance;
     try (PreparedStatement balStmt0 = this.getPreparedStatement(conn, ZeroSavingsBalance, custId0);
          PreparedStatement balStmt1 = this.getPreparedStatement(conn2, GetSavingsBalance, custId0)){
-      try (ResultSet balRes0 = balStmt0.executeQuery();
-           ResultSet balRes1 = balStmt1.executeQuery()) {
+
+      int balRes0 = balStmt0.executeUpdate();
+      if (balRes0 == 0) {
+        String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
+        if (type == CCType.RC_TAILOR_LOCK)
+          releaseTailorLock(phase, custId0, custId1, tid);
+        throw new UserAbortException(msg);
+      }
+
+      try (ResultSet balRes1 = balStmt1.executeQuery()) {
         if (!balRes1.next()) {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
           if (type == CCType.RC_TAILOR_LOCK)
@@ -178,6 +186,15 @@ public class Amalgamate extends Procedure {
     double checkingBalance;
     try (PreparedStatement balStmt2 = this.getPreparedStatement(conn, ZeroCheckingBalance, custId0);
          PreparedStatement balStmt3 = this.getPreparedStatement(conn2, GetSavingsBalance, custId0)) {
+
+      int balRes2 = balStmt2.executeUpdate();
+      if (balRes2 == 0) {
+        String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
+        if (type == CCType.RC_TAILOR_LOCK)
+          releaseTailorLock(phase, custId0, custId1, tid);
+        throw new UserAbortException(msg);
+      }
+
       try (ResultSet balRes3 = balStmt3.executeQuery()) {
         if (!balRes3.next()) {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId0);
