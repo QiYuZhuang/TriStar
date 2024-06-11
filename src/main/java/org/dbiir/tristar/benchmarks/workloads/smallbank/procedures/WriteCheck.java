@@ -54,23 +54,45 @@ public class WriteCheck extends Procedure {
   public final SQLStmt GetSavingsBalance =
       new SQLStmt("SELECT bal, tid FROM " + SmallBankConstants.TABLENAME_SAVINGS + " WHERE custid = ?");
 
-  /*  */
+  /*
   public final SQLStmt GetSavingsBalanceForUpdate =
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
                   " AS new SET bal = old.bal FROM " +
                   SmallBankConstants.TABLENAME_SAVINGS +
                   " AS old WHERE new.custid = ? " +
                   " AND old.custid=new.custid RETURNING old.bal");
+  */
+  public final SQLStmt GetSavingsBalanceForUpdate =
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
+                  " SET bal = bal FROM " +
+                  SmallBankConstants.TABLENAME_SAVINGS +
+                  "WHERE new.custid = ?;" +
+                  " SELECT bal " +
+                  " FROM " +
+                  SmallBankConstants.TABLENAME_SAVINGS +
+                  " WHERE custid = ?;");
 
   public final SQLStmt GetCheckingBalance =
       new SQLStmt("SELECT bal, tid FROM " + SmallBankConstants.TABLENAME_CHECKING + " WHERE custid = ?");
 
   public final SQLStmt GetCheckingBalanceForUpdate =
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
+                  " SET bal = bal FROM " +
+                  SmallBankConstants.TABLENAME_CHECKING +
+                  " WHERE new.custid = ?;" +
+                  " SELECT bal" +
+                  " FROM " +
+                  SmallBankConstants.TABLENAME_CHECKING +
+                  " WHERE custid = ?;");
+
+  /*
+  public final SQLStmt GetCheckingBalanceForUpdate =
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
                   " AS new SET bal = old.bal FROM " +
                   SmallBankConstants.TABLENAME_CHECKING +
                   " AS old WHERE new.custid = ? " +
                   " AND old.custid=new.custid RETURNING old.bal");
+  */
 
   public final SQLStmt UpdateCheckingBalanceDel =
       new SQLStmt(
@@ -108,16 +130,38 @@ public class WriteCheck extends Procedure {
     }
 
     // Then get their account balances
-    double savingsBalance;
+    double savingsBalance = Double.NaN;
     int phase = 0; // the phase of RC_TAILOR_LOCK
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid, LockType.SH);
       phase = 1;
     }
     try (PreparedStatement balStmt0 = switch (type) {
-      case RC_FOR_UPDATE, SI_FOR_UPDATE -> this.getPreparedStatement(conn, GetSavingsBalanceForUpdate, custId1);
+      case RC_FOR_UPDATE, SI_FOR_UPDATE -> this.getPreparedStatement(conn, GetSavingsBalanceForUpdate, custId1, custId1);
         default -> this.getPreparedStatement(conn, GetSavingsBalance, custId1);
     }) {
+
+      boolean resultsAvailable1 = balStmt0.execute();
+      while (true) {
+        if (resultsAvailable1) {
+          ResultSet rs = balStmt0.getResultSet();
+          if (!rs.next()) {
+            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId1);
+            if (type == CCType.RC_TAILOR_LOCK)
+              releaseTailorLock(phase, custId, custId1, tid);
+            throw new UserAbortException(msg);
+          }
+
+          savingsBalance = rs.getDouble(1);
+          if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR)
+            versions[0] = rs.getLong(2);
+        } else if (balStmt0.getUpdateCount() < 0) {
+          break;
+        }
+
+        resultsAvailable1 = balStmt0.getMoreResults();
+      }
+      /*
       try (ResultSet balRes0 = balStmt0.executeQuery()) {
         if (!balRes0.next()) {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId1);
@@ -130,9 +174,10 @@ public class WriteCheck extends Procedure {
         if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR)
           versions[0] = balRes0.getLong(2);
       }
+       */
     }
 
-    double checkingBalance;
+    double checkingBalance = Double.NaN;
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
     }
@@ -141,6 +186,28 @@ public class WriteCheck extends Procedure {
       case RC_FOR_UPDATE -> this.getPreparedStatement(conn, GetCheckingBalanceForUpdate, custId);
       default -> this.getPreparedStatement(conn, GetCheckingBalance, custId);
     }) {
+
+      boolean resultsAvailable0 = balStmt1.execute();
+      while (true) {
+        if (resultsAvailable0) {
+          ResultSet rs = balStmt1.getResultSet();
+          if (!rs.next()) {
+            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
+            if (type == CCType.RC_TAILOR_LOCK)
+              releaseTailorLock(phase, custId, custId1, tid);
+            throw new UserAbortException(msg);
+          }
+          savingsBalance = rs.getDouble(1);
+          if (type == CCType.RC_TAILOR) {
+            versions[1] = rs.getLong(2);
+          }
+        } else if (balStmt1.getUpdateCount() < 0) {
+          break;
+        }
+
+        resultsAvailable0 = balStmt1.getMoreResults();
+      }
+      /*
       try (ResultSet balRes1 = balStmt1.executeQuery()) {
         if (!balRes1.next()) {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
@@ -152,6 +219,8 @@ public class WriteCheck extends Procedure {
         if (type == CCType.RC_TAILOR)
           versions[1] = balRes1.getLong(2);
       }
+
+       */
     }
 
     double total = checkingBalance + savingsBalance;
