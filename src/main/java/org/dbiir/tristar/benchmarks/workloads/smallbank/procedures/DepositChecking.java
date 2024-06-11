@@ -59,6 +59,8 @@ public class DepositChecking extends Procedure {
               + " WHERE custid = ?;"
               + "SELECT "
               + " tid + 1"
+              + " FROM "
+              + SmallBankConstants.TABLENAME_CHECKING
               + " where custid = ?;");
 
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
