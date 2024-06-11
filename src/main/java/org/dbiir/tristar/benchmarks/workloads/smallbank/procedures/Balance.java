@@ -52,7 +52,7 @@ public class Balance extends Procedure {
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
                   " SET bal = bal FROM " +
                   SmallBankConstants.TABLENAME_SAVINGS +
-                  "WHERE new.custid = ?;" +
+                  " WHERE new.custid = ?;" +
                   " SELECT bal " +
                   " FROM " +
                   SmallBankConstants.TABLENAME_SAVINGS +
