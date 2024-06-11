@@ -66,7 +66,7 @@ public class WriteCheck extends Procedure {
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
                   " SET bal = bal FROM " +
                   SmallBankConstants.TABLENAME_SAVINGS +
-                  " WHERE new.custid = ?;" +
+                  " WHERE custid = ?;" +
                   " SELECT bal " +
                   " FROM " +
                   SmallBankConstants.TABLENAME_SAVINGS +
@@ -79,7 +79,7 @@ public class WriteCheck extends Procedure {
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
                   " SET bal = bal FROM " +
                   SmallBankConstants.TABLENAME_CHECKING +
-                  " WHERE new.custid = ?;" +
+                  " WHERE custid = ?;" +
                   " SELECT bal" +
                   " FROM " +
                   SmallBankConstants.TABLENAME_CHECKING +
