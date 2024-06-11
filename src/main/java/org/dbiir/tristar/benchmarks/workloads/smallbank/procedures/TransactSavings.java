@@ -57,12 +57,17 @@ public class TransactSavings extends Procedure {
           new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_SAVINGS + " WHERE custid = ? FOR UPDATE");
 
   public final SQLStmt UpdateSavingsBalance =
-      new SQLStmt(
-          "UPDATE "
-              + SmallBankConstants.TABLENAME_SAVINGS
-              + "   SET bal = bal + ?, tid = tid + 1 "
-              + " WHERE custid = ? "
-              + " RETURNING tid");
+          new SQLStmt(
+                  "UPDATE "
+                          + SmallBankConstants.TABLENAME_SAVINGS
+                          + " SET bal = bal + ?, tid = tid + 1 "
+                          + " WHERE custid = ?;"
+                          + "SELECT"
+                          + " tid + 1"
+                          + " FROM "
+                          + SmallBankConstants.TABLENAME_SAVINGS
+                          + " where custid = ?;");
+
 
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the acctId
@@ -122,16 +127,36 @@ public class TransactSavings extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid, LockType.EX);
     }
-    try (PreparedStatement stmt =
-        this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
+    try (PreparedStatement stmt = conn.prepareStatement((UpdateSavingsBalance.getSQL()))) {
       // TODO: return the savings version for validation
+      // fill the field
+      stmt.setDouble(1, amount);
+      stmt.setLong(2, custId);
+      stmt.setLong(3, custId);
+
+      boolean resultsAvailable = stmt.execute();
+      while (true) {
+        if (resultsAvailable) {
+          ResultSet rs = stmt.getResultSet();
+          if (!rs.next()) {
+            String msg = "can not find the checking version for customer #%d".formatted(custId);
+            throw new UserAbortException(msg);
+          }
+          versions[0] = rs.getLong(1);
+        } else if (stmt.getUpdateCount() < 0) {
+          break;
+        }
+
+        resultsAvailable = stmt.getMoreResults();
+      }
+      /*
       try (ResultSet res = stmt.executeQuery()) {
         if (!res.next()) {
           String msg = "can not find the checking version for customer #%d".formatted(custId);
           throw new UserAbortException(msg);
         }
         versions[0] = res.getLong(1);
-      }
+      }*/
     }
 
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {

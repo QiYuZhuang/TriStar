@@ -61,13 +61,25 @@ public class Amalgamate extends Procedure {
       new SQLStmt("SELECT bal, tid + 1 FROM " + SmallBankConstants.TABLENAME_CHECKING + " WHERE custid = ?");
 
   public final SQLStmt UpdateSavingsBalance =
+          new SQLStmt(
+                  "UPDATE "
+                          + SmallBankConstants.TABLENAME_SAVINGS
+                          + " SET bal = bal + ?, tid = tid + 1 "
+                          + " WHERE custid = ?;"
+                          + "SELECT"
+                          + " tid + 1"
+                          + " FROM "
+                          + SmallBankConstants.TABLENAME_SAVINGS
+                          + " where custid = ?;");
+  /*
+  public final SQLStmt UpdateSavingsBalance =
       new SQLStmt(
           "UPDATE "
               + SmallBankConstants.TABLENAME_SAVINGS
               + "   SET bal = bal - ?, tid = tid + 1 "
               + " WHERE custid = ?"
       + " RETURNING tid");
-
+  */
   public final SQLStmt UpdateCheckingBalance =
       new SQLStmt(
           "UPDATE "
@@ -232,7 +244,27 @@ public class Amalgamate extends Procedure {
 
     }
     try (PreparedStatement updateStmt1 =
-        this.getPreparedStatement(conn, UpdateSavingsBalance, total, custId1)) {
+        this.getPreparedStatement(conn, UpdateSavingsBalance, total, custId1, custId1)) {
+
+      boolean resultsAvailable = updateStmt1.execute();
+      while (true) {
+        if (resultsAvailable) {
+          ResultSet rs = updateStmt1.getResultSet();
+          if (!rs.next()) {
+            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId1);
+            if (type == CCType.RC_TAILOR_LOCK)
+              releaseTailorLock(phase, custId0, custId1, tid);
+            throw new UserAbortException(msg);
+          }
+          versions[2] = rs.getLong(1);
+        } else if (updateStmt1.getUpdateCount() < 0) {
+          break;
+        }
+
+        resultsAvailable = updateStmt1.getMoreResults();
+      }
+
+      /*
       try (ResultSet res = updateStmt1.executeQuery()) {
         if (!res.next()) {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId1);
@@ -242,7 +274,7 @@ public class Amalgamate extends Procedure {
         }
 
         versions[2] = res.getLong(1);
-      }
+      }*/
     }
 
     if (type == CCType.RC_TAILOR) {

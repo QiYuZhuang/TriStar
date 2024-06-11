@@ -77,8 +77,11 @@ public class WriteCheck extends Procedure {
           "UPDATE "
               + SmallBankConstants.TABLENAME_CHECKING
               + "   SET bal = bal - ?, tid = tid + 1"
-              + " WHERE custid = ?"
-              + " RETURNING tid");
+              + " WHERE custid = ?;"
+              + "SELECT tid + 1"
+              +  " FROM "
+              + SmallBankConstants.TABLENAME_CHECKING
+              + " WHERE custid = ?;");
 
   public void run(Connection conn, String custName, long custId1, double amount, CCType type, Connection conn2, long[] versions, long tid) throws SQLException {
     // First convert the custName to the custId
@@ -154,27 +157,43 @@ public class WriteCheck extends Procedure {
     double total = checkingBalance + savingsBalance;
 
     if (total < amount) {
-      try (PreparedStatement updateStmt =
-          this.getPreparedStatement(conn, UpdateCheckingBalanceDel, amount - 1, custId)) {
-        try (ResultSet res = updateStmt.executeQuery()) {
-          if (!res.next()) {
-            if (type == CCType.RC_TAILOR_LOCK)
-              releaseTailorLock(phase, custId, custId1, tid);
-            throw new UserAbortException("unknown exception");
+      try (PreparedStatement updateStmt1 =
+                   this.getPreparedStatement(conn, UpdateCheckingBalanceDel, amount - 1, custId, custId)) {
+        boolean resultsAvailable = updateStmt1.execute();
+        while (true) {
+          if (resultsAvailable) {
+            ResultSet rs = updateStmt1.getResultSet();
+            if (!rs.next()) {
+              if (type == CCType.RC_TAILOR_LOCK)
+                releaseTailorLock(phase, custId, custId1, tid);
+              throw new UserAbortException("unknown exception");
+            }
+            versions[2] = rs.getLong(1);
+          } else if (updateStmt1.getUpdateCount() < 0) {
+            break;
           }
-          versions[2] = res.getLong(1);
+
+          resultsAvailable = updateStmt1.getMoreResults();
         }
       }
     } else {
-      try (PreparedStatement updateStmt =
-          this.getPreparedStatement(conn, UpdateCheckingBalanceDel, amount, custId)) {
-        try (ResultSet res = updateStmt.executeQuery()) {
-          if (!res.next()) {
-            if (type == CCType.RC_TAILOR_LOCK)
-              releaseTailorLock(phase, custId, custId1, tid);
-            throw new UserAbortException("unknown exception");
+      try (PreparedStatement updateStmt2 =
+                   this.getPreparedStatement(conn, UpdateCheckingBalanceDel, amount, custId, custId)) {
+        boolean resultsAvailable = updateStmt2.execute();
+        while (true) {
+          if (resultsAvailable) {
+            ResultSet rs = updateStmt2.getResultSet();
+            if (!rs.next()) {
+              if (type == CCType.RC_TAILOR_LOCK)
+                releaseTailorLock(phase, custId, custId1, tid);
+              throw new UserAbortException("unknown exception");
+            }
+            versions[2] = rs.getLong(1);
+          } else if (updateStmt2.getUpdateCount() < 0) {
+            break;
           }
-          versions[2] = res.getLong(1);
+
+          resultsAvailable = updateStmt2.getMoreResults();
         }
       }
     }
