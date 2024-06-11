@@ -104,7 +104,7 @@ def generate_transation(root: ElementTree):
 
 
 def sb_scalability():
-    dir_name = "../config/smallbank/scalability/mysql"
+    dir_name = "../../config/smallbank/scalability/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     terminals = [4, 8, 16, 32, 64, 128, 256, 512]
@@ -119,7 +119,7 @@ def sb_scalability():
 
 
 def sb_hotspot(terminal=128):
-    dir_name = "../config/smallbank/hotspot-" + str(terminal) + "/mysql"
+    dir_name = "../../config/smallbank/hotspot-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -133,7 +133,7 @@ def sb_hotspot(terminal=128):
 
 
 def sb_zip_fain(terminal=128):
-    dir_name = "../config/smallbank/skew-" + str(terminal) + "/mysql"
+    dir_name = "../../config/smallbank/skew-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -146,7 +146,7 @@ def sb_zip_fain(terminal=128):
 
 
 def sb_bal_ratio(terminal=128):
-    dir_name = "../config/smallbank/bal_ratio-" + str(terminal) + "/mysql"
+    dir_name = "../../config/smallbank/bal_ratio-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -162,7 +162,7 @@ def sb_bal_ratio(terminal=128):
 
 
 def sb_wc_ratio(terminal=128):
-    dir_name = "../config/smallbank/wc_ratio-" + str(terminal) + "/mysql"
+    dir_name = "../../config/smallbank/wc_ratio-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -178,7 +178,7 @@ def sb_wc_ratio(terminal=128):
 
 
 def sb_rate(terminal=128):
-    dir_name = "../config/smallbank/rate-" + str(terminal) + "/mysql"
+    dir_name = "../../config/smallbank/rate-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
@@ -193,7 +193,7 @@ def sb_rate(terminal=128):
 
 
 def sb_random(terminal=128, cnt=80):
-    dir_name = "../config/smallbank/random-" + str(terminal) + "/mysql"
+    dir_name = "../../config/smallbank/random-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
