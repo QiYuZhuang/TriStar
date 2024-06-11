@@ -62,7 +62,7 @@ public class TransactSavings extends Procedure {
                           + SmallBankConstants.TABLENAME_SAVINGS
                           + " SET bal = bal + ?, tid = tid + 1 "
                           + " WHERE custid = ?;"
-                          + "SELECT"
+                          + " SELECT"
                           + " tid + 1"
                           + " FROM "
                           + SmallBankConstants.TABLENAME_SAVINGS
