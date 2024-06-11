@@ -39,7 +39,7 @@ def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zip
     # 添加子节点
     ElementTree.SubElement(root, 'type').text = "MYSQL"
     ElementTree.SubElement(root, 'driver').text = "com.mysql.cj.jdbc.Driver"
-    ElementTree.SubElement(root, "url").text = ("jdbc:mysql://localhost:3306/smallbank?rewriteBatchedStatements=true&allowPublicKeyRetrieval=True&sslMode=DISABLED")
+    ElementTree.SubElement(root, "url").text = ("jdbc:mysql://localhost:3306/smallbank?allowMultiQueries=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=True&sslMode=DISABLED")
     ElementTree.SubElement(root, "username").text = "shardingsphere"
     ElementTree.SubElement(root, "password").text = "Ss123!@#"
     ElementTree.SubElement(root, "isolation").text = "TRANSACTION_SERIALIZABLE"
