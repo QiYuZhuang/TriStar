@@ -145,7 +145,7 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
     // Amalgamate
     if (procClass.equals(Amalgamate.class)) {
       this.generateCustIds(true);
-      this.procAmalgamate.run(conn, this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), versionBuffer, tid);
+      this.procAmalgamate.run(conn, this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), versionBuffer, tid, conn2);
 
       // Balance
     } else if (procClass.equals(Balance.class)) {

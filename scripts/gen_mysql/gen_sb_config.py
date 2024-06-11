@@ -39,16 +39,13 @@ def generate_pg_sb_config(cc_type: str, terminals, weight, hsn=-1, hsp=-1.0, zip
     # 添加子节点
     ElementTree.SubElement(root, 'type').text = "MYSQL"
     ElementTree.SubElement(root, 'driver').text = "com.mysql.cj.jdbc.Driver"
-    ElementTree.SubElement(root, "url").text = ("jdbc:mysql://localhost:3306/mysql?useSSL=false&amp"
+    ElementTree.SubElement(root, "url").text = ("jdbc:mysql://localhost:3306/smallbank?useSSL=false&"
                                                 ";reWriteBatchedInserts=true")
     ElementTree.SubElement(root, "username").text = "shardingsphere"
     ElementTree.SubElement(root, "password").text = "Ss123!@#"
     ElementTree.SubElement(root, "isolation").text = "TRANSACTION_SERIALIZABLE"
     ElementTree.SubElement(root, "batchsize").text = "128"
     ElementTree.SubElement(root, "concurrencyControlType").text = cc_type
-    <url>jdbc:mysql://localhost:3306/smallbank?rewriteBatchedStatements=true&amp;allowPublicKeyRetrieval=True&amp;sslMode=DISABLED</url>
-    <username>shardingsphere</username>
-    <password>Ss123!@#</password>
     if zipf > 0:
         ElementTree.SubElement(root, "zipf").text = str(zipf)
     if hsn > 0 and hsp > 0:

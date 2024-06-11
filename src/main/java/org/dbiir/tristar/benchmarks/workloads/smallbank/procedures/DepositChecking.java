@@ -55,9 +55,11 @@ public class DepositChecking extends Procedure {
       new SQLStmt(
           "UPDATE "
               + SmallBankConstants.TABLENAME_CHECKING
-              + "   SET bal = bal + ?, tid = tid + 1 "
-              + " WHERE custid = ?"
-              + " RETURNING tid");
+              + " SET bal = bal + ?, tid = tid + 1 "
+              + " WHERE custid = ?;"
+              + "SELECT "
+              + " tid + 1"
+              + " where custid = ?;");
 
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the custId
@@ -87,15 +89,25 @@ public class DepositChecking extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
     }
-    try (PreparedStatement stmt1 =
-        this.getPreparedStatement(conn, UpdateCheckingBalance, amount, custId)) {
-      try (ResultSet res = stmt1.executeQuery()) {
-        if (!res.next()) {
-          throw new UserAbortException("unknown exception");
+    try (PreparedStatement stmt1 = conn.prepareStatement((UpdateCheckingBalance.getSQL()))) {
+      // fill the field
+      stmt1.setDouble(1, amount);
+      stmt1.setLong(2, custId);
+      stmt1.setLong(3, custId);
+
+      boolean resultsAvailable = stmt1.execute();
+      int idx = 0;
+      while (true) {
+        if (resultsAvailable) {
+          ResultSet rs = stmt1.getResultSet();
+          versions[idx++] = rs.getLong(1);
+        } else if (stmt1.getUpdateCount() < 0) {
+          idx++;
+          break;
         }
-        versions[0] = res.getLong(1);
       }
     }
+
     if (type == CCType.RC_TAILOR) {
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId, LockType.EX, type);
     }

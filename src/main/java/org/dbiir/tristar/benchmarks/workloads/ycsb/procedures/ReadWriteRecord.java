@@ -49,7 +49,7 @@ public class ReadWriteRecord extends Procedure {
          * if ratio1 = 0, it is a read-only transaction;
          * if ratio2 = 0, the transaction's operations are read operation;
          */
-        Arrays.sort(keyname);
+            Arrays.sort(keyname);
         int len = keyname.length;
         StringBuilder finalStmt = new StringBuilder();
 
