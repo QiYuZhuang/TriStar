@@ -181,7 +181,7 @@ public class WriteCheck extends Procedure {
     }
     phase = 2;
     try (PreparedStatement balStmt1 = switch (type) {
-      case RC_FOR_UPDATE -> this.getPreparedStatement(conn, GetCheckingBalanceForUpdate, custId);
+      case RC_FOR_UPDATE -> this.getPreparedStatement(conn, GetCheckingBalanceForUpdate, custId, custId);
       default -> this.getPreparedStatement(conn, GetCheckingBalance, custId);
     }) {
 
