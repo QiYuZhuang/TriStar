@@ -140,6 +140,7 @@ public class TransactSavings extends Procedure {
             throw new UserAbortException(msg);
           }
           versions[0] = rs.getLong(1);
+          System.out.println("TS while");
         } else if (stmt.getUpdateCount() < 0) {
           break;
         }

@@ -153,6 +153,7 @@ public class WriteCheck extends Procedure {
           savingsBalance = rs.getDouble(1);
           if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR)
             versions[0] = rs.getLong(2);
+          System.out.println("WC while");
         } else if (balStmt0.getUpdateCount() < 0) {
           break;
         }
