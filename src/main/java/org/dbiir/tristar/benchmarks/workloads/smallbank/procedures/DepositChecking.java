@@ -106,6 +106,7 @@ public class DepositChecking extends Procedure {
           }
           versions[0] = rs.getLong(1);
         } else if (stmt1.getUpdateCount() < 0) {
+          System.out.println("break DC");
           break;
         }
 

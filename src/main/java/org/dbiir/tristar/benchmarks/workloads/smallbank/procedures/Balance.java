@@ -122,6 +122,7 @@ public class Balance extends Procedure {
             versions[0] = rs.getLong(2);
           }
         } else if (balStmt0.getUpdateCount() < 0) {
+          System.out.println("break balance");
           break;
         }
 
@@ -172,6 +173,7 @@ public class Balance extends Procedure {
             versions[1] = rs.getLong(2);
           }
         } else if (balStmt1.getUpdateCount() < 0) {
+          System.out.println("break balance ");
           break;
         }
 

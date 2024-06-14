@@ -25,6 +25,7 @@
  ***************************************************************************/
 package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 
+import com.mysql.cj.log.Log;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
@@ -127,12 +128,8 @@ public class TransactSavings extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid, LockType.EX);
     }
-    try (PreparedStatement stmt = conn.prepareStatement((UpdateSavingsBalance.getSQL()))) {
+    try (PreparedStatement stmt = this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId, custId)) {
       // TODO: return the savings version for validation
-      // fill the field
-      stmt.setDouble(1, amount);
-      stmt.setLong(2, custId);
-      stmt.setLong(3, custId);
 
       boolean resultsAvailable = stmt.execute();
       while (true) {
@@ -144,6 +141,7 @@ public class TransactSavings extends Procedure {
           }
           versions[0] = rs.getLong(1);
         } else if (stmt.getUpdateCount() < 0) {
+          System.out.println("break TS");
           break;
         }
 
