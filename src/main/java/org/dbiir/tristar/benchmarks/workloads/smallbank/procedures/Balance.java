@@ -71,6 +71,7 @@ public class Balance extends Procedure {
 
   public double run(Connection conn, String custName, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the acctName to the acctId
+    System.out.println("begin Bal");
     long custId;
     if (type == CCType.RC_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {

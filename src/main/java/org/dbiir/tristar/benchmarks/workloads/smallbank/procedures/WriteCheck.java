@@ -105,6 +105,7 @@ public class WriteCheck extends Procedure {
 
   public void run(Connection conn, String custName, long custId1, double amount, CCType type, Connection conn2, long[] versions, long tid) throws SQLException {
     // First convert the custName to the custId
+    System.out.println("begin WC");
     long custId;
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {

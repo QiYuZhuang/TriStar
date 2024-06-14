@@ -73,7 +73,7 @@ public class TransactSavings extends Procedure {
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the acctId
     long custId;
-
+    System.out.println("begin TS");
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
         try (ResultSet r0 = stmtc.executeQuery()) {
@@ -140,7 +140,6 @@ public class TransactSavings extends Procedure {
             throw new UserAbortException(msg);
           }
           versions[0] = rs.getLong(1);
-          System.out.println("TS while");
         } else if (stmt.getUpdateCount() < 0) {
           break;
         }

@@ -65,6 +65,7 @@ public class DepositChecking extends Procedure {
 
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the custId
+    System.out.println("begin DC");
     long custId;
     if (type == CCType.RC_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {

@@ -514,7 +514,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           break;
 
         } catch (SQLException ex) {
-          System.out.println(ex);
+          System.out.println("[xxxx]" +ex);
           // check if we should attempt to ignore connection errors and reconnect
           boolean isConnectionErrorException = SQLUtil.isConnectionErrorException(ex);
 
@@ -733,7 +733,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     String sqlState = ex.getSQLState();
     int errorCode = ex.getErrorCode();
 
-    LOG.debug("sql state [{}] and error code [{}]", sqlState, errorCode);
+    System.out.println("[xxxx] sql state [%s] and error code [%d]".formatted(sqlState, errorCode));
 
     if (sqlState == null) {
       return false;
