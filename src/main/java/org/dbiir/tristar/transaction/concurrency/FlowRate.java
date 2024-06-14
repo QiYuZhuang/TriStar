@@ -34,9 +34,16 @@ public class FlowRate {
             HASH_SIZE = SMALL_BANK_HASH_SIZE;
             recordMetas.put("checking", new RecordMeta[HASH_SIZE]);
             recordMetas.put("savings", new RecordMeta[HASH_SIZE]);
+            for (int i = 0; i < HASH_SIZE; i++) {
+                recordMetas.get("checking")[i] = new RecordMeta();
+                recordMetas.get("savings")[i] = new RecordMeta();
+            }
         } else if (workload.equals("ycsb")) {
             HASH_SIZE = YCSB_HASH_SIZE;
             recordMetas.put("usertable", new RecordMeta[HASH_SIZE]);
+            for (int i = 0; i < HASH_SIZE; i++) {
+                recordMetas.get("usertable")[i] = new RecordMeta();
+            }
         } else if (workload.equals("tpcc")) {
 
         }
