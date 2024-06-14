@@ -68,9 +68,9 @@ public class Amalgamate extends Procedure {
                           + " WHERE custid = ?;"
                           + "SELECT"
                           + " tid"
-                          + " FROM"
+                          + " FROM "
                           + SmallBankConstants.TABLENAME_SAVINGS
-                          + " where custid = ?;");
+                          + " WHERE custid = ?;");
   /*
   public final SQLStmt UpdateSavingsBalance =
       new SQLStmt(
