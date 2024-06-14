@@ -160,7 +160,9 @@ public class WriteCheck extends Procedure {
         if (type == CCType.RC_TAILOR)
           versions[1] = balRes1.getLong(2);
       } catch (SQLException ex) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, false);
+        if (type == CCType.RC_TAILOR) {
+          FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, false);
+        }
         throw ex;
       }
     }
@@ -256,7 +258,7 @@ public class WriteCheck extends Procedure {
      * into ww-dependency
      */
     if (!success) {
-      if (versions[2] > 0) {
+      if (type == CCType.RC_TAILOR && versions[2] > 0) {
         FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
       }
       return;

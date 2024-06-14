@@ -80,6 +80,7 @@ public class FlowRate {
             System.out.println("readOperationFinish: key is out of range. #" + key);
         }
         RecordMeta meta = recordMetas.get(table)[(int) key];
+        meta.decReadInProcessing();
         meta.incReadHistory(success);
     }
 
@@ -88,6 +89,7 @@ public class FlowRate {
             System.out.println("writeOperationFinish: key is out of range. #" + key);
         }
         RecordMeta meta = recordMetas.get(table)[(int) key];
+        meta.decWriteInProcessing();
         meta.incWriteHistory(success);
     }
 

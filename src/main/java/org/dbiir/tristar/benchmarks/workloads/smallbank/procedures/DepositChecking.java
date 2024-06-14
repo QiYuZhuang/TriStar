@@ -102,7 +102,9 @@ public class DepositChecking extends Procedure {
         }
         versions[0] = res.getLong(1);
       } catch (SQLException ex) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, false);
+        if (type == CCType.RC_TAILOR) {
+          FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, false);
+        }
         throw ex;
       }
     }
@@ -113,7 +115,7 @@ public class DepositChecking extends Procedure {
 
   public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
     if (!success) {
-      if (versions[0] > 0) {
+      if (type == CCType.RC_TAILOR && versions[0] > 0) {
         FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, true);
       }
       return;
