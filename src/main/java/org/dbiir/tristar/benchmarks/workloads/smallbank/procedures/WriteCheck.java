@@ -124,11 +124,10 @@ public class WriteCheck extends Procedure {
 
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custId)) {
-        try (ResultSet r0 = stmtc.executeQuery()) {
-          if (!r0.next()) {
-            String msg = "Invalid account '" + custName + "'";
-            throw new UserAbortException(msg);
-          }
+        int res = stmtc.executeUpdate();
+        if (res == 0) {
+          String msg = "Invalid account '" + custName + "'";
+          throw new UserAbortException(msg);
         }
       }
     }
