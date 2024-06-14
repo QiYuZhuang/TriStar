@@ -122,7 +122,6 @@ public class Balance extends Procedure {
             versions[0] = rs.getLong(2);
           }
         } else if (balStmt0.getUpdateCount() < 0) {
-          System.out.println("break balance");
           break;
         }
 
@@ -157,7 +156,6 @@ public class Balance extends Procedure {
       case RC_FOR_UPDATE -> this.getPreparedStatement(conn, GetCheckingBalanceForUpdate, custId, custId);
       default -> this.getPreparedStatement(conn, GetCheckingBalance, custId);
     }) {
-
       boolean resultsAvailable1 = balStmt1.execute();
       while (true) {
         if (resultsAvailable1) {
@@ -173,7 +171,6 @@ public class Balance extends Procedure {
             versions[1] = rs.getLong(2);
           }
         } else if (balStmt1.getUpdateCount() < 0) {
-          System.out.println("break balance ");
           break;
         }
 
@@ -258,7 +255,7 @@ public class Balance extends Procedure {
         }
       }
     }
-
+    System.out.println("finish Bal");
     return checkingBalance + savingsBalance;
   }
 

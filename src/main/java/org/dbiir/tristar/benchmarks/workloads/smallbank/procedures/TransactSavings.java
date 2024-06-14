@@ -141,7 +141,6 @@ public class TransactSavings extends Procedure {
           }
           versions[0] = rs.getLong(1);
         } else if (stmt.getUpdateCount() < 0) {
-          System.out.println("break TS");
           break;
         }
 
@@ -160,6 +159,7 @@ public class TransactSavings extends Procedure {
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId, LockType.EX, type);
     }
+    System.out.println("finish TS");
   }
 
   public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {

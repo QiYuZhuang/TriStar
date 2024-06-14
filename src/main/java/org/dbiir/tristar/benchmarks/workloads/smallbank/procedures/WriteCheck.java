@@ -154,7 +154,6 @@ public class WriteCheck extends Procedure {
           if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR)
             versions[0] = rs.getLong(2);
         } else if (balStmt0.getUpdateCount() < 0) {
-          System.out.println("break");
           break;
         }
 
@@ -201,7 +200,6 @@ public class WriteCheck extends Procedure {
             versions[1] = rs.getLong(2);
           }
         } else if (balStmt1.getUpdateCount() < 0) {
-          System.out.println("break WC");
           break;
         }
 
@@ -313,6 +311,7 @@ public class WriteCheck extends Procedure {
         }
       }
     }
+    System.out.println("finish WC");
   }
 
   private void releaseTailorLock(int phase, long custId0, long custId1, long tid) {

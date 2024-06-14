@@ -106,7 +106,6 @@ public class DepositChecking extends Procedure {
           }
           versions[0] = rs.getLong(1);
         } else if (stmt1.getUpdateCount() < 0) {
-          System.out.println("break DC");
           break;
         }
 
@@ -117,6 +116,7 @@ public class DepositChecking extends Procedure {
     if (type == CCType.RC_TAILOR) {
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId, LockType.EX, type);
     }
+    System.out.println("finish DC");
   }
 
   public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
