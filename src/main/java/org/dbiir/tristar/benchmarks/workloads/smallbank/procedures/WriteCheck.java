@@ -46,8 +46,13 @@ import java.util.concurrent.locks.Lock;
  * @author pavlo
  */
 public class WriteCheck extends Procedure {
+  /*
   public final SQLStmt writeConflict =
           new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_CONFLICT + " WHERE name = ? FOR UPDATE");
+   */
+  public final SQLStmt writeConflict =
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + " SET name = name" + " WHERE custid = ?");
+
   public final SQLStmt GetAccount =
       new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?");
 
@@ -106,16 +111,6 @@ public class WriteCheck extends Procedure {
   public void run(Connection conn, String custName, long custId1, double amount, CCType type, Connection conn2, long[] versions, long tid) throws SQLException {
     // First convert the custName to the custId
     long custId;
-    if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
-      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
-        try (ResultSet r0 = stmtc.executeQuery()) {
-          if (!r0.next()) {
-            String msg = "Invalid account '" + custName + "'";
-            throw new UserAbortException(msg);
-          }
-        }
-      }
-    }
 
     try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custName)) {
       try (ResultSet r0 = stmt0.executeQuery()) {
@@ -124,6 +119,17 @@ public class WriteCheck extends Procedure {
           throw new UserAbortException(msg);
         }
         custId = r0.getLong(1);
+      }
+    }
+
+    if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
+      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custId)) {
+        try (ResultSet r0 = stmtc.executeQuery()) {
+          if (!r0.next()) {
+            String msg = "Invalid account '" + custName + "'";
+            throw new UserAbortException(msg);
+          }
+        }
       }
     }
 
