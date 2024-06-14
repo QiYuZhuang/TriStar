@@ -50,7 +50,7 @@ public class TransactSavings extends Procedure {
           new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_CONFLICT + " WHERE name = ? FOR UPDATE");
   */
   public final SQLStmt writeConflict =
-          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + " SET name = name" + " WHERE name = ?");
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + " SET name = name" + " WHERE custid = ?");
 
   public final SQLStmt GetAccount =
       new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?");
@@ -77,8 +77,19 @@ public class TransactSavings extends Procedure {
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the acctId
     long custId;
+
+    try (PreparedStatement stmt = this.getPreparedStatement(conn, GetAccount, custName)) {
+      try (ResultSet result = stmt.executeQuery()) {
+        if (!result.next()) {
+          String msg = "Invalid account '" + custName + "'";
+          throw new UserAbortException(msg);
+        }
+        custId = result.getLong(1);
+      }
+    }
+
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
-      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
+      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custId)) {
         int res = stmtc.executeUpdate();
         if (res == 0) {
           String msg = "Invalid account '" + custName + "'";
@@ -92,16 +103,6 @@ public class TransactSavings extends Procedure {
           }
         }
         */
-      }
-    }
-
-    try (PreparedStatement stmt = this.getPreparedStatement(conn, GetAccount, custName)) {
-      try (ResultSet result = stmt.executeQuery()) {
-        if (!result.next()) {
-          String msg = "Invalid account '" + custName + "'";
-          throw new UserAbortException(msg);
-        }
-        custId = result.getLong(1);
       }
     }
 

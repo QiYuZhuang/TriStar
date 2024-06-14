@@ -46,7 +46,7 @@ import java.util.concurrent.locks.Lock;
  */
 public class DepositChecking extends Procedure {
   public final SQLStmt writeConflict =
-          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + " SET name = name" + " WHERE name = ?");
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + " SET name = name" + " WHERE custid = ?");
 
   public final SQLStmt GetAccount =
       new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?");
@@ -66,8 +66,19 @@ public class DepositChecking extends Procedure {
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the custId
     long custId;
+
+    try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custName)) {
+      try (ResultSet r0 = stmt0.executeQuery()) {
+        if (!r0.next()) {
+          String msg = "Invalid account '" + custName + "'";
+          throw new UserAbortException(msg);
+        }
+        custId = r0.getLong(1);
+      }
+    }
+
     if (type == CCType.RC_ELT) {
-      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
+      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custId)) {
         int res = stmtc.executeUpdate();
         if (res == 0) {
           String msg = "Invalid account '" + custName + "'";
@@ -83,17 +94,6 @@ public class DepositChecking extends Procedure {
         */
       }
     }
-
-    try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custName)) {
-      try (ResultSet r0 = stmt0.executeQuery()) {
-        if (!r0.next()) {
-          String msg = "Invalid account '" + custName + "'";
-          throw new UserAbortException(msg);
-        }
-        custId = r0.getLong(1);
-      }
-    }
-
     // Then update their checking balance
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
