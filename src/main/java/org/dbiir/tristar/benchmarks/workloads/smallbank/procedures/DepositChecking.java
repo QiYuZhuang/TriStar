@@ -46,7 +46,7 @@ import java.util.concurrent.locks.Lock;
  */
 public class DepositChecking extends Procedure {
   public final SQLStmt writeConflict =
-          new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_CONFLICT + " WHERE name = ? FOR UPDATE");
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + "SET name = name" + " WHERE name = ?");
 
   public final SQLStmt GetAccount =
       new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?");

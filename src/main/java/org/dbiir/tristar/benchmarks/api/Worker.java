@@ -107,7 +107,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
         // read the lasted version
         this.conn2 = this.benchmark.makeConnection();
         this.conn2.setAutoCommit(true);
-        this.conn2.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+        this.conn2.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
 //        this.conn.setTransactionIsolation(this.configuration.getIsolationMode());
       } catch (SQLException ex) {
