@@ -25,6 +25,7 @@ import org.dbiir.tristar.benchmarks.catalog.Column;
 import org.dbiir.tristar.benchmarks.catalog.Table;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 import java.sql.Connection;
@@ -42,6 +43,7 @@ public final class SmallBankBenchmark extends BenchmarkModule {
     List<Connection> connectionList = new LinkedList<>();
     makeConnections(connectionList);
     LockTable.getInstance().initHotspot("smallbank", connectionList);
+    FlowRate.getInstance().init("smallbank");
     this.numAccounts =
         (int) Math.round(SmallBankConstants.NUM_ACCOUNTS * workConf.getScaleFactor());
   }

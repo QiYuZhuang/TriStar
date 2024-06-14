@@ -1,11 +1,5 @@
 package org.dbiir.tristar.transaction.concurrency;
 
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
-import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockType;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -16,6 +10,12 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
 
 public class LockTable {
     private static final LockTable INSTANCE;
@@ -359,7 +359,7 @@ public class LockTable {
             lockList.removeIf(lock -> lock.getKey() > HASH_SIZE && lock.free());
             ccBucketLocks.get(table)[bucketNum].writeLock().unlock();
         }
-     }
+    }
 
     public void updateHotspotVersion(String table, long key, long tid) {
         int bucketNum = (int)(key % HASH_SIZE);

@@ -30,6 +30,7 @@ import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 import java.sql.Connection;
@@ -122,6 +123,13 @@ public class TransactSavings extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid, LockType.EX);
     }
+    if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
+      // flow rate control
+      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId)) {
+
+      }
+    }
+
     try (PreparedStatement stmt =
         this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
       // TODO: return the savings version for validation
@@ -131,6 +139,9 @@ public class TransactSavings extends Procedure {
           throw new UserAbortException(msg);
         }
         versions[0] = res.getLong(1);
+      } catch (SQLException ex) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, false);
+        throw ex;
       }
     }
 
@@ -140,14 +151,19 @@ public class TransactSavings extends Procedure {
   }
 
   public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
-    if (!success)
+    if (!success) {
+      if (versions[0] > 0) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, true);
+      }
       return;
+    }
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid);
     }
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId, LockType.EX);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId, versions[0]);
+      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, true);
     }
   }
 }

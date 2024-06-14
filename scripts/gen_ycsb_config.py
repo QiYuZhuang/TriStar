@@ -100,10 +100,10 @@ def ycsb_wr(terminal=128):
     dir_name = "../config/ycsb/wr_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    zipf = [0.3]
+    zipf = [0.1]
     wrtxn = [1]
     wrtup = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
     weight = [0, 0, 0, 0, 0, 0, 100]
 
     experiments = product(cc, zipf, wrtxn, wrtup, [terminal])
@@ -116,10 +116,10 @@ def ycsb_scalability():
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     terminals = [4, 8, 16, 32, 64, 128, 256, 512]
-    zipf = [0.7]
+    zipf = [0.1, 0.3, 0.5]
     wrtxn = [1]
     wrtup = [0.2]
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
     # weight = list(default_weight_by_dis_ration(dis_ratio))
     weight = [0, 0, 0, 0, 0, 0, 100]
 
@@ -133,7 +133,7 @@ def ycsb_skew(terminal=128):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     zipf = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
-    wrtxn = [1]
+    wrtxn = [0.5]
     wrtup = [0.2]
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     weight = [0, 0, 0, 0, 0, 0, 100]

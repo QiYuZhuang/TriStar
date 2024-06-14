@@ -30,6 +30,7 @@ import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 import java.lang.reflect.Type;
@@ -128,10 +129,20 @@ public class WriteCheck extends Procedure {
           versions[0] = balRes0.getLong(2);
       }
     }
+    // try {
+    //   Thread.sleep(5);
+    // } catch (InterruptedException e) {
+    // }
 
     double checkingBalance;
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
+    }
+    if (type == CCType.RC_TAILOR) {
+      // flow rate control
+      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId)) {
+
+      }
     }
     phase = 2;
     try (PreparedStatement balStmt1 = switch (type) {
@@ -148,6 +159,9 @@ public class WriteCheck extends Procedure {
         checkingBalance = balRes1.getDouble(1);
         if (type == CCType.RC_TAILOR)
           versions[1] = balRes1.getLong(2);
+      } catch (SQLException ex) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, false);
+        throw ex;
       }
     }
 
@@ -241,8 +255,12 @@ public class WriteCheck extends Procedure {
      * there still some optimization space in write-after-read, it may be better that change the rw-dependency
      * into ww-dependency
      */
-    if (!success)
+    if (!success) {
+      if (versions[2] > 0) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
+      }
       return;
+    }
 
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
@@ -252,6 +270,7 @@ public class WriteCheck extends Procedure {
     if (type == CCType.RC_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId0, LockType.EX);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId0, versions[2]);
+      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
     }
     if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR)
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, LockType.SH);

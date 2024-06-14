@@ -30,6 +30,7 @@ import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 import java.sql.Connection;
@@ -150,6 +151,11 @@ public class Amalgamate extends Procedure {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid, LockType.EX);
       phase = 1;
     }
+    if (type == CCType.RC_TAILOR) {
+      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId0)) {
+
+      }
+    }
     double savingsBalance;
     try (PreparedStatement balStmt0 = this.getPreparedStatement(conn, GetAndZeroSavingsBalance, custId0)) {
       try (ResultSet balRes0 = balStmt0.executeQuery()) {
@@ -161,6 +167,9 @@ public class Amalgamate extends Procedure {
         }
         savingsBalance = balRes0.getDouble(1);
         versions[0] = balRes0.getLong(2);
+      } catch (SQLException ex) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId0, false);
+        throw ex;
       }
     }
 
@@ -171,6 +180,11 @@ public class Amalgamate extends Procedure {
       } catch (SQLException ex) {
         releaseTailorLock(phase, custId0, custId1, tid);
         throw ex;
+      }
+    }
+    if (type == CCType.RC_TAILOR) {
+      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId0)) {
+
       }
     }
     double checkingBalance;
@@ -185,6 +199,9 @@ public class Amalgamate extends Procedure {
 
         checkingBalance = balRes1.getDouble(1);
         versions[1] = balRes1.getLong(2);
+      } catch (SQLException ex) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, false);
+        throw ex;
       }
     }
 
@@ -209,7 +226,11 @@ public class Amalgamate extends Procedure {
         releaseTailorLock(phase, custId0, custId1, tid);
         throw ex;
       }
+    }
+    if (type == CCType.RC_TAILOR) {
+      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId1)) {
 
+      }
     }
     try (PreparedStatement updateStmt1 =
         this.getPreparedStatement(conn, UpdateSavingsBalance, total, custId1)) {
@@ -222,6 +243,9 @@ public class Amalgamate extends Procedure {
         }
 
         versions[2] = res.getLong(1);
+      } catch (SQLException ex) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1, false);
+        throw ex;
       }
     }
 
@@ -273,8 +297,18 @@ public class Amalgamate extends Procedure {
   }
 
   public void doAfterCommit(long custId0, long custId1, CCType type, boolean success, long[] versions, long tid) {
-    if (!success)
+    if (!success) {
+      if (versions[0] > 0) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId0, true);
+      }
+      if (versions[1] > 0) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
+      }
+      if (versions[2] > 0) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1, true);
+      }
       return;
+    }
 
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid);
@@ -289,6 +323,9 @@ public class Amalgamate extends Procedure {
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId0, versions[0]);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId0, versions[1]);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId1, versions[2]);
+      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId0, true);
+      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
+      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1, true);
     }
   }
 }
