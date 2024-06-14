@@ -215,7 +215,7 @@ public class Amalgamate extends Procedure {
       // zero Checkingbalance
       int balRes2 = balStmt2.executeUpdate();
       if (balRes2 == 0) {
-        String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
+        String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId0);
         if (type == CCType.RC_TAILOR_LOCK)
           releaseTailorLock(phase, custId0, custId1, tid);
         throw new UserAbortException(msg);
@@ -254,7 +254,7 @@ public class Amalgamate extends Procedure {
         if (resultsAvailable) {
           ResultSet rs = updateStmt1.getResultSet();
           if (!rs.next()) {
-            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId1);
+            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId1);
             if (type == CCType.RC_TAILOR_LOCK)
               releaseTailorLock(phase, custId0, custId1, tid);
             throw new UserAbortException(msg);

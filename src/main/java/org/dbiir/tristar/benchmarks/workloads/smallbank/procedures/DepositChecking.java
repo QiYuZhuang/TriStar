@@ -91,7 +91,11 @@ public class DepositChecking extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
     }
-    try (PreparedStatement stmt1 = this.getPreparedStatement(conn, UpdateCheckingBalance, amount, custId, custId)) {
+    try (PreparedStatement stmt1 = conn.prepareStatement((UpdateCheckingBalance.getSQL()))) {
+      // fill the field
+      stmt1.setDouble(1, amount);
+      stmt1.setLong(2, custId);
+      stmt1.setLong(3, custId);
 
       boolean resultsAvailable = stmt1.execute();
       while (true) {
