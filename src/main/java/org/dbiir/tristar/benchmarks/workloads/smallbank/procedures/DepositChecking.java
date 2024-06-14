@@ -68,12 +68,19 @@ public class DepositChecking extends Procedure {
     long custId;
     if (type == CCType.RC_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
+        int res = stmtc.executeUpdate();
+        if (res == 0) {
+          String msg = "Invalid account '" + custName + "'";
+          throw new UserAbortException(msg);
+        }
+       /*
         try (ResultSet r0 = stmtc.executeQuery()) {
           if (!r0.next()) {
             String msg = "Invalid account '" + custName + "'";
             throw new UserAbortException(msg);
           }
         }
+        */
       }
     }
 
