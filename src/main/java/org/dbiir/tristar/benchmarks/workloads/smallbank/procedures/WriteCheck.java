@@ -64,7 +64,7 @@ public class WriteCheck extends Procedure {
   */
   public final SQLStmt GetSavingsBalanceForUpdate =
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
-                  " SET bal = bal " +
+                  " SET bal = bal + 0.0" +
                   " WHERE custid = ?;" +
                   " SELECT bal " +
                   " FROM " +
@@ -76,7 +76,7 @@ public class WriteCheck extends Procedure {
 
   public final SQLStmt GetCheckingBalanceForUpdate =
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
-                  " SET bal = bal " +
+                  " SET bal = bal + 0.0" +
                   " WHERE custid = ?;" +
                   " SELECT bal" +
                   " FROM " +
@@ -98,7 +98,7 @@ public class WriteCheck extends Procedure {
               + SmallBankConstants.TABLENAME_CHECKING
               + "   SET bal = bal - ?, tid = tid + 1"
               + " WHERE custid = ?;"
-              + "SELECT tid + 1"
+              + "SELECT tid"
               +  " FROM "
               + SmallBankConstants.TABLENAME_CHECKING
               + " WHERE custid = ?;");
@@ -195,7 +195,7 @@ public class WriteCheck extends Procedure {
               releaseTailorLock(phase, custId, custId1, tid);
             throw new UserAbortException(msg);
           }
-          savingsBalance = rs.getDouble(1);
+          checkingBalance = rs.getDouble(1);
           if (type == CCType.RC_TAILOR) {
             versions[1] = rs.getLong(2);
           }

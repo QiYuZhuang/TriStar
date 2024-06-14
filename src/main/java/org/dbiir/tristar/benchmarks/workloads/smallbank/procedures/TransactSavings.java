@@ -63,7 +63,7 @@ public class TransactSavings extends Procedure {
                           + " SET bal = bal + ?, tid = tid + 1 "
                           + " WHERE custid = ?;"
                           + " SELECT"
-                          + " tid + 1"
+                          + " tid"
                           + " FROM "
                           + SmallBankConstants.TABLENAME_SAVINGS
                           + " where custid = ?;");
@@ -127,12 +127,8 @@ public class TransactSavings extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid, LockType.EX);
     }
-    try (PreparedStatement stmt = conn.prepareStatement((UpdateSavingsBalance.getSQL()))) {
+    try (PreparedStatement stmt = this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId, custId)) {
       // TODO: return the savings version for validation
-      // fill the field
-      stmt.setDouble(1, amount);
-      stmt.setLong(2, custId);
-      stmt.setLong(3, custId);
 
       boolean resultsAvailable = stmt.execute();
       while (true) {

@@ -58,10 +58,10 @@ public class DepositChecking extends Procedure {
               + " SET bal = bal + ?, tid = tid + 1 "
               + " WHERE custid = ?;"
               + "SELECT"
-              + " tid + 1"
+              + " tid"
               + " FROM "
               + SmallBankConstants.TABLENAME_CHECKING
-              + " where custid = ?;");
+              + " WHERE custid = ?;");
 
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the custId
@@ -91,11 +91,7 @@ public class DepositChecking extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
     }
-    try (PreparedStatement stmt1 = conn.prepareStatement((UpdateCheckingBalance.getSQL()))) {
-      // fill the field
-      stmt1.setDouble(1, amount);
-      stmt1.setLong(2, custId);
-      stmt1.setLong(3, custId);
+    try (PreparedStatement stmt1 = this.getPreparedStatement(conn, UpdateCheckingBalance, amount, custId, custId)) {
 
       boolean resultsAvailable = stmt1.execute();
       while (true) {

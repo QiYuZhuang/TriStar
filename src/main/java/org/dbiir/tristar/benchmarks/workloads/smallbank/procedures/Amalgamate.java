@@ -60,15 +60,15 @@ public class Amalgamate extends Procedure {
   public final SQLStmt GetCheckingBalance =
       new SQLStmt("SELECT bal, tid + 1 FROM " + SmallBankConstants.TABLENAME_CHECKING + " WHERE custid = ?");
 
-  public final SQLStmt UpdateSavingsBalance =
+    public final SQLStmt UpdateSavingsBalance =
           new SQLStmt(
                   "UPDATE "
                           + SmallBankConstants.TABLENAME_SAVINGS
                           + " SET bal = bal + ?, tid = tid + 1 "
                           + " WHERE custid = ?;"
                           + "SELECT"
-                          + " tid + 1"
-                          + " FROM "
+                          + " tid"
+                          + " FROM"
                           + SmallBankConstants.TABLENAME_SAVINGS
                           + " where custid = ?;");
   /*
@@ -107,14 +107,14 @@ public class Amalgamate extends Procedure {
       new SQLStmt(
           "UPDATE "
               + SmallBankConstants.TABLENAME_CHECKING
-              + "   SET bal = 0.0 "
+              + "   SET bal = 0.0, tid = tid + 1"
               + " WHERE custid = ?");
 
   public final SQLStmt ZeroSavingsBalance =
           new SQLStmt(
                   "UPDATE "
                           + SmallBankConstants.TABLENAME_SAVINGS
-                          + "   SET bal = 0.0 "
+                          + "   SET bal = 0.0, tid = tid + 1 "
                           + " WHERE custid = ?");
 
   public void run(Connection conn, long custId0, long custId1, CCType type, long[] versions, long tid, Connection conn2) throws SQLException {
@@ -165,15 +165,7 @@ public class Amalgamate extends Procedure {
     double savingsBalance;
     try (PreparedStatement balStmt0 = this.getPreparedStatement(conn, ZeroSavingsBalance, custId0);
          PreparedStatement balStmt1 = this.getPreparedStatement(conn2, GetSavingsBalance, custId0)){
-
-      int balRes0 = balStmt0.executeUpdate();
-      if (balRes0 == 0) {
-        String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
-        if (type == CCType.RC_TAILOR_LOCK)
-          releaseTailorLock(phase, custId0, custId1, tid);
-        throw new UserAbortException(msg);
-      }
-
+      //get savingsBalance
       try (ResultSet balRes1 = balStmt1.executeQuery()) {
         if (!balRes1.next()) {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
@@ -184,6 +176,15 @@ public class Amalgamate extends Procedure {
         savingsBalance = balRes1.getDouble(1);
         versions[0] = balRes1.getLong(2);
       }
+
+      int balRes0 = balStmt0.executeUpdate();
+      if (balRes0 == 0) {
+        String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
+        if (type == CCType.RC_TAILOR_LOCK)
+          releaseTailorLock(phase, custId0, custId1, tid);
+        throw new UserAbortException(msg);
+      }
+
     }
 
     if (type == CCType.RC_TAILOR_LOCK) {
@@ -195,18 +196,11 @@ public class Amalgamate extends Procedure {
         throw ex;
       }
     }
+
     double checkingBalance;
     try (PreparedStatement balStmt2 = this.getPreparedStatement(conn, ZeroCheckingBalance, custId0);
-         PreparedStatement balStmt3 = this.getPreparedStatement(conn2, GetSavingsBalance, custId0)) {
-
-      int balRes2 = balStmt2.executeUpdate();
-      if (balRes2 == 0) {
-        String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
-        if (type == CCType.RC_TAILOR_LOCK)
-          releaseTailorLock(phase, custId0, custId1, tid);
-        throw new UserAbortException(msg);
-      }
-
+         PreparedStatement balStmt3 = this.getPreparedStatement(conn2, GetCheckingBalance, custId0)) {
+      //get Checkingbalance
       try (ResultSet balRes3 = balStmt3.executeQuery()) {
         if (!balRes3.next()) {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId0);
@@ -218,6 +212,15 @@ public class Amalgamate extends Procedure {
         checkingBalance = balRes3.getDouble(1);
         versions[1] = balRes3.getLong(2);
       }
+      // zero Checkingbalance
+      int balRes2 = balStmt2.executeUpdate();
+      if (balRes2 == 0) {
+        String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
+        if (type == CCType.RC_TAILOR_LOCK)
+          releaseTailorLock(phase, custId0, custId1, tid);
+        throw new UserAbortException(msg);
+      }
+
     }
 
     double total = checkingBalance + savingsBalance;

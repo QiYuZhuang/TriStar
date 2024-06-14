@@ -50,7 +50,7 @@ public class Balance extends Procedure {
 
   public final SQLStmt GetSavingsBalanceForUpdate =
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
-                  " SET bal = bal "+
+                  " SET bal = bal + 0.0"+
                   " WHERE custid = ?;" +
                   " SELECT bal " +
                   " FROM " +
@@ -62,7 +62,7 @@ public class Balance extends Procedure {
 
   public final SQLStmt GetCheckingBalanceForUpdate =
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
-                  " SET bal = bal " +
+                  " SET bal = bal + 0.0" +
                   " WHERE custid = ?;" +
                   " SELECT bal" +
                   " FROM " +
