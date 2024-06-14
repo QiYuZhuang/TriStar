@@ -73,7 +73,6 @@ public class TransactSavings extends Procedure {
   public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the custName to the acctId
     long custId;
-    System.out.println("begin TS");
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
         try (ResultSet r0 = stmtc.executeQuery()) {
@@ -159,7 +158,6 @@ public class TransactSavings extends Procedure {
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId, LockType.EX, type);
     }
-    System.out.println("finish TS");
   }
 
   public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {

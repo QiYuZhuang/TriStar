@@ -263,7 +263,6 @@ public class Amalgamate extends Procedure {
         } else if (updateStmt1.getUpdateCount() < 0) {
           break;
         }
-        System.out.println("finish Am");
         resultsAvailable = updateStmt1.getMoreResults();
       }
 

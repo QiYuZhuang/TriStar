@@ -105,7 +105,6 @@ public class WriteCheck extends Procedure {
 
   public void run(Connection conn, String custName, long custId1, double amount, CCType type, Connection conn2, long[] versions, long tid) throws SQLException {
     // First convert the custName to the custId
-    System.out.println("begin WC");
     long custId;
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
@@ -154,7 +153,6 @@ public class WriteCheck extends Procedure {
           savingsBalance = rs.getDouble(1);
           if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR)
             versions[0] = rs.getLong(2);
-          System.out.println("WC while");
         } else if (balStmt0.getUpdateCount() < 0) {
           break;
         }
@@ -313,7 +311,6 @@ public class WriteCheck extends Procedure {
         }
       }
     }
-    System.out.println("finish WC");
   }
 
   private void releaseTailorLock(int phase, long custId0, long custId1, long tid) {
