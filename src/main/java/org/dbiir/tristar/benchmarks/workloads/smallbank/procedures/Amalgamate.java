@@ -45,8 +45,11 @@ import java.util.concurrent.locks.Lock;
  */
 public class Amalgamate extends Procedure {
   public final SQLStmt writeConflict =
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + " SET name = name" + " WHERE custid = ?");
+  /*
+  public final SQLStmt writeConflict =
           new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_CONFLICT + " WHERE custid = ? FOR UPDATE");
-
+  */
   // 2013-05-05
   // In the original version of the benchmark, this is suppose to be a look up
   // on the customer's name. We don't have fast implementation of replicated
@@ -120,21 +123,32 @@ public class Amalgamate extends Procedure {
   public void run(Connection conn, long custId0, long custId1, CCType type, long[] versions, long tid, Connection conn2) throws SQLException {
     if (type == CCType.RC_ELT) {
       try (PreparedStatement stmtc0 = this.getPreparedStatement(conn, writeConflict, custId0)) {
-        try (ResultSet r0 = stmtc0.executeQuery()) {
+      int rs0 = stmtc0.executeUpdate();
+      if (rs0 == 0) {
+        String msg = "Invalid account '" + custId0 + "'";
+        throw new UserAbortException(msg);
+      }
+/*        try (ResultSet r0 = stmtc0.executeQuery()) {
           if (!r0.next()) {
             String msg = "Invalid account '" + custId0 + "'";
             throw new UserAbortException(msg);
           }
-        }
+        }*/
       }
       try (PreparedStatement stmtc1 = this.getPreparedStatement(conn, writeConflict, custId1)) {
-        try (ResultSet r0 = stmtc1.executeQuery()) {
+        int rs1 = stmtc1.executeUpdate();
+        if (rs1 == 0) {
+          String msg = "Invalid account '" + custId1 + "'";
+          throw new UserAbortException(msg);
+        }
+/*        try (ResultSet r0 = stmtc1.executeQuery()) {
           if (!r0.next()) {
             String msg = "Invalid account '" + custId0 + "'";
             throw new UserAbortException(msg);
           }
-        }
+        }*/
       }
+
     }
 
     // Get Account Information

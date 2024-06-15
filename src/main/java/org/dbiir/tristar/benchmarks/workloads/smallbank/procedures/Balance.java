@@ -39,8 +39,11 @@ import java.sql.SQLException;
 import java.util.concurrent.locks.Lock;
 
 public class Balance extends Procedure {
+
+  /*public final SQLStmt writeConflict =
+          new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_CONFLICT + " WHERE name = ? FOR UPDATE");*/
   public final SQLStmt writeConflict =
-          new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_CONFLICT + " WHERE name = ? FOR UPDATE");
+          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + " SET name = name" + " WHERE custid = ?");
 
   public final SQLStmt GetAccount =
       new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?");
@@ -72,16 +75,6 @@ public class Balance extends Procedure {
   public double run(Connection conn, String custName, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the acctName to the acctId
     long custId;
-    if (type == CCType.RC_ELT) {
-      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
-        try (ResultSet r0 = stmtc.executeQuery()) {
-          if (!r0.next()) {
-            String msg = "Invalid account '" + custName + "'";
-            throw new UserAbortException(msg);
-          }
-        }
-      }
-    }
 
     try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custName)) {
       try (ResultSet r0 = stmt0.executeQuery()) {
@@ -93,6 +86,23 @@ public class Balance extends Procedure {
         custId = r0.getLong(1);
       }
     }
+
+    if (type == CCType.RC_ELT) {
+      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custId)) {
+        int rs = stmtc.executeUpdate();
+        if (rs == 0) {
+          String msg = "Invalid account '" + custId + "'";
+          throw new UserAbortException(msg);
+        }
+/*        try (ResultSet r0 = stmtc.executeQuery()) {
+          if (!r0.next()) {
+            String msg = "Invalid account '" + custName + "'";
+            throw new UserAbortException(msg);
+          }
+        }*/
+      }
+    }
+
     int phase = 0;
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid, LockType.SH);
