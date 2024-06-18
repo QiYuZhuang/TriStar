@@ -97,7 +97,7 @@ def generate_transation(root: ElementTree):
 
 
 def tpcc_skew_warehouse(terminal=128):
-    dir_name = "../config/tpcc/skew_warehouse-" + str(terminal) + "/mysql"
+    dir_name = "../../config/tpcc/skew_warehouse-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR", "RC_TAILOR_LOCK"]
@@ -110,7 +110,7 @@ def tpcc_skew_warehouse(terminal=128):
 
 
 def tpcc_skew_customer(terminal=128):
-    dir_name = "../config/tpcc/skew_custom-" + str(terminal) + "/mysql"
+    dir_name = "../../config/tpcc/skew_custom-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     # cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
@@ -124,7 +124,7 @@ def tpcc_skew_customer(terminal=128):
 
 
 def tpcc_warehouse(terminal=128):
-    dir_name = "../config/tpcc/warehouse-" + str(terminal) + "/mysql"
+    dir_name = "../../config/tpcc/warehouse-" + str(terminal) + "/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     #cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
@@ -138,14 +138,16 @@ def tpcc_warehouse(terminal=128):
 
 
 def tpcc_scalability():
-    dir_name = "../config/tpcc/scalability/mysql"
+    dir_name = "../../config/tpcc/scalability/mysql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     #cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     cc = ["RC_FOR_UPDATE"]
-    terminals = [4, 8, 16, 32, 64, 128, 256, 512]
+    # terminals = [4, 8, 16, 32, 64, 128, 256, 512]
+    terminals = [4]
     weight = [45, 43, 4, 4, 4]
-    wn = [1, 2, 4, 8, 16]
+    #wn = [1, 2, 4, 8, 16]
+    wn = [2]
 
     experiments = product(cc, terminals, wn)
     for exp in experiments:
@@ -158,6 +160,4 @@ if __name__ == '__main__':
 
     scaleFactor = 16
 
-    tpcc_skew_warehouse()
-    tpcc_skew_customer()
-    tpcc_warehouse()
+    tpcc_scalability()
