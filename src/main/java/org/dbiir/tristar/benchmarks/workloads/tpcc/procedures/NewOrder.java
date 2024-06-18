@@ -128,7 +128,7 @@ public class NewOrder extends TPCCProcedure {
       new SQLStmt(
           """
         UPDATE %s
-           SET S_QUANTITY -= ?
+           SET S_QUANTITY = S_QUANTITY - ?
          WHERE S_I_ID = ?
            AND S_W_ID = ?
     """
