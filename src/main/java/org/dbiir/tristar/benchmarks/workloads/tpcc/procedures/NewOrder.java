@@ -290,11 +290,11 @@ public class NewOrder extends TPCCProcedure {
 
       }
 
-      stmtInsertOrderLine.executeBatch();
-      stmtInsertOrderLine.clearBatch();
-
       stmtUpdateStock.executeBatch();
       stmtUpdateStock.clearBatch();
+
+      stmtInsertOrderLine.executeBatch();
+      stmtInsertOrderLine.clearBatch();
     }
 
     try (PreparedStatement stmtUpdateStock2 = this.getPreparedStatement(conn, stmtUpdateStockSQL);
@@ -342,12 +342,12 @@ public class NewOrder extends TPCCProcedure {
 //        }
 
       }
+      stmtUpdateStock2.executeBatch();
+      stmtUpdateStock2.clearBatch();
 
       stmtInsertOrderLine2.executeBatch();
       stmtInsertOrderLine2.clearBatch();
 
-      stmtUpdateStock2.executeBatch();
-      stmtUpdateStock2.clearBatch();
     }
   }
 
