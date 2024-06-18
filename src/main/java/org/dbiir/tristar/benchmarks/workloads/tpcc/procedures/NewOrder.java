@@ -138,7 +138,7 @@ public class NewOrder extends TPCCProcedure {
       new SQLStmt(
           """
         INSERT INTO %s
-         (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER_, OL_I_ID, OL_DELIVERY_INFO, OL_QUANTITY)
+         (OL_W_ID, OL_D_ID, OL_O_ID, ol_number, OL_I_ID, OL_DELIVERY_INFO, OL_QUANTITY)
          VALUES (?,?,?,?,?,?,?)
     """
               .formatted(TPCCConstants.TABLENAME_ORDERLINE));
