@@ -449,7 +449,7 @@ public class NewOrder extends TPCCProcedure {
       boolean resultsAvailable = stmtUpdateAndGetDist.execute();
       int res = -1;
       while (true) {
-        if (!resultsAvailable) {
+        if (resultsAvailable) {
           ResultSet rs = stmtUpdateAndGetDist.getResultSet();
           if (!rs.next()) {
             throw new RuntimeException(
