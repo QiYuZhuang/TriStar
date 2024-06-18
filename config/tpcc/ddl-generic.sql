@@ -145,7 +145,7 @@ CREATE TABLE order_line (
                             PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number)
 );
 
-CREATE INDEX idx_customer_name ON customer (c_w_id, c_d_id, c_last, c_first);
+CREATE INDEX idx_customer_name ON customer (c_w_id, c_d_id);
 
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
