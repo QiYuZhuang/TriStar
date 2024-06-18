@@ -144,10 +144,10 @@ def tpcc_scalability():
     #cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     cc = ["RC_FOR_UPDATE"]
     # terminals = [4, 8, 16, 32, 64, 128, 256, 512]
-    terminals = [4]
+    terminals = [128]
     weight = [45, 43, 4, 4, 4]
     #wn = [1, 2, 4, 8, 16]
-    wn = [2]
+    wn = [16]
 
     experiments = product(cc, terminals, wn)
     for exp in experiments:
