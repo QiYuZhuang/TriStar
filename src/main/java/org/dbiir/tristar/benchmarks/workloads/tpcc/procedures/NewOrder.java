@@ -325,7 +325,7 @@ public class NewOrder extends TPCCProcedure {
         stmtInsertOrderLine2.setInt(3, d_next_o_id);
         stmtInsertOrderLine2.setInt(2, d_id);
         stmtInsertOrderLine2.setInt(1, w_id);
-        stmtInsertOrderLine2.setInt(4, ol_number);
+        stmtInsertOrderLine2.setInt(4, ol_number + o_ol_cnt);
         stmtInsertOrderLine2.setInt(5, ol_i_id);
         stmtInsertOrderLine2.setInt(6, ol_supply_w_id);
         stmtInsertOrderLine2.setInt(7, ol_quantity);
