@@ -24,6 +24,8 @@ public class Warehouse implements Serializable {
 
   public int w_id; // PRIMARY KEY
   public float w_ytd;
+  public String w_info;
+  /*
   public double w_tax;
   public String w_name;
   public String w_street_1;
@@ -31,6 +33,7 @@ public class Warehouse implements Serializable {
   public String w_city;
   public String w_state;
   public String w_zip;
+  */
 
   @Override
   public String toString() {
@@ -39,6 +42,9 @@ public class Warehouse implements Serializable {
         + w_id
         + "\n*      w_ytd = "
         + w_ytd
+        + "\n*      w_info = "
+        +w_info
+      /*
         + "\n*      w_tax = "
         + w_tax
         + "\n*     w_name = "
@@ -53,6 +59,7 @@ public class Warehouse implements Serializable {
         + w_state
         + "\n*      w_zip = "
         + w_zip
+       */
         + "\n**********************************************");
   }
 }

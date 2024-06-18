@@ -64,11 +64,11 @@ public class Delivery extends TPCCProcedure {
         """
               .formatted(TPCCConstants.TABLENAME_OPENORDER));
 
-  public SQLStmt delivUpdateCarrierIdSQL =
+  public SQLStmt delivUpdateOrderStatusSQL =
       new SQLStmt(
           """
         UPDATE %s
-           SET O_CARRIER_ID = ?
+           SET O_STATUS = ?
          WHERE O_ID = ?
            AND O_D_ID = ?
            AND O_W_ID = ?
@@ -86,6 +86,17 @@ public class Delivery extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_ORDERLINE));
 
+  public SQLStmt delivUpdateDeliveryInfoSQL =
+          new SQLStmt(
+                  """
+                UPDATE %s
+                   SET ol_delivery_info = ?
+                 WHERE OL_O_ID = ?
+                   AND OL_D_ID = ?
+                   AND OL_W_ID = ?
+            """
+                          .formatted(TPCCConstants.TABLENAME_ORDERLINE));
+
   public SQLStmt delivSumOrderAmountSQL =
       new SQLStmt(
           """
@@ -97,12 +108,11 @@ public class Delivery extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_ORDERLINE));
 
-  public SQLStmt delivUpdateCustBalDelivCntSQL =
+  public SQLStmt delivUpdateCustBalSQL =
       new SQLStmt(
           """
         UPDATE %s
-           SET C_BALANCE = C_BALANCE + ?,
-               C_DELIVERY_CNT = C_DELIVERY_CNT + 1
+           SET C_BALANCE = C_BALANCE + ?
          WHERE C_W_ID = ?
            AND C_D_ID = ?
            AND C_ID = ?
@@ -119,8 +129,8 @@ public class Delivery extends TPCCProcedure {
       TPCCWorker w)
       throws SQLException {
 
-    int o_carrier_id = TPCCUtil.randomNumber(1, 10, gen);
-
+    // int o_carrier_id = TPCCUtil.randomNumber(1, 10, gen);
+    /*
     int d_id;
 
     int[] orderIDs = new int[10];
@@ -133,20 +143,28 @@ public class Delivery extends TPCCProcedure {
       }
 
       orderIDs[d_id - 1] = no_o_id;
+      */
+      // deleteOrder(conn, w_id, d_id, no_o_id);
 
-      deleteOrder(conn, w_id, d_id, no_o_id);
+      // int customerId = getCustomerId(conn, w_id, d_id, no_o_id);
 
-      int customerId = getCustomerId(conn, w_id, d_id, no_o_id);
+    int d_id1 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
+    int d_id2 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
 
-      updateCarrierId(conn, w_id, o_carrier_id, d_id, no_o_id);
+    int no_o_id1 = TPCCUtil.randomNumber(1,3000, gen);
+    int no_o_id2 = TPCCUtil.randomNumber(1,3000, gen);
+    int customerId = TPCCUtil.getCustomerID(gen);
 
-      updateDeliveryDate(conn, w_id, d_id, no_o_id);
+    updateOrderStatus(conn, w_id, d_id1, no_o_id1);
 
-      float orderLineTotal = getOrderLineTotal(conn, w_id, d_id, no_o_id);
+    updateDeliveryInfo(conn, w_id, d_id1, no_o_id1);
 
-      updateBalanceAndDelivery(conn, w_id, d_id, customerId, orderLineTotal);
-    }
+    updateDeliveryInfo(conn, w_id, d_id2, no_o_id2);
 
+    float orderLineTotal = (float) (TPCCUtil.randomNumber(100, 500000, gen) / 100.0);
+
+    updateBalance(conn, w_id, d_id1, customerId, orderLineTotal);
+    /*
     if (LOG.isTraceEnabled()) {
       StringBuilder terminalMessage = new StringBuilder();
       terminalMessage.append(
@@ -155,10 +173,8 @@ public class Delivery extends TPCCProcedure {
       terminalMessage.append(TPCCUtil.getCurrentTime());
       terminalMessage.append("\n\n Warehouse: ");
       terminalMessage.append(w_id);
-      terminalMessage.append("\n Carrier:   ");
-      terminalMessage.append(o_carrier_id);
       terminalMessage.append("\n\n Delivered Orders\n");
-      for (int i = 1; i <= TPCCConfig.configDistPerWhse; i++) {
+      for (int i = 1; i <= 2; i++) {
         if (orderIDs[i - 1] >= 0) {
           terminalMessage.append("  District ");
           terminalMessage.append(i < 10 ? " " : "");
@@ -172,6 +188,7 @@ public class Delivery extends TPCCProcedure {
           "+-----------------------------------------------------------------+\n\n");
       LOG.trace(terminalMessage.toString());
     }
+    */
   }
 
   private Integer getOrderId(Connection conn, int w_id, int d_id) throws SQLException {
@@ -244,7 +261,7 @@ public class Delivery extends TPCCProcedure {
   private void updateCarrierId(Connection conn, int w_id, int o_carrier_id, int d_id, int no_o_id)
       throws SQLException {
     try (PreparedStatement delivUpdateCarrierId =
-        this.getPreparedStatement(conn, delivUpdateCarrierIdSQL)) {
+        this.getPreparedStatement(conn, delivUpdateOrderStatusSQL)) {
       delivUpdateCarrierId.setInt(1, o_carrier_id);
       delivUpdateCarrierId.setInt(2, no_o_id);
       delivUpdateCarrierId.setInt(3, d_id);
@@ -256,6 +273,26 @@ public class Delivery extends TPCCProcedure {
         String msg =
             String.format(
                 "Failed to update ORDER record [W_ID=%d, D_ID=%d, O_ID=%d]", w_id, d_id, no_o_id);
+        throw new RuntimeException(msg);
+      }
+    }
+  }
+
+  private void updateOrderStatus(Connection conn, int w_id, int d_id, int no_o_id)
+          throws SQLException {
+    try (PreparedStatement delivUpdateCarrierId =
+                 this.getPreparedStatement(conn, delivUpdateOrderStatusSQL)) {
+      delivUpdateCarrierId.setString(1, "delivered");
+      delivUpdateCarrierId.setInt(2, no_o_id);
+      delivUpdateCarrierId.setInt(3, d_id);
+      delivUpdateCarrierId.setInt(4, w_id);
+
+      int result = delivUpdateCarrierId.executeUpdate();
+
+      if (result != 1) {
+        String msg =
+                String.format(
+                        "Failed to update ORDER record [W_ID=%d, D_ID=%d, O_ID=%d]", w_id, d_id, no_o_id);
         throw new RuntimeException(msg);
       }
     }
@@ -284,6 +321,29 @@ public class Delivery extends TPCCProcedure {
     }
   }
 
+  private void updateDeliveryInfo(Connection conn, int w_id, int d_id, int no_o_id)
+          throws SQLException {
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    try (PreparedStatement delivUpdateDeliveryDate =
+                 this.getPreparedStatement(conn, delivUpdateDeliveryInfoSQL)) {
+      delivUpdateDeliveryDate.setString(1, "delivered");
+      delivUpdateDeliveryDate.setInt(2, no_o_id);
+      delivUpdateDeliveryDate.setInt(3, d_id);
+      delivUpdateDeliveryDate.setInt(4, w_id);
+
+      int result = delivUpdateDeliveryDate.executeUpdate();
+
+      if (result == 0) {
+        String msg =
+                String.format(
+                        "Failed to update ORDER_LINE records [W_ID=%d, D_ID=%d, O_ID=%d]",
+                        w_id, d_id, no_o_id);
+        throw new RuntimeException(msg);
+      }
+    }
+  }
+
   private float getOrderLineTotal(Connection conn, int w_id, int d_id, int no_o_id)
       throws SQLException {
     try (PreparedStatement delivSumOrderAmount =
@@ -306,11 +366,11 @@ public class Delivery extends TPCCProcedure {
     }
   }
 
-  private void updateBalanceAndDelivery(
+  private void updateBalance(
       Connection conn, int w_id, int d_id, int c_id, float orderLineTotal) throws SQLException {
 
     try (PreparedStatement delivUpdateCustBalDelivCnt =
-        this.getPreparedStatement(conn, delivUpdateCustBalDelivCntSQL)) {
+        this.getPreparedStatement(conn, delivUpdateCustBalSQL)) {
       delivUpdateCustBalDelivCnt.setBigDecimal(1, BigDecimal.valueOf(orderLineTotal));
       delivUpdateCustBalDelivCnt.setInt(2, w_id);
       delivUpdateCustBalDelivCnt.setInt(3, d_id);

@@ -78,9 +78,7 @@ public class Payment extends TPCCProcedure {
   public SQLStmt payGetCustSQL =
       new SQLStmt(
           """
-        SELECT C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
-               C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
-               C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+        SELECT  C_BALANCE
           FROM %s
          WHERE C_W_ID = ?
            AND C_D_ID = ?
@@ -117,9 +115,7 @@ public class Payment extends TPCCProcedure {
       new SQLStmt(
           """
         UPDATE %s
-           SET C_BALANCE = ?,
-               C_YTD_PAYMENT = ?,
-               C_PAYMENT_CNT = ?
+           SET C_BALANCE = ?
          WHERE C_W_ID = ?
            AND C_D_ID = ?
            AND C_ID = ?
@@ -165,44 +161,45 @@ public class Payment extends TPCCProcedure {
 
     updateWarehouse(conn, w_id, paymentAmount);
 
-    Warehouse w = getWarehouse(conn, w_id);
+    //Warehouse w = getWarehouse(conn, w_id);
 
     updateDistrict(conn, w_id, districtID, paymentAmount);
 
-    District d = getDistrict(conn, w_id, districtID);
+    //District d = getDistrict(conn, w_id, districtID);
 
     int x = TPCCUtil.randomNumber(1, 100, gen);
 
     int customerDistrictID = getCustomerDistrictId(gen, districtID, x);
     int customerWarehouseID = getCustomerWarehouseID(gen, w_id, numWarehouses, x);
+    int customerID = TPCCUtil.getCustomerID(gen);
 
-    Customer c = getCustomer(conn, gen, customerDistrictID, customerWarehouseID, paymentAmount);
+    updateBalance(conn, customerDistrictID, customerWarehouseID, customerID, paymentAmount);
+//
+//    if (c.c_credit.equals("BC")) {
+//      // bad credit
+//      c.c_data =
+//          getCData(
+//              conn, w_id, districtID, customerDistrictID, customerWarehouseID, paymentAmount, c);
+//
+//      updateBalanceCData(conn, customerDistrictID, customerWarehouseID, c);
+//
+//    } else {
+//      // GoodCredit
+//
+//      updateBalance(conn, customerDistrictID, customerWarehouseID, c);
+//    }
 
-    if (c.c_credit.equals("BC")) {
-      // bad credit
-      c.c_data =
-          getCData(
-              conn, w_id, districtID, customerDistrictID, customerWarehouseID, paymentAmount, c);
-
-      updateBalanceCData(conn, customerDistrictID, customerWarehouseID, c);
-
-    } else {
-      // GoodCredit
-
-      updateBalance(conn, customerDistrictID, customerWarehouseID, c);
-    }
-
-    insertHistory(
-        conn,
-        w_id,
-        districtID,
-        customerDistrictID,
-        customerWarehouseID,
-        paymentAmount,
-        w.w_name,
-        d.d_name,
-        c);
-
+//    insertHistory(
+//        conn,
+//        w_id,
+//        districtID,
+//        customerDistrictID,
+//        customerWarehouseID,
+//        paymentAmount,
+//        w.w_name,
+//        d.d_name,
+//        c);
+    /*
     if (LOG.isTraceEnabled()) {
       StringBuilder terminalMessage = new StringBuilder();
       terminalMessage.append(
@@ -211,81 +208,16 @@ public class Payment extends TPCCProcedure {
       terminalMessage.append("\n\n Warehouse: ");
       terminalMessage.append(w_id);
       terminalMessage.append("\n   Street:  ");
-      terminalMessage.append(w.w_street_1);
-      terminalMessage.append("\n   Street:  ");
-      terminalMessage.append(w.w_street_2);
-      terminalMessage.append("\n   City:    ");
-      terminalMessage.append(w.w_city);
-      terminalMessage.append("   State: ");
-      terminalMessage.append(w.w_state);
-      terminalMessage.append("  Zip: ");
-      terminalMessage.append(w.w_zip);
-      terminalMessage.append("\n\n District:  ");
-      terminalMessage.append(districtID);
-      terminalMessage.append("\n   Street:  ");
-      terminalMessage.append(d.d_street_1);
-      terminalMessage.append("\n   Street:  ");
-      terminalMessage.append(d.d_street_2);
-      terminalMessage.append("\n   City:    ");
-      terminalMessage.append(d.d_city);
-      terminalMessage.append("   State: ");
-      terminalMessage.append(d.d_state);
-      terminalMessage.append("  Zip: ");
-      terminalMessage.append(d.d_zip);
       terminalMessage.append("\n\n Customer:  ");
       terminalMessage.append(c.c_id);
-      terminalMessage.append("\n   Name:    ");
-      terminalMessage.append(c.c_first);
-      terminalMessage.append(" ");
-      terminalMessage.append(c.c_middle);
-      terminalMessage.append(" ");
-      terminalMessage.append(c.c_last);
-      terminalMessage.append("\n   Street:  ");
-      terminalMessage.append(c.c_street_1);
-      terminalMessage.append("\n   Street:  ");
-      terminalMessage.append(c.c_street_2);
-      terminalMessage.append("\n   City:    ");
-      terminalMessage.append(c.c_city);
-      terminalMessage.append("   State: ");
-      terminalMessage.append(c.c_state);
-      terminalMessage.append("  Zip: ");
-      terminalMessage.append(c.c_zip);
-      terminalMessage.append("\n   Since:   ");
-      if (c.c_since != null) {
-        terminalMessage.append(c.c_since.toString());
-      } else {
-        terminalMessage.append("");
-      }
-      terminalMessage.append("\n   Credit:  ");
-      terminalMessage.append(c.c_credit);
-      terminalMessage.append("\n   %Disc:   ");
-      terminalMessage.append(c.c_discount);
-      terminalMessage.append("\n   Phone:   ");
-      terminalMessage.append(c.c_phone);
-      terminalMessage.append("\n\n Amount Paid:      ");
-      terminalMessage.append(paymentAmount);
-      terminalMessage.append("\n Credit Limit:     ");
-      terminalMessage.append(c.c_credit_lim);
-      terminalMessage.append("\n New Cust-Balance: ");
       terminalMessage.append(c.c_balance);
-      if (c.c_credit.equals("BC")) {
-        if (c.c_data.length() > 50) {
-          terminalMessage.append("\n\n Cust-Data: ").append(c.c_data.substring(0, 50));
-          int data_chunks = c.c_data.length() > 200 ? 4 : c.c_data.length() / 50;
-          for (int n = 1; n < data_chunks; n++) {
-            terminalMessage
-                .append("\n            ")
-                .append(c.c_data.substring(n * 50, (n + 1) * 50));
-          }
-        } else {
-          terminalMessage.append("\n\n Cust-Data: ").append(c.c_data);
-        }
-      }
+      terminalMessage.append(c.c_info);
       terminalMessage.append(
           "\n+-----------------------------------------------------------------+\n\n");
 
       LOG.trace(terminalMessage.toString());
     }
+     */
   }
 
   private int getCustomerWarehouseID(Random gen, int w_id, int numWarehouses, int x) {
@@ -321,27 +253,27 @@ public class Payment extends TPCCProcedure {
     }
   }
 
-  private Warehouse getWarehouse(Connection conn, int w_id) throws SQLException {
-    try (PreparedStatement payGetWhse = this.getPreparedStatement(conn, payGetWhseSQL)) {
-      payGetWhse.setInt(1, w_id);
-
-      try (ResultSet rs = payGetWhse.executeQuery()) {
-        if (!rs.next()) {
-          throw new RuntimeException("W_ID=" + w_id + " not found!");
-        }
-
-        Warehouse w = new Warehouse();
-        w.w_street_1 = rs.getString("W_STREET_1");
-        w.w_street_2 = rs.getString("W_STREET_2");
-        w.w_city = rs.getString("W_CITY");
-        w.w_state = rs.getString("W_STATE");
-        w.w_zip = rs.getString("W_ZIP");
-        w.w_name = rs.getString("W_NAME");
-
-        return w;
-      }
-    }
-  }
+//  private Warehouse getWarehouse(Connection conn, int w_id) throws SQLException {
+//    try (PreparedStatement payGetWhse = this.getPreparedStatement(conn, payGetWhseSQL)) {
+//      payGetWhse.setInt(1, w_id);
+//
+//      try (ResultSet rs = payGetWhse.executeQuery()) {
+//        if (!rs.next()) {
+//          throw new RuntimeException("W_ID=" + w_id + " not found!");
+//        }
+//
+//        Warehouse w = new Warehouse();
+//        w.w_street_1 = rs.getString("W_STREET_1");
+//        w.w_street_2 = rs.getString("W_STREET_2");
+//        w.w_city = rs.getString("W_CITY");
+//        w.w_state = rs.getString("W_STATE");
+//        w.w_zip = rs.getString("W_ZIP");
+//        w.w_name = rs.getString("W_NAME");
+//
+//        return w;
+//      }
+//    }
+//  }
 
   private Customer getCustomer(
       Connection conn,
@@ -353,25 +285,27 @@ public class Payment extends TPCCProcedure {
     int y = TPCCUtil.randomNumber(1, 100, gen);
 
     Customer c;
-
-    if (y <= 60) {
-      // 60% lookups by last name
-      c =
-          getCustomerByName(
-              customerWarehouseID,
-              customerDistrictID,
-              TPCCUtil.getNonUniformRandomLastNameForRun(gen),
-              conn);
-    } else {
-      // 40% lookups by customer ID
-      c =
+    c =
           getCustomerById(
               customerWarehouseID, customerDistrictID, TPCCUtil.getCustomerID(gen), conn);
-    }
+//    if (y <= 60) {
+//      // 60% lookups by last name
+//      c =
+//          getCustomerByName(
+//              customerWarehouseID,
+//              customerDistrictID,
+//              TPCCUtil.getNonUniformRandomLastNameForRun(gen),
+//              conn);
+//    } else {
+//      // 40% lookups by customer ID
+//      c =
+//          getCustomerById(
+//              customerWarehouseID, customerDistrictID, TPCCUtil.getCustomerID(gen), conn);
+//    }
 
     c.c_balance -= paymentAmount;
-    c.c_ytd_payment += paymentAmount;
-    c.c_payment_cnt += 1;
+//    c.c_ytd_payment += paymentAmount;
+//    c.c_payment_cnt += 1;
 
     return c;
   }
@@ -391,28 +325,28 @@ public class Payment extends TPCCProcedure {
     }
   }
 
-  private District getDistrict(Connection conn, int w_id, int districtID) throws SQLException {
-    try (PreparedStatement payGetDist = this.getPreparedStatement(conn, payGetDistSQL)) {
-      payGetDist.setInt(1, w_id);
-      payGetDist.setInt(2, districtID);
-
-      try (ResultSet rs = payGetDist.executeQuery()) {
-        if (!rs.next()) {
-          throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
-        }
-
-        District d = new District();
-        d.d_street_1 = rs.getString("D_STREET_1");
-        d.d_street_2 = rs.getString("D_STREET_2");
-        d.d_city = rs.getString("D_CITY");
-        d.d_state = rs.getString("D_STATE");
-        d.d_zip = rs.getString("D_ZIP");
-        d.d_name = rs.getString("D_NAME");
-
-        return d;
-      }
-    }
-  }
+//  private District getDistrict(Connection conn, int w_id, int districtID) throws SQLException {
+//    try (PreparedStatement payGetDist = this.getPreparedStatement(conn, payGetDistSQL)) {
+//      payGetDist.setInt(1, w_id);
+//      payGetDist.setInt(2, districtID);
+//
+//      try (ResultSet rs = payGetDist.executeQuery()) {
+//        if (!rs.next()) {
+//          throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
+//        }
+//
+//        District d = new District();
+//        d.d_street_1 = rs.getString("D_STREET_1");
+//        d.d_street_2 = rs.getString("D_STREET_2");
+//        d.d_city = rs.getString("D_CITY");
+//        d.d_state = rs.getString("D_STATE");
+//        d.d_zip = rs.getString("D_ZIP");
+//        d.d_name = rs.getString("D_NAME");
+//
+//        return d;
+//      }
+//    }
+//  }
 
   private String getCData(
       Connection conn,
@@ -465,52 +399,50 @@ public class Payment extends TPCCProcedure {
     }
   }
 
-  private void updateBalanceCData(
-      Connection conn, int customerDistrictID, int customerWarehouseID, Customer c)
-      throws SQLException {
-    try (PreparedStatement payUpdateCustBalCdata =
-        this.getPreparedStatement(conn, payUpdateCustBalCdataSQL)) {
-      payUpdateCustBalCdata.setDouble(1, c.c_balance);
-      payUpdateCustBalCdata.setDouble(2, c.c_ytd_payment);
-      payUpdateCustBalCdata.setInt(3, c.c_payment_cnt);
-      payUpdateCustBalCdata.setString(4, c.c_data);
-      payUpdateCustBalCdata.setInt(5, customerWarehouseID);
-      payUpdateCustBalCdata.setInt(6, customerDistrictID);
-      payUpdateCustBalCdata.setInt(7, c.c_id);
-
-      int result = payUpdateCustBalCdata.executeUpdate();
-
-      if (result == 0) {
-        throw new RuntimeException(
-            "Error in PYMNT Txn updating Customer C_ID="
-                + c.c_id
-                + " C_W_ID="
-                + customerWarehouseID
-                + " C_D_ID="
-                + customerDistrictID);
-      }
-    }
-  }
+//  private void updateBalanceCData(
+//      Connection conn, int customerDistrictID, int customerWarehouseID, Customer c)
+//      throws SQLException {
+//    try (PreparedStatement payUpdateCustBalCdata =
+//        this.getPreparedStatement(conn, payUpdateCustBalCdataSQL)) {
+//      payUpdateCustBalCdata.setDouble(1, c.c_balance);
+//      payUpdateCustBalCdata.setDouble(2, c.c_ytd_payment);
+//      payUpdateCustBalCdata.setInt(3, c.c_payment_cnt);
+//      payUpdateCustBalCdata.setString(4, c.c_data);
+//      payUpdateCustBalCdata.setInt(5, customerWarehouseID);
+//      payUpdateCustBalCdata.setInt(6, customerDistrictID);
+//      payUpdateCustBalCdata.setInt(7, c.c_id);
+//
+//      int result = payUpdateCustBalCdata.executeUpdate();
+//
+//      if (result == 0) {
+//        throw new RuntimeException(
+//            "Error in PYMNT Txn updating Customer C_ID="
+//                + c.c_id
+//                + " C_W_ID="
+//                + customerWarehouseID
+//                + " C_D_ID="
+//                + customerDistrictID);
+//      }
+//    }
+//  }
 
   private void updateBalance(
-      Connection conn, int customerDistrictID, int customerWarehouseID, Customer c)
+      Connection conn, int customerDistrictID, int customerWarehouseID, int customerID, double amount)
       throws SQLException {
 
     try (PreparedStatement payUpdateCustBal =
         this.getPreparedStatement(conn, payUpdateCustBalSQL)) {
-      payUpdateCustBal.setDouble(1, c.c_balance);
-      payUpdateCustBal.setDouble(2, c.c_ytd_payment);
-      payUpdateCustBal.setInt(3, c.c_payment_cnt);
-      payUpdateCustBal.setInt(4, customerWarehouseID);
-      payUpdateCustBal.setInt(5, customerDistrictID);
-      payUpdateCustBal.setInt(6, c.c_id);
+      payUpdateCustBal.setDouble(1, amount);
+      payUpdateCustBal.setInt(2, customerWarehouseID);
+      payUpdateCustBal.setInt(3, customerDistrictID);
+      payUpdateCustBal.setInt(4, customerID);
 
       int result = payUpdateCustBal.executeUpdate();
 
       if (result == 0) {
         throw new RuntimeException(
             "C_ID="
-                + c.c_id
+                + customerID
                 + " C_W_ID="
                 + customerWarehouseID
                 + " C_D_ID="
@@ -571,7 +503,6 @@ public class Payment extends TPCCProcedure {
 
         Customer c = TPCCUtil.newCustomerFromResults(rs);
         c.c_id = c_id;
-        c.c_last = rs.getString("C_LAST");
         return c;
       }
     }
@@ -579,41 +510,41 @@ public class Payment extends TPCCProcedure {
 
   // attention this code is repeated in other transacitons... ok for now to
   // allow for separate statements.
-  public Customer getCustomerByName(
-      int c_w_id, int c_d_id, String customerLastName, Connection conn) throws SQLException {
-    ArrayList<Customer> customers = new ArrayList<>();
-
-    try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
-
-      customerByName.setInt(1, c_w_id);
-      customerByName.setInt(2, c_d_id);
-      customerByName.setString(3, customerLastName);
-      try (ResultSet rs = customerByName.executeQuery()) {
-        if (LOG.isTraceEnabled()) {
-          LOG.trace("C_LAST={} C_D_ID={} C_W_ID={}", customerLastName, c_d_id, c_w_id);
-        }
-
-        while (rs.next()) {
-          Customer c = TPCCUtil.newCustomerFromResults(rs);
-          c.c_id = rs.getInt("C_ID");
-          c.c_last = customerLastName;
-          customers.add(c);
-        }
-      }
-    }
-
-    if (customers.size() == 0) {
-      throw new RuntimeException(
-          "C_LAST=" + customerLastName + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id + " not found!");
-    }
-
-    // TPC-C 2.5.2.2: Position n / 2 rounded up to the next integer, but
-    // that
-    // counts starting from 1.
-    int index = customers.size() / 2;
-    if (customers.size() % 2 == 0) {
-      index -= 1;
-    }
-    return customers.get(index);
-  }
+//  public Customer getCustomerByName(
+//      int c_w_id, int c_d_id, String customerLastName, Connection conn) throws SQLException {
+//    ArrayList<Customer> customers = new ArrayList<>();
+//
+//    try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
+//
+//      customerByName.setInt(1, c_w_id);
+//      customerByName.setInt(2, c_d_id);
+//      customerByName.setString(3, customerLastName);
+//      try (ResultSet rs = customerByName.executeQuery()) {
+//        if (LOG.isTraceEnabled()) {
+//          LOG.trace("C_LAST={} C_D_ID={} C_W_ID={}", customerLastName, c_d_id, c_w_id);
+//        }
+//
+//        while (rs.next()) {
+//          Customer c = TPCCUtil.newCustomerFromResults(rs);
+//          c.c_id = rs.getInt("C_ID");
+//          c.c_last = customerLastName;
+//          customers.add(c);
+//        }
+//      }
+//    }
+//
+//    if (customers.size() == 0) {
+//      throw new RuntimeException(
+//          "C_LAST=" + customerLastName + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id + " not found!");
+//    }
+//
+//    // TPC-C 2.5.2.2: Position n / 2 rounded up to the next integer, but
+//    // that
+//    // counts starting from 1.
+//    int index = customers.size() / 2;
+//    if (customers.size() % 2 == 0) {
+//      index -= 1;
+//    }
+//    return customers.get(index);
+//  }
 }

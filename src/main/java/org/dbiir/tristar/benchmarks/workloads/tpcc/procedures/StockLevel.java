@@ -44,20 +44,15 @@ public class StockLevel extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_DISTRICT));
 
-  public SQLStmt stockGetCountStockSQL =
+  public SQLStmt stockGetStockSQL =
       new SQLStmt(
           """
-        SELECT COUNT(DISTINCT (S_I_ID)) AS STOCK_COUNT
-         FROM  %s, %s
-         WHERE OL_W_ID = ?
-         AND OL_D_ID = ?
-         AND OL_O_ID < ?
-         AND OL_O_ID >= ?
-         AND S_W_ID = ?
-         AND S_I_ID = OL_I_ID
-         AND S_QUANTITY < ?
+        SELECT S_QUANTITY
+         FROM  %s
+         WHERE s_w_id = ?
+         AND s_i_id = ?
     """
-              .formatted(TPCCConstants.TABLENAME_ORDERLINE, TPCCConstants.TABLENAME_STOCK));
+              .formatted(TPCCConstants.TABLENAME_STOCK));
 
   public void run(
       Connection conn,
@@ -69,24 +64,20 @@ public class StockLevel extends TPCCProcedure {
       TPCCWorker w)
       throws SQLException {
 
-    int threshold = TPCCUtil.randomNumber(10, 20, gen);
-    int d_id = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
+    int i_id = TPCCUtil.getItemID(gen);
 
-    int o_id = getOrderId(conn, w_id, d_id);
 
-    int stock_count = getStockCount(conn, w_id, threshold, d_id, o_id);
+    int stock_quantity = getStock(conn, w_id, i_id);
 
     if (LOG.isTraceEnabled()) {
       String terminalMessage =
           "\n+-------------------------- STOCK-LEVEL --------------------------+"
               + "\n Warehouse: "
               + w_id
-              + "\n District:  "
-              + d_id
-              + "\n\n Stock Level Threshold: "
-              + threshold
-              + "\n Low Stock Count:       "
-              + stock_count
+              + "\n Item:  "
+              + i_id
+              + "\n Stock Quantity:       "
+              + stock_quantity
               + "\n+-----------------------------------------------------------------+\n\n";
       LOG.trace(terminalMessage);
     }
@@ -108,28 +99,24 @@ public class StockLevel extends TPCCProcedure {
     }
   }
 
-  private int getStockCount(Connection conn, int w_id, int threshold, int d_id, int o_id)
+  private int getStock(Connection conn, int w_id, int i_id)
       throws SQLException {
     try (PreparedStatement stockGetCountStock =
-        this.getPreparedStatement(conn, stockGetCountStockSQL)) {
+        this.getPreparedStatement(conn, stockGetStockSQL)) {
       stockGetCountStock.setInt(1, w_id);
-      stockGetCountStock.setInt(2, d_id);
-      stockGetCountStock.setInt(3, o_id);
-      stockGetCountStock.setInt(4, o_id - 20);
-      stockGetCountStock.setInt(5, w_id);
-      stockGetCountStock.setInt(6, threshold);
+      stockGetCountStock.setInt(2, i_id);
 
       try (ResultSet rs = stockGetCountStock.executeQuery()) {
         if (!rs.next()) {
           String msg =
               String.format(
-                  "Failed to get StockLevel result for COUNT query [W_ID=%d, D_ID=%d, O_ID=%d]",
-                  w_id, d_id, o_id);
+                  "Failed to get StockLevel result for query [W_ID=%d, I_ID=%d]",
+                  w_id, i_id);
 
           throw new RuntimeException(msg);
         }
 
-        return rs.getInt("STOCK_COUNT");
+        return rs.getInt("S_QUANTITY");
       }
     }
   }

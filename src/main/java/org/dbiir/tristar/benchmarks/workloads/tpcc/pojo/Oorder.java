@@ -25,10 +25,11 @@ public class Oorder {
   public int o_w_id;
   public int o_d_id;
   public int o_c_id;
-  public Integer o_carrier_id;
-  public int o_ol_cnt;
-  public int o_all_local;
-  public Timestamp o_entry_d;
+  public String o_info;
+//  public Integer o_carrier_id;
+//  public int o_ol_cnt;
+//  public int o_all_local;
+//  public Timestamp o_entry_d;
 
   @Override
   public String toString() {
@@ -41,14 +42,16 @@ public class Oorder {
         + o_d_id
         + "\n*       o_c_id = "
         + o_c_id
-        + "\n* o_carrier_id = "
-        + o_carrier_id
-        + "\n*     o_ol_cnt = "
-        + o_ol_cnt
-        + "\n*  o_all_local = "
-        + o_all_local
-        + "\n*    o_entry_d = "
-        + o_entry_d
+//        + "\n* o_carrier_id = "
+//        + o_carrier_id
+//        + "\n*     o_ol_cnt = "
+//        + o_ol_cnt
+//        + "\n*  o_all_local = "
+//        + o_all_local
+//        + "\n*    o_entry_d = "
+//        + o_entry_d
+        + "\n*      o_info = "
+        + o_info
         + "\n**********************************************");
   }
 }
