@@ -182,9 +182,9 @@ public class NewOrder extends TPCCProcedure {
     }
 
     // we need to cause 1% of the new orders to be rolled back.
-    if (TPCCUtil.randomNumber(1, 100, gen) == 1) {
-      itemIDs[numItems - 1] = TPCCConfig.INVALID_ITEM_ID;
-    }
+//    if (TPCCUtil.randomNumber(1, 100, gen) == 1) {
+//      itemIDs[numItems - 1] = TPCCConfig.INVALID_ITEM_ID;
+//    }
 
     for (int i = 0; i < numItems2; i++) {
       itemIDs2[i] = TPCCUtil.getItemID(gen);
@@ -201,9 +201,9 @@ public class NewOrder extends TPCCProcedure {
     }
 
     // we need to cause 1% of the new orders to be rolled back.
-    if (TPCCUtil.randomNumber(1, 100, gen) == 1) {
-      itemIDs2[numItems2 - 1] = TPCCConfig.INVALID_ITEM_ID;
-    }
+//    if (TPCCUtil.randomNumber(1, 100, gen) == 1) {
+//      itemIDs2[numItems2 - 1] = TPCCConfig.INVALID_ITEM_ID;
+//    }
 
     newOrderTransaction(
         terminalWarehouseID,
