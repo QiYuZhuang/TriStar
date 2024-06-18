@@ -1,21 +1,19 @@
 package org.dbiir.tristar.transaction.concurrency;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import lombok.Getter;
 
 public class FlowRate {
     private static final FlowRate INSTANCE;
     private static final int SMALL_BANK_HASH_SIZE = 4000000;
     private static final int YCSB_HASH_SIZE = 1000000;
+    private static final boolean use = true;
     private int HASH_SIZE;
     private static final int THRESHOLDS = 128;
-    private static final double P = 0.1;
+    private static final double P = 0.3;
     private HashMap<String, RecordMeta[]> recordMetas = new HashMap<>(4);
     private HashMap<String, ReentrantLock[]> ccBucketLocks = new HashMap<>(4);
     private final long lockWaitTimeout = 10;
@@ -54,19 +52,50 @@ public class FlowRate {
             System.out.println("readOperationAdmission: key is out of range. #" + key);
             return false;
         }
+        if (!use)
+            return true;
         RecordMeta meta = recordMetas.get(table)[(int) key];
-        meta.incReadInProcessing();
+        // meta.incReadInProcessing();
+        if (meta.writeInProcessing * (1 - meta.getWriteHistoryFailed()) > 1.75) {
+            return false;
+        }
         return true;
     }
 
     public boolean writeOperationAdmission(String table, long key) {
         if (key >= recordMetas.get(table).length) {
-            System.out.println("writeOperationAdmission: key is out of range. #" + key);
+            System.out.println(Thread.currentThread().getName() + " writeOperationAdmission: key is out of range. #" + key);
             return false;
         }
+        if (!use)
+            return true;
         RecordMeta meta = recordMetas.get(table)[(int) key];
-//        double fp = meta.writeFailureProbability();
+        // double fp = meta.writeFailureProbability();
         int writeInProcessing = meta.getWriteInProcessing();
+        // System.out.println("key #" + key + " threshold: " + meta.getThreshold() + " in processing: " + writeInProcessing);
+        if (writeInProcessing + 1 <= meta.getThreshold()) {
+            meta.incWriteInProcessing();
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public boolean writeOperationAdmission(String table, long key, boolean SI) {
+        if (key >= recordMetas.get(table).length) {
+            System.out.println(Thread.currentThread().getName() + " writeOperationAdmission: key is out of range. #" + key);
+            return false;
+        }
+        if (!use)
+            return true;
+        RecordMeta meta = recordMetas.get(table)[(int) key];
+        double fp = meta.writeFailureProbability();
+        int writeInProcessing = meta.getWriteInProcessing();
+        if (SI) {
+            if ((int) writeInProcessing * (1 - fp) > 1) {
+                return false;
+            }
+        }
         if (writeInProcessing + 1 <= meta.getThreshold()) {
             meta.incWriteInProcessing();
             return true;
@@ -79,6 +108,8 @@ public class FlowRate {
         if (key >= recordMetas.get(table).length) {
             System.out.println("readOperationFinish: key is out of range. #" + key);
         }
+        if (!use)
+            return;
         RecordMeta meta = recordMetas.get(table)[(int) key];
         meta.decReadInProcessing();
         meta.incReadHistory(success);
@@ -88,9 +119,21 @@ public class FlowRate {
         if (key >= recordMetas.get(table).length) {
             System.out.println("writeOperationFinish: key is out of range. #" + key);
         }
+        if (!use)
+            return;
         RecordMeta meta = recordMetas.get(table)[(int) key];
         meta.decWriteInProcessing();
         meta.incWriteHistory(success);
+    }
+
+    public void writeOperationFinish(String table, long key) {
+        if (key >= recordMetas.get(table).length) {
+            System.out.println("writeOperationFinish: key is out of range. #" + key);
+        }
+        if (!use)
+            return;
+        RecordMeta meta = recordMetas.get(table)[(int) key];
+        meta.decWriteInProcessing();
     }
 
     @Getter
@@ -102,50 +145,62 @@ public class FlowRate {
         private int readHistoryFailed;
         private int writeHistoryFailed;
         private int threshold;
-//        private Lock latch;
+        private Lock latch;
 
         public RecordMeta() {
             readInProcessing = 0;
             writeInProcessing = 0;
-            readHistoryTotal = 1;
-            writeHistoryTotal = 1;
+            readHistoryTotal = 3;
+            writeHistoryTotal = 3;
             readHistoryFailed = 0;
             writeHistoryFailed = 0;
             threshold = 16;
-//            latch = new ReentrantLock(true);
+           latch = new ReentrantLock(true);
         }
 
-        synchronized public void incWriteInProcessing() {
+        public void incWriteInProcessing() {
+            latch.lock();
             this.writeInProcessing++;
+            latch.unlock();
         }
 
-        synchronized public void decWriteInProcessing() {
+        public void decWriteInProcessing() {
+            latch.lock();
             this.writeInProcessing--;
+            latch.unlock();
         }
 
         synchronized public void incWriteHistory(boolean success) {
             this.writeHistoryTotal++;
             if (!success)
                 this.writeHistoryFailed++;
+
+            if (writeHistoryTotal > 8 && (writeHistoryFailed * 1.0 / writeHistoryTotal) > P) {
+                if (threshold >= 2) {
+                    threshold >>= 1;
+                    this.writeHistoryTotal = 3;
+                    this.writeHistoryFailed = 0;
+                }
+            } else {
+                threshold++;
+            }
+
             if (this.writeHistoryTotal >= THRESHOLDS) {
                 this.writeHistoryTotal >>= 1;
                 this.writeHistoryFailed >>= 1;
             }
-
-            if ((writeHistoryFailed * 1.0 / writeHistoryTotal) > P) {
-                if (threshold >= 2)
-                    threshold >>= 1;
-            } else {
-                threshold++;
-            }
         }
 
-        synchronized public void incReadInProcessing() {
+        public void incReadInProcessing() {
+            latch.lock();
             this.readInProcessing++;
+            latch.unlock();
         }
 
-        synchronized public void decReadInProcessing() {
+        public void decReadInProcessing() {
+            latch.lock();
             this.readInProcessing--;
+            latch.unlock();
         }
 
         synchronized public void incReadHistory(boolean success) {

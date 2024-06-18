@@ -108,8 +108,8 @@ def sb_scalability():
     dir_name = "../config/smallbank/scalability/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    # terminals = [4, 8, 16, 32, 64, 128, 256, 512]
-    terminals = [128]
+    terminals = [4, 8, 16, 32, 64, 128, 256, 512]
+    # terminals = [128]
     # , "RC_TAILOR_LOCK", "DYNAMIC"
     cc = ["SERIALIZABLE", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
@@ -125,7 +125,7 @@ def sb_hotspot(terminal=128):
     dir_name = "../config/smallbank/hotspot-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    cc = ["RC_TAILOR", "SI_TAILOR"]
     # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
 
     hsn_list = [10, 100, 1000]
@@ -141,7 +141,9 @@ def sb_zip_fain(terminal=128):
     dir_name = "../config/smallbank/skew-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    cc = ["RC_TAILOR"]
+    # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    # skew_list = [0.7, 1.1]
     skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [20, 20, 20, 0, 20, 20]
 
@@ -170,7 +172,7 @@ def sb_wc_ratio(terminal=128):
     dir_name = "../config/smallbank/wc_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_FOR_UPDATE", "SI_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     skew_list = [0.3, 0.7, 1.1]
     # weights = [[20, 20, 20, 0, 20, 20], [15, 15, 15, 0, 15, 40], [10, 10, 10, 0, 10, 60], [5, 5, 5, 0, 5, 80],

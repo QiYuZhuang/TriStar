@@ -96,7 +96,7 @@ def run_once(f: str):
         print("Run config - { " + case_name + " }")
         java_cmd = (prefix_cmd + "-b " + args.wl + " -c " + config_path + case_name + ".xml" +
                     " --execute=true -d " + result_dir + case_name + " > " + output_file)
-        run_shell_command(java_cmd, 300)
+        run_shell_command(java_cmd, 240)
         print("Finish config - { " + case_name + " }")
         # time.sleep(5)
         refresh_output_channel()

@@ -17,23 +17,27 @@
 
 package org.dbiir.tristar.benchmarks.workloads.smallbank;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Random;
+
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
 import org.dbiir.tristar.benchmarks.api.TransactionType;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
-import org.dbiir.tristar.benchmarks.util.RandomDistribution.Zipf;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.procedures.*;
 import org.dbiir.tristar.benchmarks.types.TransactionStatus;
 import org.dbiir.tristar.benchmarks.util.RandomDistribution.DiscreteRNG;
 import org.dbiir.tristar.benchmarks.util.RandomDistribution.Flat;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.procedures.Amalgamate;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.procedures.Balance;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.procedures.DepositChecking;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.procedures.SendPayment;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.procedures.TransactSavings;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.procedures.WriteCheck;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Random;
 
 /**
  * SmallBank Benchmark Work Driver Fuck yo couch.
@@ -62,6 +66,7 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
   private double zipFainTheta = -1.0;
   private final ZipfianGenerator custidInZipf;
   private final long[] versionBuffer = new long[5];
+  private final int[] checkout = new int[2];
   private long tid;
 
   public SmallBankWorker(SmallBankBenchmark benchmarkModule, int id) {
@@ -77,7 +82,8 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
     this.procTransactSavings = this.getProcedure(TransactSavings.class);
     this.procWriteCheck = this.getProcedure(WriteCheck.class);
 
-    this.numAccounts = benchmarkModule.numAccounts;
+    this.numAccounts = benchmarkModule.numAccounts - 1;
+    // System.out.println("number of accounts: " + benchmarkModule.numAccounts);
     this.custNameLength =
         SmallBankBenchmark.getCustomerNameLength(
             benchmarkModule.getCatalog().getTable(SmallBankConstants.TABLENAME_ACCOUNTS));
@@ -128,15 +134,14 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
 
   private void genSavingsCustId() {
     if (hotspotUseFixedSize) {
-      // custIdsBuffer[0] = rng.nextLong();
-      // custIdsBuffer[1] = (custIdsBuffer[1] % hotspotFixedSize) + hotspotFixedSize;
-      custIdsBuffer[0] = (custIdsBuffer[0] % hotspotFixedSize) + hotspotFixedSize;
+      // if (custIdsBuffer[0] < hotspotFixedSize)
+      //   custIdsBuffer[0] = (custIdsBuffer[0] % hotspotFixedSize) + hotspotFixedSize;
     } else if (zipFainTheta > 0) {
       // custIdsBuffer[0] = rng.nextLong();
       // custIdsBuffer[1] = custIdsBuffer[1] << 1;
-      custIdsBuffer[0] = custIdsBuffer[0] << 1;
+      // custIdsBuffer[0] = custIdsBuffer[0] >> 1;
     } else {
-      custIdsBuffer[0] = custIdsBuffer[0] % 50;
+      // custIdsBuffer[0] = custIdsBuffer[0] % 50;
     }
   }
 
@@ -145,12 +150,14 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
       throws UserAbortException, SQLException {
     Class<? extends Procedure> procClass = txnType.getProcedureClass();
     this.tid = (System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff);
+    checkout[0] = 0;
+    // System.out.println(Thread.currentThread().getName() + " Transaction start #" + tid + " " + txnType);
     for (int i = 0; i < 5; i++)
-      versionBuffer[i] = 0;
+      versionBuffer[i] = -1;
     // Amalgamate
     if (procClass.equals(Amalgamate.class)) {
       this.generateCustIds(true);
-      this.procAmalgamate.run(conn, this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), versionBuffer, tid);
+      this.procAmalgamate.run(conn, this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), versionBuffer, tid, checkout);
 
       // Balance
     } else if (procClass.equals(Balance.class)) {
@@ -163,7 +170,7 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
       this.generateCustIds(false);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
       this.procDepositChecking.run(
-          conn, custName, SmallBankConstants.PARAM_DEPOSIT_CHECKING_AMOUNT, getBenchmark().getCCType(), versionBuffer, tid);
+          conn, custName, SmallBankConstants.PARAM_DEPOSIT_CHECKING_AMOUNT, getBenchmark().getCCType(), versionBuffer, tid, checkout);
 
       // SendPayment
     } else if (procClass.equals(SendPayment.class)) {
@@ -181,14 +188,14 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
       this.genSavingsCustId();
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
       this.procTransactSavings.run(
-          conn, custName, SmallBankConstants.PARAM_TRANSACT_SAVINGS_AMOUNT, getBenchmark().getCCType(), versionBuffer, tid);
+          conn, custName, SmallBankConstants.PARAM_TRANSACT_SAVINGS_AMOUNT, getBenchmark().getCCType(), versionBuffer, tid, checkout);
 
       // WriteCheck
     } else if (procClass.equals(WriteCheck.class)) {
-      this.generateCustIds(true);
+      this.generateCustIds(false);
       this.genSavingsCustId();
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
-      this.procWriteCheck.run(conn, custName, custIdsBuffer[0], SmallBankConstants.PARAM_WRITE_CHECK_AMOUNT, getBenchmark().getCCType(), conn2, versionBuffer, tid);
+      this.procWriteCheck.run(conn, custName, custIdsBuffer[0], SmallBankConstants.PARAM_WRITE_CHECK_AMOUNT, getBenchmark().getCCType(), conn2, versionBuffer, tid, checkout);
     }
 
     return TransactionStatus.SUCCESS;
@@ -198,10 +205,10 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
   protected void executeAfterWork(TransactionType txnType, boolean success)
           throws UserAbortException, SQLException {
     Class<? extends Procedure> procClass = txnType.getProcedureClass();
-
+    // System.out.println("Transaction end #" + tid);
     // Amalgamate
     if (procClass.equals(Amalgamate.class)) {
-      this.procAmalgamate.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), success, versionBuffer, tid);
+      this.procAmalgamate.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), success, versionBuffer, tid, checkout);
 
       // Balance
     } else if (procClass.equals(Balance.class)) {
@@ -209,17 +216,17 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
 
       // DepositChecking
     } else if (procClass.equals(DepositChecking.class)) {
-      this.procDepositChecking.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid);
+      this.procDepositChecking.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout);
 
       // SendPayment
     } else if (procClass.equals(SendPayment.class)) {
       // TransactSavings
     } else if (procClass.equals(TransactSavings.class)) {
-      this.procTransactSavings.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid);
+      this.procTransactSavings.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout);
 
       // WriteCheck
     } else if (procClass.equals(WriteCheck.class)) {
-      this.procWriteCheck.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid);
+      this.procWriteCheck.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout);
     }
   }
 }

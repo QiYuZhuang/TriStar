@@ -215,6 +215,7 @@ public class LockTable {
      */
     private boolean checkAndTryValidationLock(String table, long tid, long key, LockType type, CCType ccType) throws SQLException {
         int bucketNum = (int)(key % HASH_SIZE);
+        long currentTime = System.currentTimeMillis();
         validationBucketLocks.get(table)[bucketNum].readLock().lock();
         List<ValidationLock> lockList = validationLocks.get(table)[bucketNum];
         for (ValidationLock lock: lockList) {
@@ -223,7 +224,8 @@ public class LockTable {
                 int count = 0;
                 while((res = lock.tryLock(tid, type, ccType)) == 0)  {
                     try {
-                        Thread.sleep(0, 10000);
+                        Thread.sleep(0, 10);
+                        // System.out.println("wait for lock " + tid + " " + table + ", lock type is " + type);
                     } catch (InterruptedException ex) {
                         System.out.println("out of the max retry count, lock type is " + type);
                         res = -1;
@@ -236,13 +238,14 @@ public class LockTable {
                     return true;
                 } else {
                     // can not keep the sequence of read and write
-                    String msg = "can not keep the sequence of rw dependency, there maybe rw-anti-dependency";
+                    String msg = "Transaction #" + tid + " can not keep the sequence of rw dependency, there maybe rw-anti-dependency";
                     validationBucketLocks.get(table)[bucketNum].readLock().unlock();
                     throw new SQLException(msg, "500");
                 }
             }
         }
         validationBucketLocks.get(table)[bucketNum].readLock().unlock();
+        System.out.println("Validation Lock { " + table + ", " + key + ", " + type + ", " + (System.currentTimeMillis() - currentTime) + "ms}");
         return false;
     }
 
@@ -257,6 +260,7 @@ public class LockTable {
                 while((res = lock.tryLock(tid, type, ccType)) == 0)  {
                     try {
                         Thread.sleep(0, 10000);
+                        System.out.println("xxxxxxxxxxxxxxxxxxxxx");
                     } catch (InterruptedException ex) {
                         System.out.println("out of the max retry count, lock type is " + type);
                         res = -1;
