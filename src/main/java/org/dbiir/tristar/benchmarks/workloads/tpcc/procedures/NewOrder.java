@@ -265,7 +265,7 @@ public class NewOrder extends TPCCProcedure {
 //        stmtUpdateStock.setInt(2, ol_quantity);
 //        stmtUpdateStock.setInt(3, s_remote_cnt_increment);
         stmtUpdateStock.setInt(2, ol_i_id);
-        stmtUpdateStock.setInt(3, ol_supply_w_id);
+        stmtUpdateStock.setInt(3, w_id);
         stmtUpdateStock.addBatch();
         //String ol_dist_info = getDistInfo(d_id, s);
 
@@ -319,7 +319,7 @@ public class NewOrder extends TPCCProcedure {
 //        stmtUpdateStock.setInt(2, ol_quantity);
 //        stmtUpdateStock.setInt(3, s_remote_cnt_increment);
         stmtUpdateStock2.setInt(2, ol_i_id);
-        stmtUpdateStock2.setInt(3, ol_supply_w_id);
+        stmtUpdateStock2.setInt(3, w_id);
         stmtUpdateStock2.addBatch();
 
         stmtInsertOrderLine2.setInt(3, d_next_o_id);
@@ -327,7 +327,7 @@ public class NewOrder extends TPCCProcedure {
         stmtInsertOrderLine2.setInt(1, w_id);
         stmtInsertOrderLine2.setInt(4, ol_number + o_ol_cnt);
         stmtInsertOrderLine2.setInt(5, ol_i_id);
-        stmtInsertOrderLine2.setInt(6, ol_supply_w_id);
+        stmtInsertOrderLine2.setString(6, "Created");
         stmtInsertOrderLine2.setInt(7, ol_quantity);
         // stmtInsertOrderLine.setDouble(8, ol_amount);
         //stmtInsertOrderLine.setString(9, ol_dist_info);
