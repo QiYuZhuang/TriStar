@@ -22,6 +22,7 @@ import org.dbiir.tristar.benchmarks.api.TransactionType;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.procedures.TPCCProcedure;
 import org.dbiir.tristar.benchmarks.types.TransactionStatus;
+import org.dbiir.tristar.common.CCType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,6 +73,7 @@ public final class TPCCWorker extends Worker<TPCCBenchmark> {
           numWarehouses,
           terminalDistrictLowerID,
           terminalDistrictUpperID,
+          getBenchmark().getCCType(),
           this);
     } catch (ClassCastException ex) {
       // fail gracefully

@@ -19,6 +19,7 @@ package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
+import org.dbiir.tristar.common.CCType;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -33,6 +34,7 @@ public abstract class TPCCProcedure extends Procedure {
       int numWarehouses,
       int terminalDistrictLowerID,
       int terminalDistrictUpperID,
+      CCType ccType,
       TPCCWorker w)
       throws SQLException;
 }

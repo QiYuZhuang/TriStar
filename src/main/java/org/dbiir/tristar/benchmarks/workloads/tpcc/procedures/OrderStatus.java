@@ -23,6 +23,7 @@ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Customer;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Oorder;
+import org.dbiir.tristar.common.CCType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,7 +47,6 @@ public class OrderStatus extends TPCCProcedure {
          WHERE O_W_ID = ?
            AND O_D_ID = ?
            AND o_id = ?
-         ORDER BY O_ID DESC LIMIT 1
     """
               .formatted(TPCCConstants.TABLENAME_OPENORDER));
 
@@ -72,19 +72,50 @@ public class OrderStatus extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
-  public SQLStmt customerByNameSQL =
-      new SQLStmt(
-          """
-        SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
-               C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
-               C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
-          FROM  %s
-         WHERE C_W_ID = ?
-           AND C_D_ID = ?
-           AND C_LAST = ?
-         ORDER BY C_FIRST
-    """
-              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+  public SQLStmt ordStatGetCustSQL =
+          new SQLStmt(
+                  """
+                SELECT  c_info, c_balance
+                  FROM %s
+                 WHERE C_W_ID = ?
+                   AND C_D_ID = ?
+                   AND C_ID = ?
+            """
+                          .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
+  public SQLStmt ordStatGetNewestOrdSQL =
+          new SQLStmt(
+                  """
+                SELECT o_status
+                  FROM %s
+                  WHERE O_W_ID = ?
+                   AND O_D_ID = ?
+                   AND O_ID = ?
+            """
+                          .formatted(TPCCConstants.TABLENAME_OPENORDER));
+
+  public SQLStmt ordStatGetOrderLinesSQL =
+          new SQLStmt(
+                  """
+                SELECT ol_delivery_info, ol_quantity
+                   FROM %s
+                   WHERE OL_O_ID = ?
+                     AND OL_D_ID = ?
+                     AND OL_W_ID = ?
+            """
+                          .formatted(TPCCConstants.TABLENAME_ORDERLINE));
+
+  public final SQLStmt stmtUpdateConflictCSQL =
+          new SQLStmt(
+                  """
+                SELECT *
+                 FROM %s
+                 WHERE C_W_ID = ?
+                   AND C_D_ID = ?
+                   AND C_ID = ?
+                 FOR UPDATE
+            """
+                          .formatted(TPCCConstants.TABLENAME_CONFLICT_CUSTOMER));
 
   public void run(
       Connection conn,
@@ -93,83 +124,34 @@ public class OrderStatus extends TPCCProcedure {
       int numWarehouses,
       int terminalDistrictLowerID,
       int terminalDistrictUpperID,
+      CCType ccType,
       TPCCWorker w)
       throws SQLException {
 
     int d_id1 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
     int d_id2 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
-//    int y = TPCCUtil.randomNumber(1, 100, gen);
-
-//    boolean c_by_name;
-//    String c_last = null;
     int c_id = -1;
-
-//    if (y <= 60) {
-//      c_by_name = true;
-//      c_last = TPCCUtil.getNonUniformRandomLastNameForRun(gen);
-//    } else {
-//      c_by_name = false;
-//      c_id = TPCCUtil.getCustomerID(gen);
-//    }
     c_id = TPCCUtil.getCustomerID(gen);
     int o_id1 = TPCCUtil.randomNumber(1, 3000, gen);
     int o_id2 = TPCCUtil.randomNumber(1, 3000, gen);
 
+    if (ccType == CCType.RC_FOR_UPDATE) {
+      updateCustomerById(w_id, d_id1, c_id, conn);
 
-//    if (c_by_name) {
-//      c = getCustomerByName(w_id, d_id, c_last, conn);
-//    } else {
-//      c = getCustomerById(w_id, d_id, c_id, conn);
-//    }
-    updateCustomerById(w_id, d_id1, c_id, conn);
+      updateOrderDetails(conn, w_id, d_id1, o_id1);
 
-    updateOrderDetails(conn, w_id, d_id1, o_id1);
-
-    // retrieve the order lines for the most recent order
-    updateOrderLines(conn, w_id, d_id1, o_id1);
-    updateOrderLines(conn, w_id, d_id2, o_id2);
-    /*
-    if (LOG.isTraceEnabled()) {
-      StringBuilder sb = new StringBuilder();
-      sb.append("\n");
-      sb.append("+-------------------------- ORDER-STATUS -------------------------+\n");
-      sb.append(" Date: ");
-      sb.append(TPCCUtil.getCurrentTime());
-      sb.append("\n\n Warehouse: ");
-      sb.append(w_id);
-      sb.append("\n District:  ");
-      sb.append(d_id);
-      sb.append("\n\n Customer:  ");
-      sb.append(c.c_id);
-      sb.append("\n   Balance: ");
-      sb.append(c.c_balance);
-      sb.append("\n\n");
-      if (o.o_id == -1) {
-        sb.append(" Customer has no orders placed.\n");
-      } else {
-        sb.append(" Order-Number: ");
-        sb.append(o.o_id);
-//        sb.append("\n    Entry-Date: ");
-//        sb.append(o.o_entry_d);
-//        sb.append("\n    Carrier-Number: ");
-//        sb.append(o.o_carrier_id);
-        sb.append("\n\n");
-        if (orderLines.size() != 0) {
-          sb.append(" [Supply_W - Item_ID - Qty - Delivery-Info]\n");
-          for (String orderLine : orderLines) {
-            sb.append(" ");
-            sb.append(orderLine);
-            sb.append("\n");
-          }
-        } else {
-          LOG.trace(" This Order has no Order-Lines.\n");
-        }
-      }
-      sb.append("+-----------------------------------------------------------------+\n\n");
-      LOG.trace(sb.toString());
+      updateOrderLines(conn, w_id, d_id1, o_id1);
+      updateOrderLines(conn, w_id, d_id2, o_id2);
     }
 
-     */
+    if (ccType == CCType.RC_ELT) {
+      setConflictC(conn, w_id, d_id1, c_id);
+    }
+
+    getCustomerById(w_id, d_id1, c_id, conn);
+    getOrderStatus(w_id, d_id1, o_id1, conn);;
+    getOrderLines(w_id, d_id1, o_id1, conn);
+    getOrderLines( w_id, d_id2, o_id2, conn);
   }
 
   private void updateOrderDetails(Connection conn, int w_id, int d_id, int o_id)
@@ -241,42 +223,80 @@ public class OrderStatus extends TPCCProcedure {
     }
   }
 
-  // attention this code is repeated in other transacitons... ok for now to
-  // allow for separate statements.
-  public Customer getCustomerByName(int c_w_id, int c_d_id, String c_last, Connection conn)
-      throws SQLException {
-    ArrayList<Customer> customers = new ArrayList<>();
+  public void getCustomerById(int c_w_id, int c_d_id, int c_id, Connection conn)
+          throws SQLException {
 
-    try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
+    try (PreparedStatement stmtGetCust = this.getPreparedStatement(conn, ordStatGetCustSQL)) {
 
-      customerByName.setInt(1, c_w_id);
-      customerByName.setInt(2, c_d_id);
-      customerByName.setString(3, c_last);
+      stmtGetCust.setInt(1, c_w_id);
+      stmtGetCust.setInt(2, c_d_id);
+      stmtGetCust.setInt(3, c_id);
 
-      try (ResultSet rs = customerByName.executeQuery()) {
-        while (rs.next()) {
-          Customer c = TPCCUtil.newCustomerFromResults(rs);
-          c.c_id = rs.getInt("C_ID");
-          // c.c_last = c_last;
-          customers.add(c);
+      try (ResultSet rs = stmtGetCust.executeQuery()) {
+        if (!rs.next()) {
+          String msg =
+                  String.format(
+                          "Failed to get CUSTOMER [C_W_ID=%d, C_D_ID=%d, C_ID=%d]", c_w_id, c_d_id, c_id);
+
+          throw new RuntimeException(msg);
         }
       }
     }
-
-    if (customers.size() == 0) {
-      String msg =
-          String.format(
-              "Failed to get CUSTOMER [C_W_ID=%d, C_D_ID=%d, C_LAST=%s]", c_w_id, c_d_id, c_last);
-
-      throw new RuntimeException(msg);
-    }
-
-    // TPC-C 2.5.2.2: Position n / 2 rounded up to the next integer, but
-    // that counts starting from 1.
-    int index = customers.size() / 2;
-    if (customers.size() % 2 == 0) {
-      index -= 1;
-    }
-    return customers.get(index);
   }
+
+  public void getOrderStatus(int o_w_id, int o_d_id, int o_id, Connection conn)
+          throws SQLException {
+
+    try (PreparedStatement stmtGetCust = this.getPreparedStatement(conn, ordStatGetNewestOrdSQL)) {
+
+      stmtGetCust.setInt(1, o_w_id);
+      stmtGetCust.setInt(2, o_d_id);
+      stmtGetCust.setInt(3, o_id);
+
+      try (ResultSet rs = stmtGetCust.executeQuery()) {
+        if (!rs.next()) {
+          String msg =
+                  String.format(
+                          "Failed to get ORDERS [O_W_ID=%d, O_D_ID=%d, O_ID=%d]", o_w_id, o_d_id, o_id);
+
+          throw new RuntimeException(msg);
+        }
+      }
+    }
+  }
+
+  public void getOrderLines(int ol_w_id, int ol_d_id, int ol_o_id, Connection conn)
+          throws SQLException {
+
+    try (PreparedStatement stmtGetCust = this.getPreparedStatement(conn, ordStatGetOrderLinesSQL)) {
+
+      stmtGetCust.setInt(1, ol_o_id);
+      stmtGetCust.setInt(2, ol_d_id);
+      stmtGetCust.setInt(3, ol_w_id);
+
+      try (ResultSet rs = stmtGetCust.executeQuery()) {
+        if (!rs.next()) {
+          String msg =
+                  String.format(
+                          "Failed to get ORDERS [OL_W_ID=%d, OL_D_ID=%d, OL_O_ID=%d]", ol_w_id, ol_d_id, ol_o_id);
+
+          throw new RuntimeException(msg);
+        }
+      }
+    }
+  }
+
+  private void setConflictC(Connection conn, int w_id, int d_id, int c_id) throws SQLException {
+    try (PreparedStatement stmtSetConfC = this.getPreparedStatement(conn, stmtUpdateConflictCSQL)) {
+      stmtSetConfC.setInt(1, w_id);
+      stmtSetConfC.setInt(2, d_id);
+      stmtSetConfC.setInt(3, c_id);
+      try (ResultSet rs = stmtSetConfC.executeQuery()) {
+        if (!rs.next()) {
+          throw new RuntimeException("C_D_ID=" + d_id + " C_ID=" + c_id + " not found!");
+        }
+      }
+    }
+  }
+
 }
