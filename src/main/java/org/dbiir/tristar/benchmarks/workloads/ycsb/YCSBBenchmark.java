@@ -17,17 +17,6 @@
 
 package org.dbiir.tristar.benchmarks.workloads.ycsb;
 
-import org.dbiir.tristar.benchmarks.WorkloadConfiguration;
-import org.dbiir.tristar.benchmarks.api.BenchmarkModule;
-import org.dbiir.tristar.benchmarks.api.Worker;
-import org.dbiir.tristar.benchmarks.workloads.ycsb.procedures.InsertRecord;
-import org.dbiir.tristar.benchmarks.catalog.Table;
-import org.dbiir.tristar.benchmarks.util.SQLUtil;
-import org.dbiir.tristar.transaction.concurrency.FlowRate;
-import org.dbiir.tristar.transaction.concurrency.LockTable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -35,7 +24,17 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.Flow;
+
+import org.dbiir.tristar.benchmarks.WorkloadConfiguration;
+import org.dbiir.tristar.benchmarks.api.BenchmarkModule;
+import org.dbiir.tristar.benchmarks.api.Worker;
+import org.dbiir.tristar.benchmarks.catalog.Table;
+import org.dbiir.tristar.benchmarks.util.SQLUtil;
+import org.dbiir.tristar.benchmarks.workloads.ycsb.procedures.InsertRecord;
+import org.dbiir.tristar.transaction.concurrency.FlowRate;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class YCSBBenchmark extends BenchmarkModule {
 
@@ -56,7 +55,7 @@ public final class YCSBBenchmark extends BenchmarkModule {
     List<Connection> connectionList = new LinkedList<>();
     makeConnections(connectionList);
     LockTable.getInstance().initHotspot("ycsb", connectionList);
-    FlowRate.getInstance().init("smallbank");
+    FlowRate.getInstance().init("ycsb");
 
     int fieldSize = YCSBConstants.MAX_FIELD_SIZE;
     if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("fieldSize")) {

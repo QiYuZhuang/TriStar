@@ -101,7 +101,7 @@ def tpcc_skew_warehouse(terminal=128):
     dir_name = "../config/tpcc/skew_warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR", "RC_TAILOR_LOCK"]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
