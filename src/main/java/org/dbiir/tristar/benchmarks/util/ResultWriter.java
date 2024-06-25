@@ -89,6 +89,7 @@ public class ResultWriter {
     TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
     Date now = new Date();
     summaryMap.put("Start timestamp (milliseconds)", results.getStartTimestampMs());
+    summaryMap.put("Isolation", expConf.getString("concurrencyControlType"));
     summaryMap.put("Current Timestamp (milliseconds)", now.getTime());
     summaryMap.put("Elapsed Time (nanoseconds)", results.getNanoseconds());
     summaryMap.put("DBMS Type", dbType);

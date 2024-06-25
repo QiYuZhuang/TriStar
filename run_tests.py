@@ -6,16 +6,21 @@ import argparse
 import sys
 import subprocess
 import signal
+import json
+import numpy as np
+from tristar_adapter.services.offline import OfflineService
 
 
 prefix_cmd = "java -cp target/tristar/tristar/lib/ -jar target/tristar/tristar/tristar.jar "
 # "-b tpcc -c config/postgres/sample_tpcc_config.xml --execute=true"
 result_prefix = "results/"
+meta_prefix = "metas/"
 workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
              "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
              "wr_ratio-128"]
+strategies = ["SERIALIZABLE", "SI_TAILOR", "RC_TAILOR"]
 
 
 def run_shell_command(cmd: str, timeout):
@@ -80,11 +85,16 @@ def parse_args():
                         help="specify the workload")
     parser.add_argument("-n", "--cnt", dest="cnt", type=int, required=False, default=1,
                         help="count of execution")
+    parser.add_argument("-p", "--phase", dest="phase", type=str, required=True, default="offline",
+                        help="online predict or offline training")
 
     return parser.parse_args()
 
 
-def run_once(f: str):
+def run_once(f: str, online: bool):
+    phase: str = "offline"
+    if online:
+        phase = "online"
     # traverse the dir
     config_path = "config/" + args.wl + "/" + f + "/" + args.engine + "/"
     print("config_path: " + config_path)
@@ -95,7 +105,7 @@ def run_once(f: str):
         output_file = create_output_file(result_dir + case_name)
         print("Run config - { " + case_name + " }")
         java_cmd = (prefix_cmd + "-b " + args.wl + " -c " + config_path + case_name + ".xml" +
-                    " --execute=true -d " + result_dir + case_name + " > " + output_file)
+                    " --execute=true -d " + result_dir + case_name + " -p " + phase + " > " + output_file)
         run_shell_command(java_cmd, 240)
         print("Finish config - { " + case_name + " }")
         # time.sleep(5)
@@ -104,22 +114,70 @@ def run_once(f: str):
     preprocess_cmd = "./scripts/preprocessing.py " + result_prefix + args.wl + "/" + f + "/"
     exec_cmd(preprocess_cmd)
 
+    if not online: # generate label
+        meta_dir = meta_prefix + args.wl + "/" + f + "/" + unique_ts
+        for entry in os.scandir(meta_dir):
+            if entry.is_dir():
+                generate_offline_labels(entry.path)
 
-def run_cnt(f: str, cnt: int):
+    return unique_ts
+
+
+def generate_offline_labels(meta_folder: str):
+    files = []
+    for entry in os.scandir(meta_folder):
+        if entry.is_file() and entry.name.endswith('.summary.json'):
+            files.append(entry.path)
+    data = {}
+    for file in files:
+        with open(file, 'r') as f:
+            json_data = json.load(f)
+            isolation = json_data['Isolation']
+            goodput = float(json_data['Goodput (requests/second)'])
+            print(isolation)
+            if isolation in strategies:
+                if isolation not in data or goodput > data[isolation]:
+                    data[isolation] = goodput
+
+    max_goodput = max(data, key=data.get)
+    max_goodput_index = strategies.index(max_goodput)
+    label = np.zeros(len(strategies), dtype=int)
+    label[max_goodput_index] = 1
+
+    label_file_path = meta_folder + '/label'
+    with open(label_file_path, 'w') as label_file:
+        label_file.write(','.join(str(x) for x in label))
+
+    for file in files:
+        os.remove(file)
+
+
+def run_cnt(f: str, online: bool, cnt: int):
+    timestamps = []
     for i in range(cnt):
-        run_once(f)
+        ts = run_once(f, online)
+        timestamps.append(ts)
+    return timestamps
 
 
 if __name__ == "__main__":
     args = parse_args()
     start_time = datetime.now()
     print("workload: " + args.wl + " engine: " + args.engine + " cnt: " + str(args.cnt))
+    online_predict = False
+    if args.phase == "online":
+        online_predict = True
     ff = functions
     if args.func is not None:
         ff = args.func
 
     for f in ff:
-        run_cnt(f, args.cnt)
+        tss = run_cnt(f, online_predict, args.cnt)
+
+        if not online_predict and f == "random-128":
+            offline_service = OfflineService(args.wl)
+            offline_service.service("train", f, meta_prefix + "/", tss)
+            print("success")
 
     print("start time: ", start_time)
     print("end time: ", datetime.now())

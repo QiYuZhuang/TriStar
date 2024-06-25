@@ -30,8 +30,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
@@ -295,6 +297,13 @@ public class WriteCheck extends Procedure {
   }
 
   public void doAfterCommit(long custId0, long custId1, CCType type, boolean success, long[] versions, long tid, int[] checkout) {
+    if (TransactionCollector.getInstance().isSample()) {
+      TransactionCollector.getInstance().addTransactionSample(16,
+              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId1)},
+              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId0)},
+              success?1:0);
+    }
+
     /*
      * there still some optimization space in write-after-read, it may be better that change the rw-dependency
      * into ww-dependency

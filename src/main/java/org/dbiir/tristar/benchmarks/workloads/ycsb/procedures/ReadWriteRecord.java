@@ -7,9 +7,14 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Random;
 
+import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
+
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
@@ -182,6 +187,26 @@ public class ReadWriteRecord extends Procedure {
     }
 
     public void doAfterCommit(int[] keynames, CCType type, boolean success, long[] versions, long tid) {
+        if (TransactionCollector.getInstance().isSample()) {
+            int rset_idx = 0;
+            int wset_idx = 0;
+            int write_cnt = 0;
+            for (int i = 0; i < ops.length; i++) {
+                if (ops[i] == 2) write_cnt++;
+            }
+
+            RWRecord[] reads = new RWRecord[ops.length - write_cnt];
+//                    {new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), (int) custId)};
+            RWRecord[] writes = new RWRecord[write_cnt];
+            for (int i = 0; i < ops.length; i++) {
+                if (ops[i] == 1) {
+                    reads[rset_idx++] = new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
+                } else {
+                    writes[wset_idx++] = new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
+                }
+            }
+            TransactionCollector.getInstance().addTransactionSample(1, reads, writes, success?1:0);
+        }
         if (!success)
             return;
         if (type == CCType.RC_TAILOR_LOCK) {

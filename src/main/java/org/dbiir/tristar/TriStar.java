@@ -27,6 +27,7 @@ import org.apache.commons.configuration2.tree.ImmutableNode;
 import org.apache.commons.configuration2.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
+import org.dbiir.tristar.adapter.Flusher;
 import org.dbiir.tristar.benchmarks.Phase;
 import org.dbiir.tristar.benchmarks.Results;
 import org.dbiir.tristar.benchmarks.ThreadBench;
@@ -46,12 +47,14 @@ import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.util.TimeUtil;
 
 import lombok.Setter;
+import org.dbiir.tristar.common.CCType;
 
 public class TriStar {
     private static final Logger logger = Logger.getLogger(TriStar.class);
     private static final String RATE_DISABLED = "disabled";
     private static final String RATE_UNLIMITED = "unlimited";
     private static final String SINGLE_LINE = StringUtil.repeat("=", 70);
+    private static Thread flushThread;
 
     /* variable and set functions for test */
     @Setter
@@ -120,7 +123,9 @@ public class TriStar {
         // Execute Workload
         if (isBooleanOptionSet(argsLine, "execute")) {
             try {
+                createFlushThread(argsLine, wrkld.getConcurrencyControlType());
                 Results r = runWorkload(benchList, intervalMonitor);
+                finishFlushThread();
                 writeOutputs(r, activeTXTypes, argsLine, xmlConfig);
                 writeHistograms(r);
 
@@ -451,6 +456,7 @@ public class TriStar {
                 "Base directory for the result files, default is current directory");
         options.addOption(null, "dialects-export", true, "Export benchmark SQL to a dialects file");
         options.addOption("jh", "json-histograms", true, "Export histograms to JSON file");
+        options.addOption("p", "phase", true, "Online predict or offline training");
         return options;
     }
 
@@ -530,6 +536,37 @@ public class TriStar {
         return JSONUtil.toJSONString(map);
     }
 
+    private static void createFlushThread(CommandLine argsLine, CCType ccType) {
+        String metaDirectory = "metas";
+        boolean onlinePredict = false;
+        if (argsLine.hasOption("d")) {
+            metaDirectory = argsLine.getOptionValue("d").trim();
+            if (metaDirectory.contains("results")) {
+                metaDirectory = metaDirectory.replace("results", "metas");
+                int lastIndex = metaDirectory.lastIndexOf("_");
+
+                if (lastIndex != -1) {
+                    metaDirectory = metaDirectory.substring(0, lastIndex - 1);
+                    metaDirectory += "/";
+                }
+            }
+        }
+
+        if (argsLine.hasOption("p")) {
+            if (argsLine.getOptionValue("p").contains("online")) {
+                onlinePredict = true;
+            }
+        }
+
+        FileUtil.makeDirIfNotExists(metaDirectory);
+        flushThread = new Thread(new Flusher(argsLine.getOptionValue("b").trim(), metaDirectory, ccType,onlinePredict));
+        flushThread.start();
+    }
+
+    private static void finishFlushThread() {
+        flushThread.interrupt();
+    }
+
     private static void writeOutputs(
             Results r,
             List<TransactionType> activeTXTypes,
@@ -539,9 +576,19 @@ public class TriStar {
 
         // If an output directory is used, store the information
         String outputDirectory = "results";
+        String metaDirectory = "metas";
 
         if (argsLine.hasOption("d")) {
             outputDirectory = argsLine.getOptionValue("d").trim();
+            if (outputDirectory.contains("results")) {
+                metaDirectory = outputDirectory.replace("results", "metas");
+                int lastIndex = metaDirectory.lastIndexOf("_");
+
+                if (lastIndex != -1) {
+                    metaDirectory = metaDirectory.substring(0, lastIndex - 1);
+                    metaDirectory += "/";
+                }
+            }
         }
 
         FileUtil.makeDirIfNotExists(outputDirectory);
@@ -568,6 +615,10 @@ public class TriStar {
         String summaryFileName = baseFileName + ".summary.json";
         try (PrintStream ps = new PrintStream(FileUtil.joinPath(outputDirectory, summaryFileName))) {
             logger.info("Output summary data into file: %s".formatted(summaryFileName));
+            rw.writeSummary(ps);
+        }
+        try (PrintStream ps = new PrintStream(FileUtil.joinPath(metaDirectory, summaryFileName))) {
+            logger.info("Output {meta directory} summary data into file: %s".formatted(summaryFileName));
             rw.writeSummary(ps);
         }
 

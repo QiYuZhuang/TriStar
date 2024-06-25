@@ -30,8 +30,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
@@ -123,6 +125,13 @@ public class DepositChecking extends Procedure {
   }
 
   public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, int[] checkout) {
+    if (TransactionCollector.getInstance().isSample()) {
+      TransactionCollector.getInstance().addTransactionSample(4,
+              new RWRecord[]{},
+              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId)},
+              success?1:0);
+    }
+
     if (!success) {
       if (type == CCType.RC_TAILOR && versions[0] >= 0) {
         FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, true);
