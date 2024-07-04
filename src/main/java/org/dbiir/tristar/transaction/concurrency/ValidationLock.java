@@ -99,20 +99,20 @@ public class ValidationLock {
             }
         }
         this.lock.unlock();
-//        if (result == 1) {
-//            assert (this.type == lockType);
-//            System.out.println("acquire id: " + id + " " + this.type + ", count: " + (count));
-//        }
+       if (result == 1) {
+           assert (this.type == lockType);
+           //System.out.println("acquire id: " + id + " " + this.type + ", count: " + (count));
+       }
         assert (result != -2);
         return result;
     }
 
     public void releaseLock(LockType lockType) {
         this.lock.lock();
-//        System.out.println("release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
-//        if (this.type != lockType) {
-//            System.out.println("failure-release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
-//        }
+       //System.out.println("release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
+       if (this.type != lockType) {
+           //System.out.println("failure-release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
+       }
         assert (this.type == lockType);
         count--;
         if (count == 0) {

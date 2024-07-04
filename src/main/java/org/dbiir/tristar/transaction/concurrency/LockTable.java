@@ -2,6 +2,9 @@ package org.dbiir.tristar.transaction.concurrency;
 
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankWorker;
+import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
+import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
@@ -16,11 +19,17 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.TimeUnit;
 
 public class LockTable {
     private static final LockTable INSTANCE;
     private static final int SMALL_BANK_HASH_SIZE = 4000000;
     private static final int YCSB_HASH_SIZE = 1000000;
+    private static final int TPCC_WAREHOUSE_HASH_SIZE = 32;
+    private static final int TPCC_STOCK_HASH_SIZE = 3200000;
+    private static final int TPCC_CUSTOMER_HASH_SIZE = 960000;
+    private static final int TPCC_ORDERS_HASH_SIZE = 960000;
+    private static final int TPCC_ORDERLINE_HASH_SIZE = 960000;
     private int LOAD_THREAD = 16;
     private int HASH_SIZE;
     private HashMap<String, LinkedList<XNORLock>[]> ccLocks = new HashMap<>(4);
@@ -36,6 +45,21 @@ public class LockTable {
 
     public final SQLStmt GetUserTable =
             new SQLStmt("SELECT vid FROM " + YCSBConstants.TABLE_NAME + " WHERE  ycsb_key = ?");
+
+    public final SQLStmt GetWarehouseTable =
+            new SQLStmt("SELECT vid FROM " + TPCCConstants.TABLENAME_WAREHOUSE + " WHERE w_id = ?");
+
+    public final SQLStmt GetCustomerTable =
+            new SQLStmt("SELECT vid FROM " + TPCCConstants.TABLENAME_CUSTOMER + " WHERE c_w_id = ? AND c_d_id = ? AND c_id = ?");
+
+    public final SQLStmt GetStockTable =
+            new SQLStmt("SELECT vid FROM " + TPCCConstants.TABLENAME_STOCK + " WHERE s_w_id = ? AND s_i_id = ?");
+
+    public final SQLStmt GetOrdersTable =
+            new SQLStmt("SELECT vid FROM " + TPCCConstants.TABLENAME_OPENORDER + " WHERE o_w_id = ? AND o_d_id = ? AND o_id = ?");
+
+    public final SQLStmt GetOrderLineTbale =
+            new SQLStmt("SELECT vid FROM " + TPCCConstants.TABLENAME_ORDERLINE + " WHERE ol_w_id = ? AND ol_d_id = ? AND ol_o_id = ? LIMIT 1");
 
     static {
         INSTANCE = new LockTable();
@@ -164,7 +188,234 @@ public class LockTable {
             }
             executor.shutdown();
         } else if (workload.equals("tpcc")) {
-            throw new SQLException("not implemented", "501");
+            //System.out.println("tpcc_load");
+            this.HASH_SIZE = TPCC_STOCK_HASH_SIZE;
+            this.LOAD_THREAD = connections.size();
+
+            ccLocks.put("warehouse", new LinkedList[TPCC_WAREHOUSE_HASH_SIZE]);
+            ccLocks.put("customer", new LinkedList[TPCC_CUSTOMER_HASH_SIZE]);
+            ccLocks.put("stock", new LinkedList[TPCC_STOCK_HASH_SIZE]);
+            ccLocks.put("orders", new LinkedList[TPCC_ORDERS_HASH_SIZE]);
+            ccLocks.put("order_line", new LinkedList[TPCC_ORDERLINE_HASH_SIZE]);
+
+            ccBucketLocks.put("warehouse", new ReentrantReadWriteLock[TPCC_WAREHOUSE_HASH_SIZE]);
+            ccBucketLocks.put("customer", new ReentrantReadWriteLock[TPCC_CUSTOMER_HASH_SIZE]);
+            ccBucketLocks.put("stock", new ReentrantReadWriteLock[TPCC_STOCK_HASH_SIZE]);
+            ccBucketLocks.put("orders", new ReentrantReadWriteLock[TPCC_ORDERS_HASH_SIZE]);
+            ccBucketLocks.put("order_line", new ReentrantReadWriteLock[TPCC_ORDERLINE_HASH_SIZE]);
+
+            // init validation locks
+            validationLocks.put("warehouse", new LinkedList[TPCC_WAREHOUSE_HASH_SIZE]);
+            validationLocks.put("customer", new LinkedList[TPCC_CUSTOMER_HASH_SIZE]);
+            validationLocks.put("stock", new LinkedList[TPCC_STOCK_HASH_SIZE]);
+            validationLocks.put("orders", new LinkedList[TPCC_ORDERS_HASH_SIZE]);
+            validationLocks.put("order_line", new LinkedList[TPCC_ORDERLINE_HASH_SIZE]);
+
+            validationBucketLocks.put("warehouse", new ReentrantReadWriteLock[TPCC_WAREHOUSE_HASH_SIZE]);
+            validationBucketLocks.put("customer", new ReentrantReadWriteLock[TPCC_CUSTOMER_HASH_SIZE]);
+            validationBucketLocks.put("stock", new ReentrantReadWriteLock[TPCC_STOCK_HASH_SIZE]);
+            validationBucketLocks.put("orders", new ReentrantReadWriteLock[TPCC_ORDERS_HASH_SIZE]);
+            validationBucketLocks.put("order_line", new ReentrantReadWriteLock[TPCC_ORDERLINE_HASH_SIZE]);
+
+            for (int i = 0; i < TPCC_WAREHOUSE_HASH_SIZE; i++) {
+                ccLocks.get("warehouse")[i] = new LinkedList<>();
+
+                ccLocks.get("warehouse")[i].add(new XNORLock(i));
+
+                ccBucketLocks.get("warehouse")[i] = new ReentrantReadWriteLock();
+
+                validationLocks.get("warehouse")[i] = new LinkedList<>();
+
+                validationLocks.get("warehouse")[i].add(new ValidationLock(i));;
+
+                validationBucketLocks.get("warehouse")[i] = new ReentrantReadWriteLock();
+            }
+
+            for (int i = 0; i < TPCC_CUSTOMER_HASH_SIZE; i++) {
+                ccLocks.get("customer")[i] = new LinkedList<>();
+
+                ccLocks.get("customer")[i].add(new XNORLock(i));
+
+                ccBucketLocks.get("customer")[i] = new ReentrantReadWriteLock();
+
+                validationLocks.get("customer")[i] = new LinkedList<>();
+
+                validationLocks.get("customer")[i].add(new ValidationLock(i));;
+
+                validationBucketLocks.get("customer")[i] = new ReentrantReadWriteLock();
+            }
+
+            for (int i = 0; i < TPCC_STOCK_HASH_SIZE; i++) {
+                ccLocks.get("stock")[i] = new LinkedList<>();
+
+                ccLocks.get("stock")[i].add(new XNORLock(i));
+
+                ccBucketLocks.get("stock")[i] = new ReentrantReadWriteLock();
+
+                validationLocks.get("stock")[i] = new LinkedList<>();
+
+                validationLocks.get("stock")[i].add(new ValidationLock(i));;
+
+                validationBucketLocks.get("stock")[i] = new ReentrantReadWriteLock();
+            }
+
+            for (int i = 0; i < TPCC_ORDERS_HASH_SIZE; i++) {
+                ccLocks.get("orders")[i] = new LinkedList<>();
+
+                ccLocks.get("orders")[i].add(new XNORLock(i));
+
+                ccBucketLocks.get("orders")[i] = new ReentrantReadWriteLock();
+
+                validationLocks.get("orders")[i] = new LinkedList<>();
+
+                validationLocks.get("orders")[i].add(new ValidationLock(i));;
+
+                validationBucketLocks.get("orders")[i] = new ReentrantReadWriteLock();
+            }
+
+            for (int i = 0; i < TPCC_ORDERLINE_HASH_SIZE; i++) {
+                ccLocks.get("order_line")[i] = new LinkedList<>();
+
+                ccLocks.get("order_line")[i].add(new XNORLock(i));
+
+                ccBucketLocks.get("order_line")[i] = new ReentrantReadWriteLock();
+
+                validationLocks.get("order_line")[i] = new LinkedList<>();
+
+                validationLocks.get("order_line")[i].add(new ValidationLock(i));;
+
+                validationBucketLocks.get("order_line")[i] = new ReentrantReadWriteLock();
+            }
+
+            ExecutorService executor = Executors.newFixedThreadPool(LOAD_THREAD);
+
+            for (int i = 0; i < LOAD_THREAD; i++) {
+                int index = i;
+
+                executor.submit(() -> {
+                    PreparedStatement getwarehouse = null;
+                    PreparedStatement getcustomer = null;
+                    PreparedStatement getstock = null;
+                    PreparedStatement getorders = null;
+                    PreparedStatement getorderline = null;
+
+                    try {
+                        getwarehouse = connections.get(index).prepareStatement("SELECT vid FROM warehouse WHERE w_id = ?");
+                        getcustomer = connections.get(index).prepareStatement(GetCustomerTable.getSQL());
+                        getstock = connections.get(index).prepareStatement(GetStockTable.getSQL());
+                        getorders = connections.get(index).prepareStatement(GetOrdersTable.getSQL());
+                        getorderline = connections.get(index).prepareStatement(GetOrderLineTbale.getSQL());
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    }
+
+                    for (int j = index; j < TPCC_WAREHOUSE_HASH_SIZE; j += LOAD_THREAD) {
+                        try {
+                            if (!validationLocks.get("warehouse")[j].isEmpty()) {
+                                getwarehouse.setLong(1, j + 1);
+                                try (ResultSet res = getwarehouse.executeQuery()) {
+                                    if (!res.next()) {
+                                        String msg = "Invalid warehouseid #%d".formatted(j);
+                                        throw new RuntimeException(msg);
+                                    }
+                                    updateHotspotVersion("warehouse", j, res.getLong(1));
+                                }
+                            }
+                        } catch (SQLException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
+
+                    for (int j = index; j < TPCC_CUSTOMER_HASH_SIZE; j += LOAD_THREAD) {
+                        try {
+                            if (!validationLocks.get("customer")[j].isEmpty()) {
+                                int[] ids  = getCustomerIdsFromIndex(j);
+                                getcustomer.setInt(1, ids[0]);
+                                getcustomer.setInt(2, ids[1]);
+                                getcustomer.setInt(3, ids[2]);
+                                try (ResultSet res = getcustomer.executeQuery()) {
+                                    if (!res.next()) {
+                                        String msg = "Invalid customerid #%d".formatted(j);
+                                        throw new RuntimeException(msg);
+                                    }
+                                    updateHotspotVersion("customer", j, res.getInt(1));
+                                }
+                            }
+                        } catch (SQLException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
+
+                    for (int j = index; j < TPCC_STOCK_HASH_SIZE; j += LOAD_THREAD) {
+                        try {
+                            if (!validationLocks.get("stock")[j].isEmpty()) {
+                                int[] ids = getStockIdsFromIndex(j);
+                                getstock.setInt(1, ids[0]);
+                                getstock.setInt(2, ids[1]);
+                                try (ResultSet res = getstock.executeQuery()) {
+                                    if (!res.next()) {
+                                        String msg = "Invalid stock #%d".formatted(j);
+                                        throw new RuntimeException(msg);
+                                    }
+                                    updateHotspotVersion("stock", j, res.getInt(1));
+                                }
+                            }
+                        } catch (SQLException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
+
+                    for (int j = index; j < TPCC_ORDERS_HASH_SIZE; j += LOAD_THREAD) {
+                        try {
+                            if (!validationLocks.get("orders")[j].isEmpty()) {
+                                int[] ids = getCustomerIdsFromIndex(j);
+                                getorders.setInt(1, ids[0]);
+                                getorders.setInt(2, ids[1]);
+                                getorders.setInt(3, ids[2]);
+                                try (ResultSet res = getorders.executeQuery()) {
+                                    if (!res.next()) {
+                                        String msg = "Invalid orders #%d".formatted(j);
+                                        throw new RuntimeException(msg);
+                                    }
+                                    updateHotspotVersion("orders", j, res.getInt(1));
+                                }
+                            }
+                        } catch (SQLException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
+
+                    for (int j = index; j < TPCC_ORDERLINE_HASH_SIZE; j += LOAD_THREAD) {
+                        try {
+                            if (!validationLocks.get("order_line")[j].isEmpty()) {
+                                int[] ids = getCustomerIdsFromIndex(j);
+                                getorderline.setInt(1, ids[0]);
+                                getorderline.setInt(2, ids[1]);
+                                getorderline.setInt(3, ids[2]);
+                                try (ResultSet res = getorderline.executeQuery()) {
+                                    if (!res.next()) {
+                                        String msg = "Invalid orderline #%d".formatted(j);
+                                        throw new RuntimeException(msg);
+                                    }
+                                    updateHotspotVersion("order_line", j, res.getInt(1));
+                                }
+                            }
+                        } catch (SQLException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
+
+                });
+            }
+
+            executor.shutdown();
+            try{
+                executor.awaitTermination(1, TimeUnit.HOURS);
+            } catch (InterruptedException ex) {
+                System.out.println("[unexpected error]: " + ex);
+                throw new RuntimeException(ex);
+            }
+
         }
 
         for (int i = 0; i < LOAD_THREAD; i++) {
@@ -178,10 +429,13 @@ public class LockTable {
             throw new RuntimeException(msg);
         }
 
-        if (checkAndTryValidationLock(table, tid, key, type, ccType))
+        if (checkAndTryValidationLock(table, tid, key, type, ccType)) {
+            //System.out.println(Thread.currentThread().getName() + " name: " + table + "  acquire lock: " + key);
             return;
+        }
         try {
             tryAndAddValidationLock(table, tid, key, type, ccType);
+            //System.out.println(Thread.currentThread().getName() + " name: " + table + "  acquire lock: " + key);
         } catch (SQLException ex){
             throw ex;
         }
@@ -192,6 +446,7 @@ public class LockTable {
             String msg = "unknown table name: " + table;
             throw new RuntimeException(msg);
         }
+        //System.out.println(Thread.currentThread().getName() + " name: " + table + " release validation lock: " + key);
         int bucketNum = (int)(key % HASH_SIZE);
         validationBucketLocks.get(table)[bucketNum].readLock().lock();
         List<ValidationLock> lockList = validationLocks.get(table)[bucketNum];
@@ -223,6 +478,7 @@ public class LockTable {
                 int count = 0;
                 while((res = lock.tryLock(tid, type, ccType)) == 0)  {
                     try {
+                        //System.out.println(Thread.currentThread().getName() + " #" + tid +" name: " + table + " key: " + key);
                         Thread.sleep(0, 10000);
                     } catch (InterruptedException ex) {
                         System.out.println("out of the max retry count, lock type is " + type);
@@ -359,7 +615,7 @@ public class LockTable {
             lockList.removeIf(lock -> lock.getKey() > HASH_SIZE && lock.free());
             ccBucketLocks.get(table)[bucketNum].writeLock().unlock();
         }
-     }
+    }
 
     public void updateHotspotVersion(String table, long key, long tid) {
         int bucketNum = (int)(key % HASH_SIZE);
@@ -393,4 +649,18 @@ public class LockTable {
     public static LockTable getInstance() {
         return INSTANCE;
     }
+
+    public static int[] getCustomerIdsFromIndex(int index) {
+        int w_id = (index / 30000) + 1;
+        int d_id = ((index % 30000) / 3000) + 1;
+        int c_id = (index % 3000) + 1;
+        return new int[]{w_id, d_id, c_id};
+    }
+
+    public static int[] getStockIdsFromIndex(int index) {
+        int w_id = (index / 100000) + 1;
+        int i_id = (index % 100000) + 1;
+        return new int[]{w_id, i_id};
+    }
+
 }

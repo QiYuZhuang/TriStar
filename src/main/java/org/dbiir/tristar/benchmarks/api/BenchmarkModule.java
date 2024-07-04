@@ -98,10 +98,17 @@ public abstract class BenchmarkModule {
         connectionList.add(DriverManager.getConnection(workConf.getUrl()));
       }
     } else {
-      for (int i = 0; i < 16; i++) {
-        connectionList.add(DriverManager.getConnection(
-                workConf.getUrl(), workConf.getUsername(), workConf.getPassword()));
-      }
+        try {
+            for (int i = 0; i < 16; i++) {
+                Connection conn = DriverManager.getConnection(workConf.getUrl(), workConf.getUsername(), workConf.getPassword());
+                if (conn != null && !conn.isClosed()) {
+                    connectionList.add(conn);
+                }
+              }
+        } catch (SQLException ex) {
+            System.out.println(ex);
+            throw ex;
+        }
     }
   }
 
@@ -113,6 +120,10 @@ public abstract class BenchmarkModule {
 
   public CCType getCCType() {
     return workConf.getConcurrencyControlType();
+  }
+
+  public double getZipFTheta() {
+    return  workConf.getZipFainTheta();
   }
 
   // --------------------------------------------------------------------------

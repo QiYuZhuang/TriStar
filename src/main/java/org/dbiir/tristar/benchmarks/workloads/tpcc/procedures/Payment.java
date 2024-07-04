@@ -15,191 +15,264 @@
  *
  */
 
-package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
+ package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Customer;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.District;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Warehouse;
-import org.dbiir.tristar.common.CCType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.math.BigDecimal;
-import java.sql.*;
-import java.util.ArrayList;
-import java.util.Random;
-
-public class Payment extends TPCCProcedure {
-
-  private static final Logger LOG = LoggerFactory.getLogger(Payment.class);
-
-  public SQLStmt payUpdateWhseSQL =
-      new SQLStmt(
-          """
-        UPDATE %s
-           SET W_YTD = W_YTD + ?
-         WHERE W_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_WAREHOUSE));
-
-  public SQLStmt payUpdateDistSQL =
-      new SQLStmt(
-          """
-        UPDATE %s
-           SET D_YTD = D_YTD + ?
-         WHERE D_W_ID = ?
-           AND D_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_DISTRICT));
-
-  public SQLStmt payUpdateCustBalSQL =
-      new SQLStmt(
-          """
-        UPDATE %s
-           SET C_BALANCE = ?
-         WHERE C_W_ID = ?
-           AND C_D_ID = ?
-           AND C_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
-
-  public final SQLStmt stmtUpdateConflictCSQL =
-          new SQLStmt(
-                  """
-                SELECT *
-                 FROM %s
-                 WHERE C_W_ID = ?
-                   AND C_D_ID = ?
-                   AND C_ID = ?
-                 FOR UPDATE
-            """
-                          .formatted(TPCCConstants.TABLENAME_CONFLICT_CUSTOMER));
-
-  public void run(
-      Connection conn,
-      Random gen,
-      int w_id,
-      int numWarehouses,
-      int terminalDistrictLowerID,
-      int terminalDistrictUpperID,
-      CCType ccType,
-      TPCCWorker worker)
-      throws SQLException {
-
-    int districtID = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
-
-    float paymentAmount = (float) (TPCCUtil.randomNumber(100, 500000, gen) / 100.0);
-    int x = TPCCUtil.randomNumber(1, 100, gen);
-
-    int customerDistrictID = getCustomerDistrictId(gen, districtID, x);
-    int customerWarehouseID = getCustomerWarehouseID(gen, w_id, numWarehouses, x);
-    int customerID = TPCCUtil.getCustomerID(gen);
-
-    if (ccType == CCType.RC_ELT) {
-      setConflictC(conn, customerWarehouseID, customerDistrictID, customerID);
-    }
-
-
-    updateWarehouse(conn, w_id, paymentAmount);
-
-
-    updateDistrict(conn, w_id, districtID, paymentAmount);
-
-
-    updateBalance(conn, customerDistrictID, customerWarehouseID, customerID, paymentAmount);
-
-  }
-
-  private int getCustomerWarehouseID(Random gen, int w_id, int numWarehouses, int x) {
-    int customerWarehouseID;
-    if (x <= 85) {
-      customerWarehouseID = w_id;
-    } else {
-      do {
-        customerWarehouseID = TPCCUtil.randomNumber(1, numWarehouses, gen);
-      } while (customerWarehouseID == w_id && numWarehouses > 1);
-    }
-    return customerWarehouseID;
-  }
-
-  private int getCustomerDistrictId(Random gen, int districtID, int x) {
-    if (x <= 85) {
-      return districtID;
-    } else {
-      return TPCCUtil.randomNumber(1, TPCCConfig.configDistPerWhse, gen);
-    }
-  }
-
-  private void updateWarehouse(Connection conn, int w_id, float paymentAmount) throws SQLException {
-    try (PreparedStatement payUpdateWhse = this.getPreparedStatement(conn, payUpdateWhseSQL)) {
-      payUpdateWhse.setBigDecimal(1, BigDecimal.valueOf(paymentAmount));
-      payUpdateWhse.setInt(2, w_id);
-      // MySQL reports deadlocks due to lock upgrades:
-      // t1: read w_id = x; t2: update w_id = x; t1 update w_id = x
-      int result = payUpdateWhse.executeUpdate();
-      if (result == 0) {
-        throw new RuntimeException("W_ID=" + w_id + " not found!");
-      }
-    }
-  }
-
-  private void updateDistrict(Connection conn, int w_id, int districtID, float paymentAmount)
-      throws SQLException {
-    try (PreparedStatement payUpdateDist = this.getPreparedStatement(conn, payUpdateDistSQL)) {
-      payUpdateDist.setBigDecimal(1, BigDecimal.valueOf(paymentAmount));
-      payUpdateDist.setInt(2, w_id);
-      payUpdateDist.setInt(3, districtID);
-
-      int result = payUpdateDist.executeUpdate();
-
-      if (result == 0) {
-        throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
-      }
-    }
-  }
-
-  private void updateBalance(
-      Connection conn, int customerDistrictID, int customerWarehouseID, int customerID, double amount)
-      throws SQLException {
-
-    try (PreparedStatement payUpdateCustBal =
-        this.getPreparedStatement(conn, payUpdateCustBalSQL)) {
-      payUpdateCustBal.setDouble(1, amount);
-      payUpdateCustBal.setInt(2, customerWarehouseID);
-      payUpdateCustBal.setInt(3, customerDistrictID);
-      payUpdateCustBal.setInt(4, customerID);
-
-      int result = payUpdateCustBal.executeUpdate();
-
-      if (result == 0) {
-        throw new RuntimeException(
-            "C_ID="
-                + customerID
-                + " C_W_ID="
-                + customerWarehouseID
-                + " C_D_ID="
-                + customerDistrictID
-                + " not found!");
-      }
-    }
-  }
-
-  private void setConflictC(Connection conn, int w_id, int d_id, int c_id) throws SQLException {
-    try (PreparedStatement stmtSetConfC = this.getPreparedStatement(conn, stmtUpdateConflictCSQL)) {
-      stmtSetConfC.setInt(1, w_id);
-      stmtSetConfC.setInt(2, d_id);
-      stmtSetConfC.setInt(3, c_id);
-      try (ResultSet rs = stmtSetConfC.executeQuery()) {
-        if (!rs.next()) {
-          throw new RuntimeException("C_D_ID=" + d_id + " C_ID=" + c_id + " not found!");
-        }
-      }
-    }
-  }
-
-}
+ import org.dbiir.tristar.benchmarks.api.SQLStmt;
+ import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Customer;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.District;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Warehouse;
+ import org.dbiir.tristar.common.CCType;
+ import org.dbiir.tristar.common.LockType;
+ import org.dbiir.tristar.transaction.concurrency.LockTable;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+ import java.math.BigDecimal;
+ import java.sql.*;
+ import java.util.ArrayList;
+ import java.util.Random;
+ 
+ public class Payment extends TPCCProcedure {
+ 
+   private static final Logger LOG = LoggerFactory.getLogger(Payment.class);
+ 
+   public SQLStmt payUpdateWhseSQL =
+           new SQLStmt(
+                   """
+                 UPDATE %s
+                    SET W_YTD = W_YTD + ?, vid = vid + 1
+                  WHERE W_ID = ?
+                  RETURNING vid;
+             """
+                           .formatted(TPCCConstants.TABLENAME_WAREHOUSE));
+ 
+   public SQLStmt payUpdateDistSQL =
+           new SQLStmt(
+                   """
+                 UPDATE %s
+                    SET D_YTD = D_YTD + ?
+                  WHERE D_W_ID = ?
+                    AND D_ID = ?
+             """
+                           .formatted(TPCCConstants.TABLENAME_DISTRICT));
+ 
+   public SQLStmt payUpdateCustBalSQL =
+           new SQLStmt(
+                   """
+                 UPDATE %s
+                    SET C_BALANCE = ?, vid = vid + 1
+                  WHERE C_W_ID = ?
+                    AND C_D_ID = ?
+                    AND C_ID = ?
+                  RETURNING vid;
+             """
+                           .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+ 
+   public final SQLStmt stmtUpdateConflictCSQL =
+           new SQLStmt(
+                   """
+                 SELECT *
+                  FROM %s
+                  WHERE C_W_ID = ?
+                    AND C_D_ID = ?
+                    AND C_ID = ?
+                  FOR UPDATE
+             """
+                           .formatted(TPCCConstants.TABLENAME_CONFLICT_CUSTOMER));
+ 
+   public final SQLStmt stmtUpdateConflictWSQL =
+           new SQLStmt(
+                   """
+                 SELECT *
+                  FROM %s
+                  WHERE W_ID = ?
+                  FOR UPDATE
+             """
+                           .formatted(TPCCConstants.TABLENAME_CONFLICT_WAREHOUSE));
+ 
+   public void run(
+           Connection conn,
+           Random gen,
+           int w_id,
+           int numWarehouses,
+           int terminalDistrictLowerID,
+           int terminalDistrictUpperID,
+           CCType ccType,
+           double zipftheta,
+           ZipfianGenerator iditer,
+           long tid,
+           long[] versions,
+           long[] keys,
+           TPCCWorker worker)
+           throws SQLException {
+ 
+     int districtID = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
+ 
+     float paymentAmount = (float) (TPCCUtil.randomNumber(-500000, 500000, gen) / 100.0);
+     // int customerDistrictID = getCustomerDistrictId(gen, districtID, x);
+     // int customerWarehouseID = getCustomerWarehouseID(gen, w_id, numWarehouses, x);
+     int customerDistrictID = districtID;
+     int customerWarehouseID = w_id;
+     int customerID;
+     if (zipftheta > -1.0) {
+       customerID = iditer.nextInt();
+     } else {
+       customerID = TPCCUtil.getCustomerID(gen);
+     }
+ 
+     if (ccType == CCType.RC_ELT) {
+       setConflictC(conn, w_id, customerDistrictID, customerID);
+       setConflictW(conn, w_id);
+     }
+ 
+     // U[Warehouse]
+     updateWarehouse(conn, w_id, paymentAmount, ccType, versions);
+ 
+     keys[0] = w_id - 1;
+ 
+     updateDistrict(conn, w_id, districtID, paymentAmount);
+ 
+     // U[Customer]
+     updateBalance(conn, customerDistrictID, customerWarehouseID, customerID, BigDecimal.valueOf(paymentAmount), ccType, versions);
+     
+     keys[1] = ((long) (customerWarehouseID - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
+             + (long) (customerDistrictID - 1) * TPCCConfig.configCustPerDist + (long) (customerID - 1));
+ 
+     if (ccType == CCType.RC_TAILOR) {
+       // lock WAREHOUSE
+       LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, tid, keys[0], LockType.EX, ccType);
+     }
+     if (ccType == CCType.RC_TAILOR | ccType == CCType.RC_TAILOR_ATTR) {
+       int validationPhase = 1;
+       try {
+         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, keys[1], LockType.EX, ccType);
+         validationPhase = 2;
+       } catch (SQLException ex) {
+         releaseTailorLock(validationPhase, keys, ccType);
+         throw ex;
+       }
+     }
+ 
+   }
+ 
+   private void updateWarehouse(Connection conn, int w_id, float paymentAmount, CCType type, long[] versions) throws SQLException {
+     try (PreparedStatement payUpdateWhse = this.getPreparedStatement(conn, payUpdateWhseSQL)) {
+       payUpdateWhse.setBigDecimal(1, BigDecimal.valueOf(paymentAmount));
+       payUpdateWhse.setInt(2, w_id);
+       // MySQL reports deadlocks due to lock upgrades:
+       // t1: read w_id = x; t2: update w_id = x; t1 update w_id = x
+       try (ResultSet rs = payUpdateWhse.executeQuery()) {
+         if (!rs.next()) {
+           throw new RuntimeException("W_ID=" + w_id + " not found!");
+         }
+         if (type == CCType.RC_TAILOR | type == CCType.RC_TAILOR_ATTR) {
+           versions[0] = rs.getLong("vid");
+         }
+       }
+     }
+   }
+ 
+   private void updateDistrict(Connection conn, int w_id, int districtID, float paymentAmount)
+           throws SQLException {
+     try (PreparedStatement payUpdateDist = this.getPreparedStatement(conn, payUpdateDistSQL)) {
+       payUpdateDist.setBigDecimal(1, BigDecimal.valueOf(paymentAmount));
+       payUpdateDist.setInt(2, w_id);
+       payUpdateDist.setInt(3, districtID);
+ 
+       int result = payUpdateDist.executeUpdate();
+ 
+       if (result == 0) {
+         throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
+       }
+     }
+   }
+ 
+   private void updateBalance(
+           Connection conn, int customerDistrictID, int customerWarehouseID, int customerID, BigDecimal amount, CCType type, long[] versions)
+           throws SQLException {
+ 
+     try (PreparedStatement payUpdateCustBal =
+                  this.getPreparedStatement(conn, payUpdateCustBalSQL)) {
+       payUpdateCustBal.setBigDecimal(1, amount);
+       payUpdateCustBal.setInt(2, customerWarehouseID);
+       payUpdateCustBal.setInt(3, customerDistrictID);
+       payUpdateCustBal.setInt(4, customerID);
+ 
+       try (ResultSet rs = payUpdateCustBal.executeQuery()) {
+         if (!rs.next()) {
+           throw new RuntimeException(
+                   "C_ID="
+                           + customerID
+                           + " C_W_ID="
+                           + customerWarehouseID
+                           + " C_D_ID="
+                           + customerDistrictID
+                           + " not found!");
+         }
+         if (type == CCType.RC_TAILOR | type == CCType.RC_TAILOR_ATTR) {
+           versions[1] = rs.getLong("vid");
+         }
+       }
+     }
+   }
+ 
+   private void setConflictC(Connection conn, int w_id, int d_id, int c_id) throws SQLException {
+     try (PreparedStatement stmtSetConfC = this.getPreparedStatement(conn, stmtUpdateConflictCSQL)) {
+       stmtSetConfC.setInt(1, w_id);
+       stmtSetConfC.setInt(2, d_id);
+       stmtSetConfC.setInt(3, c_id);
+       try (ResultSet rs = stmtSetConfC.executeQuery()) {
+         if (!rs.next()) {
+           throw new RuntimeException("C_D_ID=" + d_id + " C_ID=" + c_id + " not found!");
+         }
+       }
+     }
+   }
+ 
+   private void releaseTailorLock(int phase, long[] keys, CCType type) {
+ 
+     if (phase == 1 && type == CCType.RC_TAILOR) {
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.EX);
+     } else if (phase == 2 && type == CCType.RC_TAILOR) {
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.EX);
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.EX);
+     }
+   }
+ 
+   private void setConflictW(Connection conn, int w_id) throws SQLException {
+     try (PreparedStatement stmtSetConfW = this.getPreparedStatement(conn, stmtUpdateConflictWSQL)) {
+       stmtSetConfW.setInt(1, w_id);
+       try (ResultSet rs = stmtSetConfW.executeQuery()) {
+         if (!rs.next()) {
+           throw new RuntimeException("W_ID=" + w_id + " not found!");
+         }
+       }
+     }
+   }
+ 
+   public void doAfterCommit(long[] keys, CCType type, boolean success, long[] versions) {
+     if (!success)
+       return;
+     if (type == CCType.RC_TAILOR) {
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.EX);
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.EX);
+       // update the
+       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[1], versions[1]);
+       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], versions[0]);
+       return;
+     }
+     if (type == CCType.RC_TAILOR_ATTR) {
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.EX);
+       // update the
+       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[1], versions[1]);
+       //System.out.println("update customer Pay key:" + keys[1] + " version:" + versions[1]);
+     }
+   }
+ 
+ }
+ 

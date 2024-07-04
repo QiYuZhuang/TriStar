@@ -18,8 +18,10 @@
 package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
 import org.dbiir.tristar.benchmarks.api.Procedure;
+import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.utils.Zip;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -35,6 +37,13 @@ public abstract class TPCCProcedure extends Procedure {
       int terminalDistrictLowerID,
       int terminalDistrictUpperID,
       CCType ccType,
+      double zipfTheta,
+      ZipfianGenerator iditer,
+      long tid,
+      long[] versions,
+      long[] keys,
       TPCCWorker w)
       throws SQLException;
+
+
 }

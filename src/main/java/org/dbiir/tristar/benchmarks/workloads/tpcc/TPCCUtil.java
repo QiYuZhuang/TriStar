@@ -110,4 +110,28 @@ public class TPCCUtil {
   public static int nonUniformRandom(int A, int C, int min, int max, Random r) {
     return (((randomNumber(0, A, r) | randomNumber(min, max, r)) + C) % (max - min + 1)) + min;
   }
+
+  private static final int WAREHOUSE_ID_MASK = 0b1111; // 用于提取 warehouse ID 的掩码
+  private static final int DISTRICT_ID_MASK = 0b1111_0000; // 用于提取 district ID 的掩码
+  private static final int CUSTOMER_AND_ORDER_ID_MASK = 0b1111_1111_1111_0000_0000; // 用于提取 customer ID 的掩码
+
+  public static long createInformation(int warehouseId, int districtId, int customerandorderId) {
+    long information = 0;
+    information |= warehouseId & WAREHOUSE_ID_MASK;
+    information |= (districtId << 4) & DISTRICT_ID_MASK;
+    information |= (customerandorderId << 12) & CUSTOMER_AND_ORDER_ID_MASK;
+    return information;
+  }
+
+  public static int getWarehouseId(int information) {
+    return information & WAREHOUSE_ID_MASK;
+  }
+
+  public static int getDistrictId(int information) {
+    return (information & DISTRICT_ID_MASK) >>> 4;
+  }
+
+  public static int getCustomerId(int information) {
+    return (information & CUSTOMER_AND_ORDER_ID_MASK) >>> 12;
+  }
 }

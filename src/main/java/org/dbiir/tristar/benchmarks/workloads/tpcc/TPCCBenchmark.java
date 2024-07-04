@@ -20,20 +20,27 @@ package org.dbiir.tristar.benchmarks.workloads.tpcc;
 import org.dbiir.tristar.benchmarks.WorkloadConfiguration;
 import org.dbiir.tristar.benchmarks.api.BenchmarkModule;
 import org.dbiir.tristar.benchmarks.api.Worker;
+import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.procedures.NewOrder;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 
 public final class TPCCBenchmark extends BenchmarkModule {
   private static final Logger LOG = LoggerFactory.getLogger(TPCCBenchmark.class);
 
-  public TPCCBenchmark(WorkloadConfiguration workConf) {
+  public TPCCBenchmark(WorkloadConfiguration workConf) throws SQLException {
     super(workConf);
+    List<Connection> connectionList = new LinkedList<>();
+    makeConnections(connectionList);
+    LockTable.getInstance().initHotspot("tpcc", connectionList);
   }
 
   @Override
@@ -71,7 +78,8 @@ public final class TPCCBenchmark extends BenchmarkModule {
 
     double zipf = workConf.getZipFainTheta();
     boolean warehouseSkew = workConf.isWarehouseSkew();
-    // TODO: generate skewed warehouse
+    boolean customerSkew = workConf.isCustomerSkew();
+    ZipfianGenerator zipfgen = new ZipfianGenerator(rng(), 1, TPCCConfig.configCustPerDist, (zipf > 0 ? zipf : 0.1));
 
     int numTerminals = workConf.getTerminals();
 
@@ -82,37 +90,74 @@ public final class TPCCBenchmark extends BenchmarkModule {
     final double terminalsPerWarehouse = (double) numTerminals / numWarehouses;
     int workerId = 0;
 
-    for (int w = 0; w < numWarehouses; w++) {
-      // Compute the number of terminals in *this* warehouse
-      int lowerTerminalId = (int) (w * terminalsPerWarehouse);
-      int upperTerminalId = (int) ((w + 1) * terminalsPerWarehouse);
-      // protect against double rounding errors
-      int w_id = w + 1;
-      if (w_id == numWarehouses) {
-        upperTerminalId = numTerminals;
-      }
-      int numWarehouseTerminals = upperTerminalId - lowerTerminalId;
-
-      if (LOG.isDebugEnabled()) {
-        LOG.debug(
-            String.format(
-                "w_id %d = %d terminals [lower=%d / upper%d]",
-                w_id, numWarehouseTerminals, lowerTerminalId, upperTerminalId));
-      }
-
-      final double districtsPerTerminal =
-          TPCCConfig.configDistPerWhse / (double) numWarehouseTerminals;
-      for (int terminalId = 0; terminalId < numWarehouseTerminals; terminalId++) {
-        int lowerDistrictId = (int) (terminalId * districtsPerTerminal);
-        int upperDistrictId = (int) ((terminalId + 1) * districtsPerTerminal);
-        if (terminalId + 1 == numWarehouseTerminals) {
-          upperDistrictId = TPCCConfig.configDistPerWhse;
+    // TODO: generate skewed warehouse
+    if (warehouseSkew) {
+      ZipfianGenerator ZipfwarehouseId = new ZipfianGenerator(rng(), 1, numWarehouses, zipf);
+      // System.out.println("zipf: " + zipf);
+      for (int w = 0; w < numWarehouses; w++) {
+        int w_id = ZipfwarehouseId.nextInt();
+        int lowerTerminalId = (int) (w * terminalsPerWarehouse);
+        int upperTerminalId = (int) ((w + 1) * terminalsPerWarehouse);
+        if (w == numWarehouses -  1) {
+          upperTerminalId = numTerminals;
         }
-        lowerDistrictId += 1;
+        int numWarehouseTerminals = upperTerminalId - lowerTerminalId;
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(
+                  String.format(
+                          "w_id %d = %d terminals [lower=%d / upper%d]",
+                          w_id, numWarehouseTerminals, lowerTerminalId, upperTerminalId));
+        }
 
-        TPCCWorker terminal =
-            new TPCCWorker(this, workerId++, w_id, lowerDistrictId, upperDistrictId, numWarehouses);
-        terminals[lowerTerminalId + terminalId] = terminal;
+        final double districtsPerTerminal =
+                TPCCConfig.configDistPerWhse / (double) numWarehouseTerminals;
+        for (int terminalId = 0; terminalId < numWarehouseTerminals; terminalId++) {
+          int lowerDistrictId = (int) (terminalId * districtsPerTerminal);
+          int upperDistrictId = (int) ((terminalId + 1) * districtsPerTerminal);
+          if (terminalId + 1 == numWarehouseTerminals) {
+            upperDistrictId = TPCCConfig.configDistPerWhse;
+          }
+          lowerDistrictId += 1;
+
+          TPCCWorker terminal =
+                  new TPCCWorker(this, workerId++, w_id, lowerDistrictId, upperDistrictId, numWarehouses, zipf, zipfgen);
+          terminals[lowerTerminalId + terminalId] = terminal;
+        }
+      }
+    } else {
+      // generate uniform warehouse
+      for (int w = 0; w < numWarehouses; w++) {
+        // Compute the number of terminals in *this* warehouse
+        int lowerTerminalId = (int) (w * terminalsPerWarehouse);
+        int upperTerminalId = (int) ((w + 1) * terminalsPerWarehouse);
+        // protect against double rounding errors
+        int w_id = w + 1;
+        if (w_id == numWarehouses) {
+          upperTerminalId = numTerminals;
+        }
+        int numWarehouseTerminals = upperTerminalId - lowerTerminalId;
+
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(
+                  String.format(
+                          "w_id %d = %d terminals [lower=%d / upper%d]",
+                          w_id, numWarehouseTerminals, lowerTerminalId, upperTerminalId));
+        }
+
+        final double districtsPerTerminal =
+                TPCCConfig.configDistPerWhse / (double) numWarehouseTerminals;
+        for (int terminalId = 0; terminalId < numWarehouseTerminals; terminalId++) {
+          int lowerDistrictId = (int) (terminalId * districtsPerTerminal);
+          int upperDistrictId = (int) ((terminalId + 1) * districtsPerTerminal);
+          if (terminalId + 1 == numWarehouseTerminals) {
+            upperDistrictId = TPCCConfig.configDistPerWhse;
+          }
+          lowerDistrictId += 1;
+
+          TPCCWorker terminal =
+                  new TPCCWorker(this, workerId++, w_id, lowerDistrictId, upperDistrictId, numWarehouses, zipf, zipfgen);
+          terminals[lowerTerminalId + terminalId] = terminal;
+        }
       }
     }
 

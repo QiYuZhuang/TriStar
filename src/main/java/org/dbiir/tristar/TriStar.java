@@ -143,7 +143,7 @@ public class TriStar {
         wrkld.setBenchmarkName(targetBenchmark);
         wrkld.setXmlConfig(xmlConfig);
 
-        if (targetBenchmark.contains("smallbank")) {
+        if (targetBenchmark.contains("smallbank") | targetBenchmark.contains("tpcc")) {
             // load smallbank variables
             zipFain_ = zipFain_ > 0 ? zipFain_ : xmlConfig.getDouble("zipf", -1.0);
             hotspotNum_ = hotspotNum_ > 0 ? hotspotNum_ : xmlConfig.getInt("hotspotNumber", -1);

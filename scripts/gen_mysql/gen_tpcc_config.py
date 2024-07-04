@@ -16,26 +16,31 @@ transactionType = [
 ]
 
 cc_map = {
+    "SI": "SI",
+    "RC_ELT_ATTR": "RC+E_ATTR",
     "SERIALIZABLE": "SER",
     "SI_ELT": "SI+E",
     "RC_ELT": "RC+E",
     "SI_FOR_UPDATE": "SI+P",
     "RC_FOR_UPDATE": "RC+P",
+    "RC_FOR_UPDATE_ATTR": "RC+P_ATTR",
     "SI_TAILOR": "SI+TV",
     "RC_TAILOR": "RC+TV",
+    "RC_TAILOR_ATTR": "RC+TV_ATTR",
     "RC_TAILOR_LOCK": "RC+TL",
     "DYNAMIC": "DYNAMIC"
 }
 
 
-def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 16, rate="", dir="../config", casename=""):
+def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 32, rate="", dir="../../config", casename=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
-    ElementTree.SubElement(root, 'type').text = "MYSQL"
-    ElementTree.SubElement(root, 'driver').text = "com.mysql.cj.jdbc.Driver"
-    ElementTree.SubElement(root, "url").text = ("jdbc:mysql://localhost:3306/tpcc?allowMultiQueries=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=True&sslMode=DISABLED")
-    ElementTree.SubElement(root, "username").text = "shardingsphere"
+    ElementTree.SubElement(root, 'type').text = "POSTGRES"
+    ElementTree.SubElement(root, 'driver').text = "org.postgresql.Driver"
+    ElementTree.SubElement(root, "url").text = ("jdbc:postgresql://localhost:5432/tpcc?sslmode=disable&amp"
+                                                ";ApplicationName=tpcc&amp;reWriteBatchedInserts=true")
+    ElementTree.SubElement(root, "username").text = "postgres"
     ElementTree.SubElement(root, "password").text = "Ss123!@#"
     ElementTree.SubElement(root, "isolation").text = "TRANSACTION_SERIALIZABLE"
     ElementTree.SubElement(root, "batchsize").text = "128"
@@ -48,6 +53,8 @@ def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.
         ElementTree.SubElement(root, "warehouseSkew").text = "true"
     elif casename == "customer":
         ElementTree.SubElement(root, "customerSkew").text = "true"
+    if zipf > 0:
+        ElementTree.SubElement(root, "zipf").text = str(zipf)
 
     works = ElementTree.SubElement(root, "works")
     if int(len(rate)) == int(0):
@@ -97,10 +104,10 @@ def generate_transation(root: ElementTree):
 
 
 def tpcc_skew_warehouse(terminal=128):
-    dir_name = "../../config/tpcc/skew_warehouse-" + str(terminal) + "/mysql"
+    dir_name = "../../config/tpcc/skew_warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR", "RC_TAILOR_LOCK"]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR", "RC_ELT_ATTR", "RC_FOR_UPDATE_ATTR", "RC_TAILOR_ATTR"]
     skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
@@ -110,44 +117,41 @@ def tpcc_skew_warehouse(terminal=128):
 
 
 def tpcc_skew_customer(terminal=128):
-    dir_name = "../../config/tpcc/skew_custom-" + str(terminal) + "/mysql"
+    dir_name = "../../config/tpcc/skew_custom-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    # cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
-    cc = ["RC_FOR_UPDATE"]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR", "RC_ELT_ATTR", "RC_FOR_UPDATE_ATTR", "RC_TAILOR_ATTR"]
     skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
+    skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
 
     experiments = product(cc, [terminal], skews)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight, exp[2], dir=dir_name, casename="customer")
+        generate_mysql_tpcc_config(exp[0], exp[1], weight, exp[2], dir=dir_name, casename="customer", zipf=skew_list)
 
 
 def tpcc_warehouse(terminal=128):
-    dir_name = "../../config/tpcc/warehouse-" + str(terminal) + "/mysql"
+    dir_name = "../../config/tpcc/warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    #cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
-    cc = ["RC_FOR_UPDATE"]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     weight = [45, 43, 4, 4, 4]
-    wn = [1, 2, 4, 8, 16]
+    wn = [1, 2, 4, 8, 16, 32]
+    skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
 
     experiments = product(cc, [terminal], wn)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name)
+        generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name, zipf=skew_list)
 
 
 def tpcc_scalability():
-    dir_name = "../../config/tpcc/scalability/mysql"
+    dir_name = "../../config/tpcc/scalability/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    #cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
-    cc = ["RC_FOR_UPDATE"]
-    # terminals = [4, 8, 16, 32, 64, 128, 256, 512]
-    terminals = [128]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    terminals = [4, 8, 16, 32, 64, 128, 256, 512]
     weight = [45, 43, 4, 4, 4]
-    #wn = [1, 2, 4, 8, 16]
-    wn = [16]
+    wn = [1, 2, 4, 8, 16, 32]
 
     experiments = product(cc, terminals, wn)
     for exp in experiments:
@@ -155,9 +159,10 @@ def tpcc_scalability():
 
 
 if __name__ == '__main__':
-    if not os.path.exists("../config"):
-        os.mkdir("../config")
+    if not os.path.exists("../../config"):
+        os.mkdir("../../config")
 
-    scaleFactor = 16
+    scaleFactor = 32
 
-    tpcc_scalability()
+    tpcc_skew_warehouse()
+    tpcc_skew_customer()
