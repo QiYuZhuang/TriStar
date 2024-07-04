@@ -25,19 +25,20 @@
  ***************************************************************************/
 package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 
-import org.dbiir.tristar.benchmarks.api.Procedure;
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.LockTable;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.SortedMap;
-import java.util.concurrent.locks.Lock;
+
+import org.dbiir.tristar.adapter.TransactionCollector;
+import org.dbiir.tristar.benchmarks.api.Procedure;
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.FlowRate;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 /**
  * DepositChecking Procedure Original version by Mohammad Alomari and Michael Cahill
@@ -59,7 +60,7 @@ public class DepositChecking extends Procedure {
               + " WHERE custid = ?"
               + " RETURNING tid");
 
-  public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
+  public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
     // First convert the custName to the custId
     long custId;
     if (type == CCType.RC_ELT) {
@@ -87,6 +88,18 @@ public class DepositChecking extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
     }
+    if (type == CCType.RC_TAILOR) {
+      // flow rate control
+      int count = 0;
+      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId)) {
+        if (count > 10) {
+          String msg = String.format("Too much concurrent update for customer #%d, checking, DepositChecking", custId);
+          throw new SQLException(msg, "500");
+        }
+        count++;
+      }
+      checkout[0]++;
+    }
     try (PreparedStatement stmt1 =
         this.getPreparedStatement(conn, UpdateCheckingBalance, amount, custId)) {
       try (ResultSet res = stmt1.executeQuery()) {
@@ -95,21 +108,48 @@ public class DepositChecking extends Procedure {
         }
         versions[0] = res.getLong(1);
       }
+    } catch (SQLException ex) {
+      if (type == CCType.RC_TAILOR) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, false);
+        checkout[0]--;
+      }
+      throw ex;
     }
+    if (type == CCType.RC_TAILOR && versions[0] < 0)
+      System.out.println("custome error 4");
     if (type == CCType.RC_TAILOR) {
+      LOG.debug("DepositChecking #" + tid + " acquire EX validation lock - checking #"+custId);
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId, LockType.EX, type);
+      LOG.debug("DepositChecking #" + tid + " acquired EX validation lock - checking #"+custId);
     }
   }
 
-  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
-    if (!success)
+  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, int[] checkout) {
+    if (TransactionCollector.getInstance().isSample()) {
+      TransactionCollector.getInstance().addTransactionSample(4,
+              new RWRecord[]{},
+              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId)},
+              success?1:0);
+    }
+
+    if (!success) {
+      if (type == CCType.RC_TAILOR && versions[0] >= 0) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, true);
+        checkout[0]--;
+      }
       return;
+    }
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid);
     }
     if (type == CCType.RC_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId, LockType.EX);
+      LOG.debug("DepositChecking #" + tid + " release EX validation lock - checking #"+custId);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId, versions[0]);
+      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, true);
+      checkout[0]--;
+      if (checkout[0] != 0)
+        System.out.println("DC Transaction #" + tid + " checkout: " + checkout[0]);
     }
   }
 }

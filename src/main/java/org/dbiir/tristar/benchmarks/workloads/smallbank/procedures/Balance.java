@@ -25,18 +25,19 @@
  ***************************************************************************/
 package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 
-import org.dbiir.tristar.benchmarks.api.Procedure;
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.LockTable;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.concurrent.locks.Lock;
+
+import org.dbiir.tristar.adapter.TransactionCollector;
+import org.dbiir.tristar.benchmarks.api.Procedure;
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 public class Balance extends Procedure {
   public final SQLStmt writeConflict =
@@ -144,36 +145,42 @@ public class Balance extends Procedure {
       }
     }
 
+    LOG.debug("Balance #" + tid + " enter validation");
     if (type == CCType.RC_TAILOR) {
+      LOG.debug("Balance #" + tid + " acquire SH validation lock - savings #"+custId);
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId, LockType.SH, type);
+      LOG.debug("Balance #" + tid + " acquired SH validation lock - savings #"+custId);
       int validationPhase = 1;
       try {
+        LOG.debug("Balance #" + tid + " acquire SH validation lock - checking #"+custId);
         LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId, LockType.SH, type);
+        LOG.debug("Balance #" + tid + " acquired SH validation lock - checking #"+custId);
         validationPhase = 2;
       } catch (SQLException ex) {
-        releaseTailorValidationLock(validationPhase, custId);
+        releaseTailorValidationLock(validationPhase, custId, tid);
         throw ex;
       }
 
+      LOG.debug("Balance #" + tid + " get validation locks");
       long v = LockTable.getInstance().getHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId);
       if (v >= 0) {
         if (v != versions[0]) {
           String msg = String.format("Validation failed for customer #%d, savings, Balance", custId);
-          releaseTailorValidationLock(validationPhase, custId);
+          releaseTailorValidationLock(validationPhase, custId, tid);
           throw new SQLException(msg, "500");
         }
       } else {
         try (PreparedStatement balStmt0 = this.getPreparedStatement(conn, GetSavingsBalance, custId)) {
           try (ResultSet balRes0 = balStmt0.executeQuery()) {
             if (!balRes0.next()) {
-              releaseTailorValidationLock(validationPhase, custId);
+              releaseTailorValidationLock(validationPhase, custId, tid);
               String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId);
               throw new UserAbortException(msg);
             }
             v = balRes0.getLong(2);
             LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId, v);
             if (v != versions[0]) {
-              releaseTailorValidationLock(validationPhase, custId);
+              releaseTailorValidationLock(validationPhase, custId, tid);
               String msg = String.format("Validation failed for customer #%d, savings, Balance", custId);
               throw new SQLException(msg, "500");
             }
@@ -184,7 +191,7 @@ public class Balance extends Procedure {
       v = LockTable.getInstance().getHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId);
       if (v >= 0) {
        if (v != versions[1]) {
-         releaseTailorValidationLock(validationPhase, custId);
+         releaseTailorValidationLock(validationPhase, custId, tid);
          String msg = String.format("Validation failed for customer #%d, checking, Balance", custId);
          throw new SQLException(msg, "500");
        }
@@ -192,14 +199,14 @@ public class Balance extends Procedure {
         try (PreparedStatement balStmt1 = this.getPreparedStatement(conn, GetCheckingBalance, custId)) {
           try (ResultSet balRes1 = balStmt1.executeQuery()) {
             if (!balRes1.next()) {
-              releaseTailorValidationLock(validationPhase, custId);
+              releaseTailorValidationLock(validationPhase, custId, tid);
               String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
               throw new UserAbortException(msg);
             }
             v = balRes1.getLong(2);
             LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId, v);
             if (v != versions[1]) {
-              releaseTailorValidationLock(validationPhase, custId);
+              releaseTailorValidationLock(validationPhase, custId, tid);
               String msg = String.format("Validation failed for customer #%d, checking, Balance", custId);
               throw new SQLException(msg, "500");
             }
@@ -220,16 +227,27 @@ public class Balance extends Procedure {
     }
   }
 
-  private void releaseTailorValidationLock(int phase, long custId) {
+  private void releaseTailorValidationLock(int phase, long custId, long tid) {
     if (phase == 1) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId, LockType.SH);
+      LOG.debug("Balance #" + tid + " release SH validation lock - savings #"+custId);
     } else if (phase == 2) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId, LockType.SH);
+      LOG.debug("Balance #" + tid + " release SH validation lock - checking #"+custId);
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId, LockType.SH);
+      LOG.debug("Balance #" + tid + " release SH validation lock - savings #"+custId);
     }
   }
 
   public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
+    // transaction sample
+    if (TransactionCollector.getInstance().isSample()) {
+      TransactionCollector.getInstance().addTransactionSample(2,
+              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId),
+                            new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId)},
+              new RWRecord[]{}, success?1:0);
+    }
+
     if (!success)
       return;
 
@@ -240,7 +258,9 @@ public class Balance extends Procedure {
     if (type == CCType.RC_TAILOR) {
       // release validation lock on savings and checking
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId, LockType.SH);
+      LOG.debug("Balance #" + tid + " release SH validation lock - checking #"+custId);
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId, LockType.SH);
+      LOG.debug("Balance #" + tid + " release SH validation lock - savings #"+custId);
     }
   }
 }

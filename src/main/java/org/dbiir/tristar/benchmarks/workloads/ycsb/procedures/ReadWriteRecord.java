@@ -1,11 +1,5 @@
 package org.dbiir.tristar.benchmarks.workloads.ycsb.procedures;
 
-import org.dbiir.tristar.benchmarks.api.Procedure;
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.LockTable;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -13,7 +7,19 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Random;
 
+import org.dbiir.tristar.adapter.TAdapter;
+import org.dbiir.tristar.adapter.TransactionCollector;
+import org.dbiir.tristar.benchmarks.api.Procedure;
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
+
+import org.dbiir.tristar.benchmarks.api.Worker;
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 public class ReadWriteRecord extends Procedure {
     public final SQLStmt readStmt = new SQLStmt(
@@ -44,12 +50,17 @@ public class ReadWriteRecord extends Procedure {
      * @param ratio1: <read transaction : write transaction> (read transaction represents read-only)
      * @param ratio2: <read operation : write operation> (in write transaction)
      */
-    public void run(Connection conn, int[] keyname, String[][] vals, double ratio1, double ratio2, long tid, long[] versions, CCType type) throws SQLException {
+    public void run(Worker worker, Connection conn, int[] keyname, String[][] vals, double ratio1, double ratio2, long tid, long[] versions, CCType type) throws SQLException {
         /*
          * if ratio1 = 0, it is a read-only transaction;
          * if ratio2 = 0, the transaction's operations are read operation;
          */
+        int[] sortedKeyname = new int[keyname.length];
         Arrays.sort(keyname);
+        for (int i = 0; i < keyname.length; i++) {
+            sortedKeyname[i] = keyname[keyname.length - i - 1];
+        }
+
         int len = keyname.length;
         StringBuilder finalStmt = new StringBuilder();
 
@@ -60,20 +71,32 @@ public class ReadWriteRecord extends Procedure {
             if (rand1 >= ratio1 || rand2 >= ratio2) {
                 // read operation
                 ops[i] = 1;
+                // if (type == CCType.RC_FOR_UPDATE || type == CCType.SI_FOR_UPDATE)
+                //     finalStmt.append(selectForUpdate.getSQL());
+                // else
+                //     finalStmt.append(readStmt.getSQL());
+            } else {
+                // write operation
+                ops[i] = 2;
+                // finalStmt.append(updateStmt.getSQL());
+            }
+        }
+        Arrays.sort(ops);
+
+        for (int i = 0; i < len; i++) {
+            if (ops[i] == 1) {
                 if (type == CCType.RC_FOR_UPDATE || type == CCType.SI_FOR_UPDATE)
                     finalStmt.append(selectForUpdate.getSQL());
                 else
                     finalStmt.append(readStmt.getSQL());
-            } else {
-                // write operation
-                ops[i] = 2;
+            } else if (ops[i] == 2) {
                 finalStmt.append(updateStmt.getSQL());
             }
         }
 
         if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
             try {
-                doConflictOperations(conn, keyname);
+                doConflictOperations(conn, sortedKeyname);
             } catch (SQLException ex) {
                 throw ex;
             }
@@ -84,12 +107,12 @@ public class ReadWriteRecord extends Procedure {
             for (int i = 0; i < len; i++) {
                 try {
                     if (ops[i] == 1)
-                        LockTable.getInstance().tryLock(TABLE_NAME, keyname[i], tid, LockType.SH);
+                        LockTable.getInstance().tryLock(TABLE_NAME, sortedKeyname[i], tid, LockType.SH);
                     else
-                        LockTable.getInstance().tryLock(TABLE_NAME, keyname[i], tid, LockType.EX);
+                        LockTable.getInstance().tryLock(TABLE_NAME, sortedKeyname[i], tid, LockType.EX);
                     phase++;
                 } catch (SQLException ex) {
-                    releaseTailorCCLock(phase, keyname, tid);
+                    releaseTailorCCLock(phase, sortedKeyname, tid);
                     throw ex;
                 }
             }
@@ -101,12 +124,12 @@ public class ReadWriteRecord extends Procedure {
             int idx = 1;
             for (int i = 0; i < len; i++) {
                 if (ops[i] == 1) {
-                    stmt.setInt(idx++, keyname[i]);
+                    stmt.setInt(idx++, sortedKeyname[i]);
                 } else if (ops[i] == 2) {
                     for (int j = 0; j < vals[i].length; j++) {
                         stmt.setString(idx++, vals[i][j]);
                     }
-                    stmt.setInt(idx++, keyname[i]);
+                    stmt.setInt(idx++, sortedKeyname[i]);
                 }
             }
 
@@ -125,21 +148,25 @@ public class ReadWriteRecord extends Procedure {
                 resultsAvailable = stmt.getMoreResults();
             }
         } catch (SQLException ex) {
-            releaseTailorCCLock(phase, keyname, tid);
+            releaseTailorCCLock(phase, sortedKeyname, tid);
             throw ex;
         }
 
         if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
             int validationPhase = 0;
+            while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+                // set current thread ready, block for all thread to ready
+                worker.setSwitchPhaseReady(true);
+            }
             for (int i = 0; i < len; i++) {
                 try {
                     if (ops[i] == 1)
-                        LockTable.getInstance().tryValidationLock(TABLE_NAME, tid, keyname[i], LockType.SH, type);
+                        LockTable.getInstance().tryValidationLock(TABLE_NAME, tid, sortedKeyname[i], LockType.SH, type);
                     else
-                        LockTable.getInstance().tryValidationLock(TABLE_NAME, tid, keyname[i], LockType.EX, type);
+                        LockTable.getInstance().tryValidationLock(TABLE_NAME, tid, sortedKeyname[i], LockType.EX, type);
                     validationPhase++;
                 } catch (SQLException ex) {
-                    releaseTailorValidationLock(validationPhase, keyname);
+                    releaseTailorValidationLock(validationPhase, sortedKeyname);
                     throw ex;
                 }
             }
@@ -166,6 +193,26 @@ public class ReadWriteRecord extends Procedure {
     }
 
     public void doAfterCommit(int[] keynames, CCType type, boolean success, long[] versions, long tid) {
+        if (TransactionCollector.getInstance().isSample()) {
+            int rset_idx = 0;
+            int wset_idx = 0;
+            int write_cnt = 0;
+            for (int i = 0; i < ops.length; i++) {
+                if (ops[i] == 2) write_cnt++;
+            }
+
+            RWRecord[] reads = new RWRecord[ops.length - write_cnt];
+//                    {new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), (int) custId)};
+            RWRecord[] writes = new RWRecord[write_cnt];
+            for (int i = 0; i < ops.length; i++) {
+                if (ops[i] == 1) {
+                    reads[rset_idx++] = new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
+                } else {
+                    writes[wset_idx++] = new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
+                }
+            }
+            TransactionCollector.getInstance().addTransactionSample(1, reads, writes, success?1:0);
+        }
         if (!success)
             return;
         if (type == CCType.RC_TAILOR_LOCK) {

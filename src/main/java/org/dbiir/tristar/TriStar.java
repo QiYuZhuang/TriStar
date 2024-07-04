@@ -1,7 +1,22 @@
 package org.dbiir.tristar;
 
-import lombok.Setter;
-import org.apache.commons.cli.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.commons.configuration2.HierarchicalConfiguration;
 import org.apache.commons.configuration2.XMLConfiguration;
 import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
@@ -11,31 +26,35 @@ import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.configuration2.tree.ImmutableNode;
 import org.apache.commons.configuration2.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.log4j.Logger;
+import org.dbiir.tristar.adapter.Flusher;
 import org.dbiir.tristar.benchmarks.Phase;
 import org.dbiir.tristar.benchmarks.Results;
 import org.dbiir.tristar.benchmarks.ThreadBench;
 import org.dbiir.tristar.benchmarks.WorkloadConfiguration;
 import org.dbiir.tristar.benchmarks.api.BenchmarkModule;
 import org.dbiir.tristar.benchmarks.api.TransactionType;
-import org.apache.log4j.Logger;
 import org.dbiir.tristar.benchmarks.api.TransactionTypes;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.types.DatabaseType;
 import org.dbiir.tristar.benchmarks.types.State;
-import org.dbiir.tristar.benchmarks.util.*;
-import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.benchmarks.util.ClassUtil;
+import org.dbiir.tristar.benchmarks.util.FileUtil;
+import org.dbiir.tristar.benchmarks.util.JSONSerializable;
+import org.dbiir.tristar.benchmarks.util.JSONUtil;
+import org.dbiir.tristar.benchmarks.util.ResultWriter;
+import org.dbiir.tristar.benchmarks.util.StringUtil;
+import org.dbiir.tristar.benchmarks.util.TimeUtil;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.util.*;
-import java.util.stream.Collectors;
+import lombok.Setter;
+import org.dbiir.tristar.common.CCType;
 
 public class TriStar {
     private static final Logger logger = Logger.getLogger(TriStar.class);
     private static final String RATE_DISABLED = "disabled";
     private static final String RATE_UNLIMITED = "unlimited";
     private static final String SINGLE_LINE = StringUtil.repeat("=", 70);
+    private static Thread flushThread;
 
     /* variable and set functions for test */
     @Setter
@@ -104,7 +123,9 @@ public class TriStar {
         // Execute Workload
         if (isBooleanOptionSet(argsLine, "execute")) {
             try {
+                createFlushThread(argsLine, wrkld.getConcurrencyControlType());
                 Results r = runWorkload(benchList, intervalMonitor);
+                finishFlushThread();
                 writeOutputs(r, activeTXTypes, argsLine, xmlConfig);
                 writeHistograms(r);
 
@@ -169,7 +190,7 @@ public class TriStar {
         wrkld.setMaxRetries(xmlConfig.getInt("retries", 3));
         wrkld.setNewConnectionPerTxn(xmlConfig.getBoolean("newConnectionPerTxn", false));
         wrkld.setReconnectOnConnectionFailure(
-                xmlConfig.getBoolean("reconnectOnConnectionFailure", false));
+                xmlConfig.getBoolean("reconnectOnConnectionFailure", true));
         if (xmlConfig.containsKey("warehouseSkew")) {
             wrkld.setWarehouseSkew(xmlConfig.getBoolean("warehouseSkew", false));
         }
@@ -435,6 +456,7 @@ public class TriStar {
                 "Base directory for the result files, default is current directory");
         options.addOption(null, "dialects-export", true, "Export benchmark SQL to a dialects file");
         options.addOption("jh", "json-histograms", true, "Export histograms to JSON file");
+        options.addOption("p", "phase", true, "Online predict or offline training");
         return options;
     }
 
@@ -514,6 +536,37 @@ public class TriStar {
         return JSONUtil.toJSONString(map);
     }
 
+    private static void createFlushThread(CommandLine argsLine, CCType ccType) {
+        String metaDirectory = "metas";
+        boolean onlinePredict = false;
+        if (argsLine.hasOption("d")) {
+            metaDirectory = argsLine.getOptionValue("d").trim();
+            if (metaDirectory.contains("results")) {
+                metaDirectory = metaDirectory.replace("results", "metas");
+                int lastIndex = metaDirectory.lastIndexOf("_");
+
+                if (lastIndex != -1) {
+                    metaDirectory = metaDirectory.substring(0, lastIndex - 1);
+                    metaDirectory += "/";
+                }
+            }
+        }
+
+        if (argsLine.hasOption("p")) {
+            if (argsLine.getOptionValue("p").contains("online")) {
+                onlinePredict = true;
+            }
+        }
+
+        FileUtil.makeDirIfNotExists(metaDirectory);
+        flushThread = new Thread(new Flusher(argsLine.getOptionValue("b").trim(), metaDirectory, ccType,onlinePredict));
+        flushThread.start();
+    }
+
+    private static void finishFlushThread() {
+        flushThread.interrupt();
+    }
+
     private static void writeOutputs(
             Results r,
             List<TransactionType> activeTXTypes,
@@ -523,9 +576,19 @@ public class TriStar {
 
         // If an output directory is used, store the information
         String outputDirectory = "results";
+        String metaDirectory = "metas";
 
         if (argsLine.hasOption("d")) {
             outputDirectory = argsLine.getOptionValue("d").trim();
+            if (outputDirectory.contains("results")) {
+                metaDirectory = outputDirectory.replace("results", "metas");
+                int lastIndex = metaDirectory.lastIndexOf("_");
+
+                if (lastIndex != -1) {
+                    metaDirectory = metaDirectory.substring(0, lastIndex - 1);
+                    metaDirectory += "/";
+                }
+            }
         }
 
         FileUtil.makeDirIfNotExists(outputDirectory);
@@ -552,6 +615,10 @@ public class TriStar {
         String summaryFileName = baseFileName + ".summary.json";
         try (PrintStream ps = new PrintStream(FileUtil.joinPath(outputDirectory, summaryFileName))) {
             logger.info("Output summary data into file: %s".formatted(summaryFileName));
+            rw.writeSummary(ps);
+        }
+        try (PrintStream ps = new PrintStream(FileUtil.joinPath(metaDirectory, summaryFileName))) {
+            logger.info("Output {meta directory} summary data into file: %s".formatted(summaryFileName));
             rw.writeSummary(ps);
         }
 

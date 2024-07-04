@@ -18,6 +18,8 @@
 package org.dbiir.tristar.benchmarks.workloads.ycsb;
 
 
+import org.dbiir.tristar.adapter.Adapter;
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.TransactionType;
 import org.dbiir.tristar.benchmarks.api.Worker;
@@ -123,10 +125,13 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
 
   @Override
   protected void executeAfterWork(TransactionType txnType, boolean success) throws Procedure.UserAbortException, SQLException {
+    if (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+      switchPhaseReady = true;
+    }
     Class<? extends Procedure> procClass = txnType.getProcedureClass();
     if (procClass.equals(ReadWriteRecord.class)) {
       // release validation locks if needs
-      this.procReadWriteRecord.doAfterCommit(keynames, getBenchmark().getCCType(), success, versionBuffer, tid);
+      this.procReadWriteRecord.doAfterCommit(keynames, TAdapter.getInstance().getCCType(), success, versionBuffer, tid);
     }
 
   }
@@ -184,7 +189,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       keynames[i] = keyname;
     }
 
-    this.procReadWriteRecord.run(conn, keynames, fixParams, ratio1, ratio2, tid, versionBuffer, getBenchmark().getCCType());
+    this.procReadWriteRecord.run(this, conn, keynames, fixParams, ratio1, ratio2, tid, versionBuffer, TAdapter.getInstance().getCCType());
   }
 
   private void buildParameters() {

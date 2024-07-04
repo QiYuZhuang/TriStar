@@ -109,8 +109,10 @@ def sb_scalability():
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     terminals = [4, 8, 16, 32, 64, 128, 256, 512]
+    # terminals = [128]
     # , "RC_TAILOR_LOCK", "DYNAMIC"
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
+    cc = ["SERIALIZABLE", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     # weight = list(default_weight_by_dis_ration(dis_ratio))
     weight = [20, 20, 20, 0, 20, 20]
 
@@ -123,7 +125,9 @@ def sb_hotspot(terminal=128):
     dir_name = "../config/smallbank/hotspot-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
+    # cc = ["RC_TAILOR", "SI_TAILOR"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+
     hsn_list = [10, 100, 1000]
     hsp_list = [0.1, 0.3, 0.5, 0.7, 0.9]
     weight = [20, 20, 20, 0, 20, 20]
@@ -137,7 +141,9 @@ def sb_zip_fain(terminal=128):
     dir_name = "../config/smallbank/skew-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
+    # cc = ["RC_TAILOR"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    # skew_list = [0.7, 1.1]
     skew_list = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [20, 20, 20, 0, 20, 20]
 
@@ -150,8 +156,8 @@ def sb_bal_ratio(terminal=128):
     dir_name = "../config/smallbank/bal_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
-    skew_list = [0.1, 0.7, 1.3]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    skew_list = [0.3, 0.7, 1.1]
     # weights = [[20, 20, 20, 0, 20, 20], [15, 40, 15, 0, 15, 15], [10, 60, 10, 0, 10, 10], [5, 80, 5, 0, 5, 5],
     #            [0, 90, 0, 0, 0, 0]]
     weights = [[22.5, 10, 22.5, 0, 22.5, 22.5], [17.5, 30, 17.5, 0, 17.5, 17.5], [12.5, 50, 12.5, 0, 12.5, 12.5], [7.5, 70, 7.5, 0, 7.5, 7.5],
@@ -166,8 +172,9 @@ def sb_wc_ratio(terminal=128):
     dir_name = "../config/smallbank/wc_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
-    skew_list = [0.1, 0.7, 1.3]
+    cc = ["SERIALIZABLE", "RC_FOR_UPDATE", "SI_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    skew_list = [0.3, 0.7, 1.1]
     # weights = [[20, 20, 20, 0, 20, 20], [15, 15, 15, 0, 15, 40], [10, 10, 10, 0, 10, 60], [5, 5, 5, 0, 5, 80],
     #            [0, 0, 0, 0, 0, 100]]
     weights = [[22.5, 22.5, 22.5, 0, 22.5, 10], [17.5, 17.5, 17.5, 0, 17.5, 30], [12.5, 12.5, 12.5, 0, 12.5, 50], [7.5, 7.5, 7.5, 0, 7.5, 70],
@@ -182,7 +189,7 @@ def sb_rate(terminal=128):
     dir_name = "../config/smallbank/rate-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     hsn_list = [10, 100, 1000]
     hsp_list = [0.5]
     rates = [5000, 10000, 15000, "unlimited"]
@@ -198,7 +205,7 @@ def sb_random(terminal=128, cnt=80):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
+    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
     for i in range(cnt):
         rf1, rf2 = random.uniform(0, 1), random.uniform(0, 1)
         skew = random.uniform(0.1, 1.3)
@@ -241,9 +248,9 @@ if __name__ == '__main__':
     sb_scalability()
     warmupTime = 20
     execTime = 60
-    sb_hotspot(128)
+    sb_hotspot(256)
     sb_zip_fain(128)
-    sb_bal_ratio(128)
-    sb_wc_ratio(128)
-    sb_rate(128)
+    sb_bal_ratio(256)
+    sb_wc_ratio(256)
+    # sb_rate(128)
 

@@ -17,6 +17,7 @@
 
 package org.dbiir.tristar.benchmarks.api;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.WorkloadConfiguration;
 import org.dbiir.tristar.benchmarks.catalog.AbstractCatalog;
 import org.dbiir.tristar.benchmarks.types.DatabaseType;
@@ -68,6 +69,7 @@ public abstract class BenchmarkModule {
     this.dialects = new StatementDialects(workConf);
     // setClassLoader();
     this.classLoader = ClassLoader.getSystemClassLoader();
+    TAdapter.getInstance().setBenchmark(this);
   }
 
   /**
@@ -198,7 +200,9 @@ public abstract class BenchmarkModule {
   }
 
   public final List<Worker<? extends BenchmarkModule>> makeWorkers() throws IOException {
-    return (this.makeWorkersImpl());
+    List<Worker<? extends BenchmarkModule>> workers = this.makeWorkersImpl();
+    TAdapter.getInstance().setWorkers(workers);
+    return workers;
   }
 
   public final void refreshCatalog() throws SQLException {

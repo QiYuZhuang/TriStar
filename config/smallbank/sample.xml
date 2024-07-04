@@ -30,8 +30,8 @@
     <terminals>32</terminals>
     <works>
         <work>
-            <warmup>10</warmup>
-            <time>60</time>
+            <warmup>5</warmup>
+            <time>15</time>
             <rate>unlimited</rate>
             <weights>20,20,20,0,20,20</weights>
 <!--            <weights>0,0,0,0,0,100</weights>-->

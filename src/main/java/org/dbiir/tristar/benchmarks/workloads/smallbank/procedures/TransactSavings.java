@@ -25,18 +25,20 @@
  ***************************************************************************/
 package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 
-import org.dbiir.tristar.benchmarks.api.Procedure;
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.LockTable;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.concurrent.locks.Lock;
+
+import org.dbiir.tristar.adapter.TransactionCollector;
+import org.dbiir.tristar.benchmarks.api.Procedure;
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.FlowRate;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 /**
  * TransactSavings Procedure Original version by Mohammad Alomari and Michael Cahill
@@ -64,7 +66,7 @@ public class TransactSavings extends Procedure {
               + " WHERE custid = ? "
               + " RETURNING tid");
 
-  public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
+  public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
     // First convert the custName to the acctId
     long custId;
 
@@ -122,6 +124,23 @@ public class TransactSavings extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid, LockType.EX);
     }
+    if (type == CCType.RC_TAILOR) {
+      // flow rate control
+      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId)) {
+        // System.out.println("TS 127 custId: " + custId);
+      }
+      // System.out.println("TransactSavings transaction #" + tid + " acquire savings #" + custId);
+      checkout[0]++;
+    }
+    if (type == CCType.SI_TAILOR) {
+      if (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId, true)) {
+        String msg = String.format("concurrent update, TS", custId);
+        throw new SQLException(msg, "500");
+      } else {
+        checkout[0]++;
+      }
+    }
+
     try (PreparedStatement stmt =
         this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
       // TODO: return the savings version for validation
@@ -131,23 +150,50 @@ public class TransactSavings extends Procedure {
           throw new UserAbortException(msg);
         }
         versions[0] = res.getLong(1);
+      } 
+    } catch (SQLException ex) {
+      if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, false);
+        checkout[0]--;
       }
+      throw ex;
     }
 
+    if (type == CCType.RC_TAILOR && versions[0] < 0)
+      System.out.println("custome error 5");
+
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
+      LOG.debug("TransactSavings #" + tid + " acquire EX validation lock - checking #"+custId);
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId, LockType.EX, type);
+      LOG.debug("TransactSavings #" + tid + " acquired EX validation lock - checking #"+custId);
     }
   }
 
-  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
-    if (!success)
+  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, int[] checkout) {
+    if (TransactionCollector.getInstance().isSample()) {
+      TransactionCollector.getInstance().addTransactionSample(8,
+              new RWRecord[]{},
+              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId)},
+              success?1:0);
+    }
+    if (!success) {
+      if ((type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) && versions[0] >= 0) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, true);
+        checkout[0]--;
+      }
       return;
+    }
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid);
     }
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId, LockType.EX);
+      LOG.debug("TransactSavings #" + tid + " release EX validation lock - savings #"+custId);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId, versions[0]);
+      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, true);
+      checkout[0]--;
+      if (checkout[0] != 0)
+        System.out.println("TS Transaction #" + tid + " checkout: " + checkout[0]);
     }
   }
 }

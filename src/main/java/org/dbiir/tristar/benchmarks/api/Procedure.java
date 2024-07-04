@@ -18,11 +18,6 @@
 package org.dbiir.tristar.benchmarks.api;
 
 
-import org.dbiir.tristar.benchmarks.jdbc.AutoIncrementPreparedStatement;
-import org.dbiir.tristar.benchmarks.types.DatabaseType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.sql.Connection;
@@ -33,8 +28,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.dbiir.tristar.benchmarks.jdbc.AutoIncrementPreparedStatement;
+import org.dbiir.tristar.benchmarks.types.DatabaseType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public abstract class Procedure {
-  private static final Logger LOG = LoggerFactory.getLogger(Procedure.class);
+  protected static final Logger LOG = LoggerFactory.getLogger(Procedure.class);
 
   private final String procName;
   private DatabaseType dbType;

@@ -1,11 +1,5 @@
 package org.dbiir.tristar.transaction.concurrency;
 
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
-import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockType;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -16,6 +10,12 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
 
 public class LockTable {
     private static final LockTable INSTANCE;
@@ -48,7 +48,7 @@ public class LockTable {
     public void initHotspot(String workload, List<Connection> connections) throws SQLException {
         if (workload.equals("smallbank")) {
             this.HASH_SIZE = SMALL_BANK_HASH_SIZE;
-            this.LOAD_THREAD = connections.size();
+            this.LOAD_THREAD = 1;
             ccLocks.put("savings", new LinkedList[HASH_SIZE]);
             ccLocks.put("checking", new LinkedList[HASH_SIZE]);
             ccBucketLocks.put("savings", new ReentrantReadWriteLock[HASH_SIZE]);
@@ -215,6 +215,7 @@ public class LockTable {
      */
     private boolean checkAndTryValidationLock(String table, long tid, long key, LockType type, CCType ccType) throws SQLException {
         int bucketNum = (int)(key % HASH_SIZE);
+        long currentTime = System.currentTimeMillis();
         validationBucketLocks.get(table)[bucketNum].readLock().lock();
         List<ValidationLock> lockList = validationLocks.get(table)[bucketNum];
         for (ValidationLock lock: lockList) {
@@ -223,7 +224,8 @@ public class LockTable {
                 int count = 0;
                 while((res = lock.tryLock(tid, type, ccType)) == 0)  {
                     try {
-                        Thread.sleep(0, 10000);
+                        Thread.sleep(0, 10);
+                        // System.out.println("wait for lock " + tid + " " + table + ", lock type is " + type);
                     } catch (InterruptedException ex) {
                         System.out.println("out of the max retry count, lock type is " + type);
                         res = -1;
@@ -236,13 +238,14 @@ public class LockTable {
                     return true;
                 } else {
                     // can not keep the sequence of read and write
-                    String msg = "can not keep the sequence of rw dependency, there maybe rw-anti-dependency";
+                    String msg = "Transaction #" + tid + " can not keep the sequence of rw dependency, there maybe rw-anti-dependency";
                     validationBucketLocks.get(table)[bucketNum].readLock().unlock();
                     throw new SQLException(msg, "500");
                 }
             }
         }
         validationBucketLocks.get(table)[bucketNum].readLock().unlock();
+        System.out.println("Validation Lock { " + table + ", " + key + ", " + type + ", " + (System.currentTimeMillis() - currentTime) + "ms}");
         return false;
     }
 
@@ -257,6 +260,7 @@ public class LockTable {
                 while((res = lock.tryLock(tid, type, ccType)) == 0)  {
                     try {
                         Thread.sleep(0, 10000);
+                        System.out.println("xxxxxxxxxxxxxxxxxxxxx");
                     } catch (InterruptedException ex) {
                         System.out.println("out of the max retry count, lock type is " + type);
                         res = -1;
@@ -359,7 +363,7 @@ public class LockTable {
             lockList.removeIf(lock -> lock.getKey() > HASH_SIZE && lock.free());
             ccBucketLocks.get(table)[bucketNum].writeLock().unlock();
         }
-     }
+    }
 
     public void updateHotspotVersion(String table, long key, long tid) {
         int bucketNum = (int)(key % HASH_SIZE);

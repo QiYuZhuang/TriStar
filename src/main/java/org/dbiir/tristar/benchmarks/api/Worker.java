@@ -17,19 +17,6 @@
 
 package org.dbiir.tristar.benchmarks.api;
 
-import org.dbiir.tristar.benchmarks.*;
-import org.dbiir.tristar.benchmarks.types.DatabaseType;
-import org.dbiir.tristar.benchmarks.types.State;
-import org.dbiir.tristar.benchmarks.types.TransactionStatus;
-import org.dbiir.tristar.benchmarks.util.Histogram;
-import org.dbiir.tristar.benchmarks.util.SQLUtil;
-import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankBenchmark;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.transaction.concurrency.LockTable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLRecoverableException;
@@ -41,7 +28,24 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import lombok.Getter;
+import lombok.Setter;
+import org.dbiir.tristar.adapter.TAdapter;
+import org.dbiir.tristar.benchmarks.LatencyRecord;
+import org.dbiir.tristar.benchmarks.Phase;
+import org.dbiir.tristar.benchmarks.SubmittedProcedure;
+import org.dbiir.tristar.benchmarks.WorkloadConfiguration;
+import org.dbiir.tristar.benchmarks.WorkloadState;
+import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
+import org.dbiir.tristar.benchmarks.types.DatabaseType;
+import org.dbiir.tristar.benchmarks.types.State;
 import static org.dbiir.tristar.benchmarks.types.State.MEASURE;
+import org.dbiir.tristar.benchmarks.types.TransactionStatus;
+import org.dbiir.tristar.benchmarks.util.Histogram;
+import org.dbiir.tristar.benchmarks.util.SQLUtil;
+import org.dbiir.tristar.common.CCType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(Worker.class);
@@ -74,6 +78,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
   private boolean seenDone = false;
   CCType ccType = CCType.NUM_CC;
+  @Setter
+  @Getter
+  protected boolean switchFinish = false;
+  @Getter
+  @Setter
+  protected boolean switchPhaseReady = false; // validation transaction common, set it to true
 
   public Worker(T benchmark, int id) {
     this.id = id;
@@ -121,6 +131,26 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       Procedure proc = e.getValue();
       this.name_procedures.put(e.getKey().getName(), proc);
       this.class_procedures.put(proc.getClass(), proc);
+    }
+  }
+
+  protected void switchIsolation(Connection conn) throws SQLException {
+    switch (TAdapter.getInstance().getSwitchPhaseCCType()) {
+      case RC:
+      case RC_ELT:
+      case RC_FOR_UPDATE:
+      case RC_TAILOR:
+      case RC_TAILOR_LOCK:
+        conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        break;
+      case SI:
+      case SI_ELT:
+      case SI_FOR_UPDATE:
+      case SI_TAILOR:
+        conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        break;
+      case SER:
+        conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
     }
   }
 
@@ -463,7 +493,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             }
             this.conn = this.benchmark.makeConnection();
             this.conn.setAutoCommit(false);
-            setIsolation(this.conn);
+            switchIsolation(this.conn);
           } catch (SQLException ex) {
             if (LOG.isDebugEnabled()) {
               LOG.debug(String.format("%s failed to open a connection...", this));
@@ -480,6 +510,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
           if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("%s %s attempting...", this, transactionType));
+          }
+
+          if (TAdapter.getInstance().isInSwitchPhase() && !switchFinish) {
+            switchIsolation(conn);
+            switchFinish = true;
+            conn.setAutoCommit(false);
           }
 
           status = this.executeWork(conn, transactionType);
@@ -515,6 +551,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
         } catch (SQLException ex) {
           // check if we should attempt to ignore connection errors and reconnect
+          // System.out.println(Thread.currentThread().getName() + " " + ex);
           boolean isConnectionErrorException = SQLUtil.isConnectionErrorException(ex);
 
           if (indicatesReadOnly(ex)) {

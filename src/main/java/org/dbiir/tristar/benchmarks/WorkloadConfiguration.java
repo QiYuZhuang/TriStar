@@ -20,6 +20,7 @@ package org.dbiir.tristar.benchmarks;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.commons.configuration2.XMLConfiguration;
+import org.dbiir.tristar.adapter.Adapter;
 import org.dbiir.tristar.benchmarks.api.TransactionTypes;
 import org.dbiir.tristar.benchmarks.types.DatabaseType;
 import org.dbiir.tristar.common.CCType;
@@ -170,6 +171,7 @@ public class WorkloadConfiguration {
         break;
       case "DYNAMIC":
         this.concurrencyControlType = CCType.DYNAMIC;
+        Adapter.getInstance().setUse(true);
         break;
       case "RC":
         this.concurrencyControlType = CCType.RC;
