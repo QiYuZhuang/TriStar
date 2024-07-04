@@ -1,17 +1,17 @@
 package org.dbiir.tristar.adapter;
 
-import lombok.Getter;
-import lombok.Setter;
-import org.dbiir.tristar.benchmarks.api.TransactionType;
-import org.dbiir.tristar.benchmarks.catalog.RWRecord;
-
 import java.util.Random;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+
+import lombok.Getter;
+import lombok.Setter;
+
 public class TransactionCollector {
     private static final TransactionCollector INSTANCE;
-    static public int TRANSACTION_BATCH = 1000;
+    static public int TRANSACTION_BATCH = 250;
     private static final double SAMPLE_PROBABILITY = 0.01;
     private final Random random = new Random();
     static String edgeFormat = "#%d,%d,%d";
@@ -39,7 +39,7 @@ public class TransactionCollector {
             if (sampleCount >= TRANSACTION_BATCH)
                 needFlush = true;
         }
-        System.out.println("sample count: " + sampleCount);
+        // System.out.println("sample count: " + sampleCount);
         lock.unlock();
     }
 
@@ -59,14 +59,27 @@ public class TransactionCollector {
         int table_idx;
         for (int i = 0; i < TRANSACTION_BATCH; i++) {
             if (i == idx) continue;
-            if ((table_idx = wwDependency(idx, i)) > 0) {
+            if ((table_idx = rrDependency(idx, i)) > 0) {
                 builder.append(edgeFormat.formatted(i, 1, table_idx));
             }
             if ((table_idx = rwDependency(idx, i)) > 0) {
                 builder.append(edgeFormat.formatted(i, 2, table_idx));
             }
+            if ((table_idx = wwDependency(idx, i)) > 0) {
+                builder.append(edgeFormat.formatted(i, 4, table_idx));
+            }
         }
         return builder.toString();
+    }
+
+    private int rrDependency(int idx1, int idx2) {
+        for (RWRecord r: transactionMetas[idx2].rset()) {
+            for (RWRecord r2: transactionMetas[idx1].rset()) {
+                if (r.table_idx() == r2.table_idx() && r.key_id() == r2.key_id())
+                    return r.table_idx();
+            }
+        }
+        return -1;
     }
 
     private int rwDependency(int idx1, int idx2) {

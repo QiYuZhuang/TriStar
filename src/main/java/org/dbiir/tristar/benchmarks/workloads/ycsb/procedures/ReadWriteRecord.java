@@ -7,11 +7,13 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Random;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
 
+import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
@@ -48,7 +50,7 @@ public class ReadWriteRecord extends Procedure {
      * @param ratio1: <read transaction : write transaction> (read transaction represents read-only)
      * @param ratio2: <read operation : write operation> (in write transaction)
      */
-    public void run(Connection conn, int[] keyname, String[][] vals, double ratio1, double ratio2, long tid, long[] versions, CCType type) throws SQLException {
+    public void run(Worker worker, Connection conn, int[] keyname, String[][] vals, double ratio1, double ratio2, long tid, long[] versions, CCType type) throws SQLException {
         /*
          * if ratio1 = 0, it is a read-only transaction;
          * if ratio2 = 0, the transaction's operations are read operation;
@@ -152,6 +154,10 @@ public class ReadWriteRecord extends Procedure {
 
         if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
             int validationPhase = 0;
+            while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+                // set current thread ready, block for all thread to ready
+                worker.setSwitchPhaseReady(true);
+            }
             for (int i = 0; i < len; i++) {
                 try {
                     if (ops[i] == 1)

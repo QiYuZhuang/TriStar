@@ -41,6 +41,6 @@ public abstract class YCSBConstants {
   public static final HashMap<String , Integer> TABLENAME_TO_INDEX = new HashMap<>(1);
 
   static {
-    TABLENAME_TO_INDEX.put(TABLE_NAME, 0);
+    TABLENAME_TO_INDEX.put(TABLE_NAME, 1);
   }
 }

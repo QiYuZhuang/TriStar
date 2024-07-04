@@ -28,6 +28,9 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import lombok.Getter;
+import lombok.Setter;
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.LatencyRecord;
 import org.dbiir.tristar.benchmarks.Phase;
 import org.dbiir.tristar.benchmarks.SubmittedProcedure;
@@ -75,6 +78,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
   private boolean seenDone = false;
   CCType ccType = CCType.NUM_CC;
+  @Setter
+  @Getter
+  protected boolean switchFinish = false;
+  @Getter
+  @Setter
+  protected boolean switchPhaseReady = false; // validation transaction common, set it to true
 
   public Worker(T benchmark, int id) {
     this.id = id;
@@ -122,6 +131,26 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       Procedure proc = e.getValue();
       this.name_procedures.put(e.getKey().getName(), proc);
       this.class_procedures.put(proc.getClass(), proc);
+    }
+  }
+
+  protected void switchIsolation(Connection conn) throws SQLException {
+    switch (TAdapter.getInstance().getSwitchPhaseCCType()) {
+      case RC:
+      case RC_ELT:
+      case RC_FOR_UPDATE:
+      case RC_TAILOR:
+      case RC_TAILOR_LOCK:
+        conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        break;
+      case SI:
+      case SI_ELT:
+      case SI_FOR_UPDATE:
+      case SI_TAILOR:
+        conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        break;
+      case SER:
+        conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
     }
   }
 
@@ -464,7 +493,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             }
             this.conn = this.benchmark.makeConnection();
             this.conn.setAutoCommit(false);
-            setIsolation(this.conn);
+            switchIsolation(this.conn);
           } catch (SQLException ex) {
             if (LOG.isDebugEnabled()) {
               LOG.debug(String.format("%s failed to open a connection...", this));
@@ -481,6 +510,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
           if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("%s %s attempting...", this, transactionType));
+          }
+
+          if (TAdapter.getInstance().isInSwitchPhase() && !switchFinish) {
+            switchIsolation(conn);
+            switchFinish = true;
+            conn.setAutoCommit(false);
           }
 
           status = this.executeWork(conn, transactionType);

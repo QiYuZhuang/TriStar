@@ -42,3 +42,6 @@ results/
 targets/
 config/
 metas/
+tristar_adapter/
+scripts/
+project.yaml

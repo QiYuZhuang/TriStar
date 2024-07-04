@@ -52,6 +52,7 @@ public class Flusher implements Runnable {
                 System.out.println(fileName);
                 try (FileWriter fileWriter = new FileWriter(fileName, true)) {
                     for (int i = 0; i < TransactionCollector.TRANSACTION_BATCH; i++) {
+                        fileWriter.write(i + ",");
                         fileWriter.write(TransactionCollector.getInstance().getTransactionNodeFeature(i));
                         fileWriter.write(TransactionCollector.getInstance().getTransactionEdgeFeature(i));
                         fileWriter.write("\n");
@@ -68,12 +69,18 @@ public class Flusher implements Runnable {
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                     out.println(workload + ",predict," + fileName);
                     String data = in.readLine();
-                    System.out.println("receive data: " + data);
+                    System.out.println("Receive the prediction result: " + data);
+                    // TODO: change the
+                    TAdapter.getInstance().setNextCCType(data);
                 }
                 System.out.println("Flush time cost: " + (System.currentTimeMillis() - timestamp) + " ms");
             }
             try {
-                Thread.sleep(20000);
+                if (online) {
+                    Thread.sleep(1000);
+                } else {
+                    Thread.sleep(10000);
+                }
             } catch (InterruptedException ignored) {
                 return;
             }

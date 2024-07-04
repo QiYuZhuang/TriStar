@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.WorkloadConfiguration;
 import org.dbiir.tristar.benchmarks.api.BenchmarkModule;
 import org.dbiir.tristar.benchmarks.api.Worker;

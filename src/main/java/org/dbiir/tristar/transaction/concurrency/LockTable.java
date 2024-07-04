@@ -48,7 +48,7 @@ public class LockTable {
     public void initHotspot(String workload, List<Connection> connections) throws SQLException {
         if (workload.equals("smallbank")) {
             this.HASH_SIZE = SMALL_BANK_HASH_SIZE;
-            this.LOAD_THREAD = connections.size();
+            this.LOAD_THREAD = 1;
             ccLocks.put("savings", new LinkedList[HASH_SIZE]);
             ccLocks.put("checking", new LinkedList[HASH_SIZE]);
             ccBucketLocks.put("savings", new ReentrantReadWriteLock[HASH_SIZE]);
