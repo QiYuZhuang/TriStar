@@ -17,9 +17,15 @@
 
  package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+ import java.math.BigDecimal;
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.util.Random;
+
  import org.dbiir.tristar.benchmarks.api.SQLStmt;
  import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
- import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
@@ -27,12 +33,8 @@
  import org.dbiir.tristar.common.CCType;
  import org.dbiir.tristar.common.LockType;
  import org.dbiir.tristar.transaction.concurrency.LockTable;
- import org.slf4j.Logger;
- import org.slf4j.LoggerFactory;
- 
- import java.math.BigDecimal;
- import java.sql.*;
- import java.util.Random;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
  
  public class Delivery extends TPCCProcedure {
  
@@ -107,8 +109,8 @@
      int d_id1 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
      int d_id2 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
  
-     int no_o_id1 = TPCCUtil.randomNumber(1,3000, gen);
-     int no_o_id2 = TPCCUtil.randomNumber(1,3000, gen);
+     // int no_o_id1 = TPCCUtil.randomNumber(1,3000, gen);
+     // int no_o_id2 = TPCCUtil.randomNumber(1,3000, gen);
  
      int customerId;
      if (zipftheta > -1.0) {
@@ -116,15 +118,16 @@
      } else {
        customerId = TPCCUtil.getCustomerID(gen);
      }
- 
- 
+
+     int no_o_id1 = customerId;
+     
      if (ccType == CCType.RC_ELT) {
        setConflictC(conn, w_id, d_id1, customerId);
      }
  
      // Orders
      updateOrderStatus(conn, w_id, d_id1, no_o_id1, versions, ccType);
- 
+     
      // Orderline
      updateDeliveryInfo(conn, w_id, d_id1, no_o_id1, versions, 1, ccType);
  
@@ -167,6 +170,7 @@
          LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, key2, LockType.EX, ccType);
        } catch (SQLException ex) {
          releaseTailorLock(validationPhase, key1, key2);
+         throw ex;
        }
      }
    }

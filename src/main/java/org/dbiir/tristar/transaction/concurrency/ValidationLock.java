@@ -1,14 +1,12 @@
 package org.dbiir.tristar.transaction.concurrency;
 
-import lombok.Getter;
-import lombok.Setter;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockStrategy;
-import org.dbiir.tristar.common.LockType;
-
-import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+
+import lombok.Getter;
 
 
 public class ValidationLock {
@@ -99,20 +97,20 @@ public class ValidationLock {
             }
         }
         this.lock.unlock();
-       if (result == 1) {
-           assert (this.type == lockType);
-           //System.out.println("acquire id: " + id + " " + this.type + ", count: " + (count));
-       }
+//        if (result == 1) {
+//            assert (this.type == lockType);
+//            System.out.println("acquire id: " + id + " " + this.type + ", count: " + (count));
+//        }
         assert (result != -2);
         return result;
     }
 
     public void releaseLock(LockType lockType) {
         this.lock.lock();
-       //System.out.println("release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
-       if (this.type != lockType) {
-           //System.out.println("failure-release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
-       }
+        //System.out.println("release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
+        if (this.type != lockType) {
+            System.out.println("failure-release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
+        }
         assert (this.type == lockType);
         count--;
         if (count == 0) {

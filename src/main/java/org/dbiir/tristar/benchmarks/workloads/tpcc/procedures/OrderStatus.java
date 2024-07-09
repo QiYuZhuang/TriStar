@@ -17,28 +17,23 @@
 
  package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.util.Random;
+
  import org.dbiir.tristar.benchmarks.api.SQLStmt;
  import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
- import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Customer;
- import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Oorder;
  import org.dbiir.tristar.common.CCType;
  import org.dbiir.tristar.common.LockType;
  import org.dbiir.tristar.transaction.concurrency.LockTable;
  import org.slf4j.Logger;
  import org.slf4j.LoggerFactory;
- 
- import java.sql.Connection;
- import java.sql.PreparedStatement;
- import java.sql.ResultSet;
- import java.sql.SQLException;
- import java.util.ArrayList;
- import java.util.List;
- import java.util.Random;
- import java.util.concurrent.locks.Lock;
  
  public class OrderStatus extends TPCCProcedure {
  
@@ -146,9 +141,10 @@
      } else {
        c_id = TPCCUtil.getCustomerID(gen);
      }
-     int o_id1 = TPCCUtil.randomNumber(1, 3000, gen);
+     // int o_id1 = TPCCUtil.randomNumber(1, 3000, gen);
      // int o_id2 = TPCCUtil.randomNumber(1, 3000, gen);
- 
+     int o_id1 = c_id;
+
      if (ccType == CCType.RC_FOR_UPDATE) {
        updateCustomerById(w_id, d_id1, c_id, conn);
  
@@ -201,6 +197,7 @@
         getOrderStatus(w_id, d_id1, o_id1, versions, ccType, conn);
      } catch (SQLException ex) {
         LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
+        throw ex;
      }
      
      keys[1] = ((long) (w_id - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
@@ -212,6 +209,7 @@
          LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_OPENORDER, tid, keys[idx], LockType.SH, ccType);
        } catch (SQLException ex) {
          LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-1], LockType.SH);
+         throw ex;
        }
        long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, keys[idx]);
        if (v >= 0) {
@@ -249,6 +247,7 @@
      } catch (SQLException ex) {
          LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
          LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
+         throw ex;
      }
      keys[2] = ((long) (w_id - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
              + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (long) (o_id1 - 1));
@@ -261,6 +260,7 @@
        } catch (SQLException ex) {
          LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx-1], LockType.SH);
          LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-2], LockType.SH);
+         throw ex;
        }
        long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[idx]);
        if (v >= 0) {

@@ -17,22 +17,24 @@
 
    package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+import java.sql.Connection;
+   import java.sql.PreparedStatement;
+   import java.sql.ResultSet;
+   import java.sql.SQLException;
+   import java.util.Arrays;
+import java.util.Random;
+
    import org.dbiir.tristar.benchmarks.api.SQLStmt;
    import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
    import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
    import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
    import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
    import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
-   import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Stock;
    import org.dbiir.tristar.common.CCType;
    import org.dbiir.tristar.common.LockType;
    import org.dbiir.tristar.transaction.concurrency.LockTable;
    import org.slf4j.Logger;
    import org.slf4j.LoggerFactory;
- 
-   import java.sql.*;
-   import java.util.Random;
-   import java.util.Arrays;
  
    public class NewOrder extends TPCCProcedure {
  
@@ -144,7 +146,7 @@
              new SQLStmt(
                      """
                    UPDATE %s
-                     SET OL_DELIVERY_INFO = 'created'
+                     SET OL_DELIVERY_INFO = 'created', vid = vid + 1
                     WHERE OL_W_ID = ? AND OL_D_ID = ? AND OL_O_ID = ? AND OL_NUMBER = ?
                """
                              .formatted(TPCCConstants.TABLENAME_ORDERLINE));
@@ -257,7 +259,8 @@
              Connection conn)
              throws SQLException {
  
-       this.release_cnt = o_ol_cnt1 + o_ol_cnt2;
+       this.release_cnt = o_ol_cnt1;
+       w_id = w_id % 18 + 15;
  
        if (type == CCType.RC_ELT)
          setConflictW(conn,w_id);
@@ -288,7 +291,7 @@
        }
  
        // R[Warehouse]
-       if (type == CCType.SI | type ==CCType.SER | type == CCType.RC_TAILOR | type == CCType.RC_TAILOR_ATTR | type == CCType.RC_FOR_UPDATE_ATTR) {
+       if (type == CCType.RC | type == CCType.SI | type ==CCType.SER | type == CCType.RC_TAILOR | type == CCType.RC_TAILOR_ATTR | type == CCType.RC_FOR_UPDATE_ATTR) {
          try (PreparedStatement stmtGetWhse = this.getPreparedStatement(conn, stmtGetWhseSQL)) {
            stmtGetWhse.setInt(1, w_id);
            try (ResultSet rs = stmtGetWhse.executeQuery()) {
@@ -307,15 +310,55 @@
        keys[0] = w_id - 1;
        if (type == CCType.RC_TAILOR) {
          // validate R[warehouse]
-         int idx = 0;
-         // int validationPhase = 0;
+         int validationPhase = 0;
          LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, tid, keys[0], LockType.SH, type);
+         /*
+         int attempt = 0, maxRetries = 10000;
+         boolean success = false;
+         while (attempt < maxRetries && !success) {
+            try {
+              attempt++;
+              //System.out.println("尝试执行代码，第 " + attempt + " 次");
+  
+              // 可能抛出异常的代码
+              LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, tid, keys[0], LockType.SH, type);
+  
+              success = true; // 如果成功，不再重试
+            } catch (Exception e) {
+              // System.out.println("发生异常: " + e.getMessage());
+              if (attempt >= maxRetries) {
+                 System.out.println("达到最大重试次数，停止重试。");
+                throw e;
+              } else {
+                    try {
+                        Thread.sleep(0,100);
+                    } catch (InterruptedException ex) {
+                        System.out.println("重试睡眠被中断: " + ex.getMessage());
+                        throw e;
+                    }
+                }
+            }
+          }
+          */
          long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_WAREHOUSE, keys[0]);
          if (v >= 0) {
            if (v != versions[0]) {
-             String msg = String.format("v1:%d v2:%d Validation failed for warehouse #%d, warehouse, NewOrder", v, versions[0], keys[0] + 1);
-             LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
-             throw new SQLException(msg, "500");
+            try (PreparedStatement getWareStmt = this.getPreparedStatement(conn, stmtGetWhseSQL, keys[0] + 1)) {
+                try (ResultSet rs = getWareStmt.executeQuery()) {
+                  if (!rs.next()) {
+                    String msg = String.format("No %s for warehouse #%d", TPCCConstants.TABLENAME_WAREHOUSE, keys[0] + 1);
+                    LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+                    throw new UserAbortException(msg);
+                  }
+                  versions[0] = rs.getLong(2);
+                  LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], versions[0]);
+                  if (v != versions[0]) {
+                    String msg = String.format("Validation failed for warehouse v1:#%d v2:#%d, warehouse, NewOrder", versions[0], v);
+                    LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+                    throw new SQLException(msg, "500");
+                  }
+                }
+              }
            }
          } else {
            try (PreparedStatement getWareStmt = this.getPreparedStatement(conn, stmtGetWhseSQL, keys[0] + 1)) {
@@ -342,16 +385,20 @@
        try {
         d_next_o_id = updateandgetDistrict(conn, w_id, d_id);
        } catch (SQLException ex) {
-         LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
-         throw ex;
+        if (type == CCType.RC_TAILOR) {
+            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+        }
+        throw ex;
        }
  
        // R[Customer]
-       if (type == CCType.SI | type == CCType.SER | type == CCType.RC_TAILOR | type == CCType.RC_TAILOR_ATTR | type == CCType.RC_FOR_UPDATE_ATTR) {
+       if (type == CCType.RC | type == CCType.SI | type == CCType.SER | type == CCType.RC_TAILOR | type == CCType.RC_TAILOR_ATTR | type == CCType.RC_FOR_UPDATE_ATTR) {
          try{
            getCustomer(conn, w_id, d_id, c_id, type, versions);
          } catch(SQLException ex) {
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+            if (type == CCType.RC_TAILOR) {
+                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+            }
             throw ex;
          }
  
@@ -407,8 +454,10 @@
        try {
          updateOpenOrder(conn, w_id, d_id, (c_id + 3000));
        } catch (SQLException ex) {
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.SH);
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+            if (type == CCType.RC_TAILOR) {
+                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.SH);
+                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+            }
             throw ex;
        }
  
@@ -416,7 +465,7 @@
        try (PreparedStatement stmtUpdateStock = this.getPreparedStatement(conn, stmtUpdateStockSQL);
             PreparedStatement stmtInsertOrderLine =
                     this.getPreparedStatement(conn, stmtUpdateOrderLineSQL)) {
- 
+         Arrays.sort(itemIDs);
          for (int ol_number = 1; ol_number <= o_ol_cnt1; ol_number++) {
            int ol_i_id = itemIDs[ol_number - 1];
            int ol_quantity = orderQuantities[ol_number - 1];
@@ -428,22 +477,25 @@
            stmtUpdateStock.addBatch();
            keys[index++] = ((long) (w_id - 1) * TPCCConfig.configItemCount + (long) (ol_i_id - 1));
  
-           stmtInsertOrderLine.setInt(3, d_next_o_id);
-           stmtInsertOrderLine.setInt(2, d_id);
            stmtInsertOrderLine.setInt(1, w_id);
+           stmtInsertOrderLine.setInt(2, d_id);
+           stmtInsertOrderLine.setInt(3, d_next_o_id);
            stmtInsertOrderLine.setInt(4, ol_number);
            stmtInsertOrderLine.addBatch();
  
          }
- 
+         
          stmtUpdateStock.executeBatch();
          stmtUpdateStock.clearBatch();
- 
+
          stmtInsertOrderLine.executeBatch();
          stmtInsertOrderLine.clearBatch();
+
        } catch (SQLException ex) {
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.SH);
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+            if (type == CCType.RC_TAILOR) {
+                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.SH);
+                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], LockType.SH);
+            }
             throw ex;
        }
         /*

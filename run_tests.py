@@ -12,7 +12,7 @@ result_prefix = "results/"
 workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew_custom-128", "skew_warehouse-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
-             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
+             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128", "no_ratio-128", "pa_ratio-128", 
              "ycsb-wr-128", "ycsb-scalability", "ycsb-skew"]
 
 

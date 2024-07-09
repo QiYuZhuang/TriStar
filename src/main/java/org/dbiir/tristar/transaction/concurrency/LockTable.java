@@ -1,14 +1,5 @@
 package org.dbiir.tristar.transaction.concurrency;
 
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankWorker;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
-import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockType;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -18,8 +9,15 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
+import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
 
 public class LockTable {
     private static final LockTable INSTANCE;
@@ -300,7 +298,7 @@ public class LockTable {
                     PreparedStatement getorderline = null;
 
                     try {
-                        getwarehouse = connections.get(index).prepareStatement("SELECT vid FROM warehouse WHERE w_id = ?");
+                        getwarehouse = connections.get(index).prepareStatement(GetWarehouseTable.getSQL());
                         getcustomer = connections.get(index).prepareStatement(GetCustomerTable.getSQL());
                         getstock = connections.get(index).prepareStatement(GetStockTable.getSQL());
                         getorders = connections.get(index).prepareStatement(GetOrdersTable.getSQL());
@@ -479,7 +477,7 @@ public class LockTable {
                 while((res = lock.tryLock(tid, type, ccType)) == 0)  {
                     try {
                         //System.out.println(Thread.currentThread().getName() + " #" + tid +" name: " + table + " key: " + key);
-                        Thread.sleep(0, 10000);
+                        Thread.sleep(0, 100);
                     } catch (InterruptedException ex) {
                         System.out.println("out of the max retry count, lock type is " + type);
                         res = -1;
@@ -492,6 +490,7 @@ public class LockTable {
                     return true;
                 } else {
                     // can not keep the sequence of read and write
+                    //System.out.println("table: " + table + " key: " + key);   
                     String msg = "can not keep the sequence of rw dependency, there maybe rw-anti-dependency";
                     validationBucketLocks.get(table)[bucketNum].readLock().unlock();
                     throw new SQLException(msg, "500");
@@ -512,6 +511,7 @@ public class LockTable {
                 int count = 0;
                 while((res = lock.tryLock(tid, type, ccType)) == 0)  {
                     try {
+                        //System.out.println(Thread.currentThread().getName() + " #" + tid +" name: " + table + " key: " + key);
                         Thread.sleep(0, 10000);
                     } catch (InterruptedException ex) {
                         System.out.println("out of the max retry count, lock type is " + type);
@@ -523,6 +523,7 @@ public class LockTable {
                 validationBucketLocks.get(table)[bucketNum].writeLock().unlock();
                 if (res <= 0) {
                     // can not keep the sequence of read and write
+                    //System.out.println("table: " + table + " key: " + key);   
                     String msg = "can not keep the sequence of rw dependency, there maybe rw-anti-dependency";
                     throw new SQLException(msg, "500");
                 }

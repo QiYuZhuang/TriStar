@@ -4,8 +4,8 @@ from xml.etree import ElementTree
 import xml.dom.minidom as minidom
 from itertools import product
 
-warmupTime = 20
-execTime = 60  # ms
+warmupTime = 10
+execTime = 30  # ms
 
 transactionType = [
     "NewOrder",
@@ -32,7 +32,7 @@ cc_map = {
 }
 
 
-def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 32, rate="", dir="../../config", casename=""):
+def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 32, rate="", dir="../../config", casename="", rationame="", ratio:int = 0):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
@@ -50,7 +50,7 @@ def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.
     ElementTree.SubElement(root, "terminals").text = str(terminals)
     
     if casename == "warehouse":
-        ElementTree.SubElement(root, "warehouseSkew").text = "true"
+        ElementTree.SubElement(root, "warehouseSkew").text = "false"
     elif casename == "customer":
         ElementTree.SubElement(root, "customerSkew").text = "true"
     if zipf > 0:
@@ -73,6 +73,8 @@ def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.
     filename = "/terminal_" + str(terminals)
     filename += "_warehouse_{:03d}".format(scalaF)
     filename += "_zipf_{:03.2f}".format(zipf)
+    if ratio != 0:
+        filename += "_ratio_" + rationame + "_"+ str(ratio)
     if casename == "warehouse":
         filename += "_tn_warehouse_"
     elif casename == "customer":
@@ -120,9 +122,9 @@ def tpcc_skew_customer(terminal=128):
     dir_name = "../../config/tpcc/skew_custom-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SI", "RC_TAILOR", "RC_FOR_UPDATE",  "RC_ELT"]
+    cc = ["SERIALIZABLE", "SI", "RC_TAILOR", "RC_FOR_UPDATE",  "RC_ELT"]
     #skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
-    skews = [0.1, 0.7, 1.3]
+    skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
     experiments = product(cc, [terminal], skews)
@@ -142,6 +144,36 @@ def tpcc_warehouse(terminal=128):
     for exp in experiments:
         generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name)
 
+def tpcc_no_ratio(terminal=128):
+    dir_name = "../../config/tpcc/no_ratio-" + str(terminal) + "/postgresql"
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name, exist_ok=True)
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    #weights = [[22.5, 22.5, 22.5, 0, 22.5, 10], [17.5, 17.5, 17.5, 0, 17.5, 30], [12.5, 12.5, 12.5, 0, 12.5, 50], [7.5, 7.5, 7.5, 0, 7.5, 70],
+               #[2.5, 2.5, 2.5, 0, 2.5, 90]]
+    weights = [[90, 2.5, 2.5, 2.5, 2.5], [70, 7.5, 7.5, 7.5, 7.5], [50, 12.5, 12.5, 12.5, 12.5], [30, 17.5, 17.5, 17.5, 17.5],
+               [10, 22.5, 22.5, 22.5, 22.5]]
+    skew_list = [0.1, 0.7, 1.3]
+
+    experiments = product(cc, [terminal], weights, skew_list)
+    for exp in experiments:
+        generate_mysql_tpcc_config(exp[0], exp[1], weight=exp[2], zipf=exp[3], scalaF=32, dir=dir_name,casename="customer", rationame="neworder", ratio=exp[2][0])
+
+def tpcc_pa_ratio(terminal=128):
+    dir_name = "../../config/tpcc/pa_ratio-" + str(terminal) + "/postgresql"
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name, exist_ok=True)
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    #weights = [[22.5, 22.5, 22.5, 0, 22.5, 10], [17.5, 17.5, 17.5, 0, 17.5, 30], [12.5, 12.5, 12.5, 0, 12.5, 50], [7.5, 7.5, 7.5, 0, 7.5, 70],
+               #[2.5, 2.5, 2.5, 0, 2.5, 90]]
+    weights = [[2.5, 90, 2.5, 2.5, 2.5], [7.5, 70, 7.5, 7.5, 7.5], [12.5, 50, 12.5, 12.5, 12.5], [17.5, 30, 17.5, 17.5, 17.5],
+               [22.5, 10, 22.5, 22.5, 22.5]]
+    skew_list = [0.1, 0.7, 1.3]
+
+    experiments = product(cc, [terminal], weights, skew_list)
+    for exp in experiments:
+        generate_mysql_tpcc_config(exp[0], exp[1], weight=exp[2], zipf=exp[3], scalaF=32, dir=dir_name,casename="customer", rationame="payment", ratio=exp[2][1])
+
 
 def tpcc_scalability():
     dir_name = "../../config/tpcc/scalability/postgresql"
@@ -152,9 +184,9 @@ def tpcc_scalability():
     weight = [45, 43, 4, 4, 4]
     wn = [1, 2, 4, 8, 16, 32]
 
-    experiments = product(cc, terminals, wn)
+    experiments = product(cc, terminals, weight)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name)
+        generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name, casename="customer", rationame="neworder")
 
 
 if __name__ == '__main__':
@@ -163,5 +195,7 @@ if __name__ == '__main__':
 
     scaleFactor = 32
 
-    tpcc_skew_warehouse()
+    #tpcc_skew_warehouse()
+    tpcc_pa_ratio()
+    tpcc_no_ratio()
     tpcc_skew_customer()

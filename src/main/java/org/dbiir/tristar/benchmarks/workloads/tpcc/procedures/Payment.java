@@ -17,25 +17,24 @@
 
  package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+ import java.math.BigDecimal;
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.util.Random;
+
  import org.dbiir.tristar.benchmarks.api.SQLStmt;
  import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
- import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Customer;
- import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.District;
- import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Warehouse;
  import org.dbiir.tristar.common.CCType;
  import org.dbiir.tristar.common.LockType;
  import org.dbiir.tristar.transaction.concurrency.LockTable;
  import org.slf4j.Logger;
  import org.slf4j.LoggerFactory;
- 
- import java.math.BigDecimal;
- import java.sql.*;
- import java.util.ArrayList;
- import java.util.Random;
  
  public class Payment extends TPCCProcedure {
  
@@ -117,7 +116,9 @@
      // int customerDistrictID = getCustomerDistrictId(gen, districtID, x);
      // int customerWarehouseID = getCustomerWarehouseID(gen, w_id, numWarehouses, x);
      int customerDistrictID = districtID;
+     w_id = (w_id % 17) + 1;
      int customerWarehouseID = w_id;
+     //int customerWarehouseID = (w_id % 16) + 1;
      int customerID;
      if (zipftheta > -1.0) {
        customerID = iditer.nextInt();
@@ -131,11 +132,11 @@
      }
  
      // U[Warehouse]
-     updateWarehouse(conn, w_id, paymentAmount, ccType, versions);
+     updateWarehouse(conn, customerWarehouseID, paymentAmount, ccType, versions);
  
-     keys[0] = w_id - 1;
+     keys[0] = customerWarehouseID - 1;
  
-     updateDistrict(conn, w_id, districtID, paymentAmount);
+     updateDistrict(conn, customerWarehouseID, districtID, paymentAmount);
  
      // U[Customer]
      updateBalance(conn, customerDistrictID, customerWarehouseID, customerID, BigDecimal.valueOf(paymentAmount), ccType, versions);
@@ -151,7 +152,6 @@
        int validationPhase = 1;
        try {
          LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, keys[1], LockType.EX, ccType);
-         validationPhase = 2;
        } catch (SQLException ex) {
          releaseTailorLock(validationPhase, keys, ccType);
          throw ex;
