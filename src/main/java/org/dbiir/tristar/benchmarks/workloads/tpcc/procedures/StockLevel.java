@@ -17,6 +17,12 @@
 
  package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.util.Random;
+
  import org.dbiir.tristar.benchmarks.api.SQLStmt;
  import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
@@ -24,21 +30,9 @@
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
  import org.dbiir.tristar.common.CCType;
- import org.dbiir.tristar.common.LockType;
- import org.dbiir.tristar.transaction.concurrency.LockTable;
- import org.slf4j.Logger;
- import org.slf4j.LoggerFactory;
- 
- import java.sql.Connection;
- import java.sql.PreparedStatement;
- import java.sql.ResultSet;
- import java.sql.SQLException;
- import java.util.Random;
  
  public class StockLevel extends TPCCProcedure {
- 
-   private static final Logger LOG = LoggerFactory.getLogger(StockLevel.class);
- 
+
    public final SQLStmt stmtUpdateConflictSSQL =
            new SQLStmt(
                    """
@@ -53,7 +47,7 @@
    public SQLStmt stockGetStockSQL =
        new SQLStmt(
            """
-         SELECT S_QUANTITY, vid
+         SELECT S_QUANTITY
           FROM  %s
           WHERE s_w_id = ?
           AND s_i_id = ?
@@ -84,41 +78,6 @@
  
      getStock(conn, w_id, i_id, versions, ccType);
      keys[0] = (long) (w_id - 1) * TPCCConfig.configItemCount + (long) (i_id - 1);
- 
-     /*
-     if (ccType == CCType.RC_TAILOR) {
-       LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_STOCK, tid, keys[0], LockType.SH, ccType);
-       long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_STOCK, keys[0]);
-       // validate R[Stock]
-       if (v >= 0) {
-         if (v != versions[0]) {
-           String msg = String.format("Validation failed for stock %d %d  StockLevel", w_id, i_id);
-           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_STOCK, keys[0], LockType.SH);
-           throw new SQLException(msg, "500");
-         }
-       } else {
-         try (PreparedStatement getWareStmt = this.getPreparedStatement(conn, stockGetStockSQL, w_id, i_id)) {
-           try (ResultSet rs = getWareStmt.executeQuery()) {
-             if (!rs.next()) {
-               String msg = String.format("Nothing for stock %d %d  StockLevel", w_id, i_id);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_STOCK, keys[0], LockType.SH);
-               throw new UserAbortException(msg);
-             }
-             v = rs.getLong("vid");
-             LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_STOCK, keys[0], v);
-             if (v != versions[0]) {
-               String msg = String.format("Validation failed for stock %d %d  StockLevel", w_id, i_id);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_STOCK, keys[0], LockType.SH);
-               throw new SQLException(msg, "500");
-             }
-             else {
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_STOCK, keys[0], LockType.SH);
-             }
-           }
-         }
-       }
-     }
-      */
    }
  
  
@@ -138,7 +97,7 @@
  
            throw new RuntimeException(msg);
          }
-         if (type == CCType.RC_TAILOR | type == CCType.RC_TAILOR_ATTR) {
+         if (type == CCType.RC_TAILOR) {
            versions[0] = rs.getLong("vid");
          }
          return rs.getInt("S_QUANTITY");
@@ -160,9 +119,6 @@
    public void doAfterCommit(long[] keys, CCType type, boolean success, long[] versions) {
      if (!success)
        return;
-     // if (type == CCType.RC_TAILOR) {
-       // LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_STOCK, keys[0], LockType.SH);
-     // }
    }
  }
  

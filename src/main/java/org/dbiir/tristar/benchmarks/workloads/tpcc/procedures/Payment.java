@@ -33,12 +33,8 @@
  import org.dbiir.tristar.common.CCType;
  import org.dbiir.tristar.common.LockType;
  import org.dbiir.tristar.transaction.concurrency.LockTable;
- import org.slf4j.Logger;
- import org.slf4j.LoggerFactory;
  
  public class Payment extends TPCCProcedure {
- 
-   private static final Logger LOG = LoggerFactory.getLogger(Payment.class);
  
    public SQLStmt payUpdateWhseSQL =
            new SQLStmt(
@@ -64,7 +60,7 @@
            new SQLStmt(
                    """
                  UPDATE %s
-                    SET C_BALANCE = ?, vid = vid + 1
+                    SET C_BALANCE = C_BALANCE - ?, vid = vid + 1
                   WHERE C_W_ID = ?
                     AND C_D_ID = ?
                     AND C_ID = ?
@@ -113,12 +109,9 @@
      int districtID = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
  
      float paymentAmount = (float) (TPCCUtil.randomNumber(-500000, 500000, gen) / 100.0);
-     // int customerDistrictID = getCustomerDistrictId(gen, districtID, x);
-     // int customerWarehouseID = getCustomerWarehouseID(gen, w_id, numWarehouses, x);
      int customerDistrictID = districtID;
      w_id = (w_id % 17) + 1;
      int customerWarehouseID = w_id;
-     //int customerWarehouseID = (w_id % 16) + 1;
      int customerID;
      if (zipftheta > -1.0) {
        customerID = iditer.nextInt();
@@ -148,7 +141,7 @@
        // lock WAREHOUSE
        LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, tid, keys[0], LockType.EX, ccType);
      }
-     if (ccType == CCType.RC_TAILOR | ccType == CCType.RC_TAILOR_ATTR) {
+     if (ccType == CCType.RC_TAILOR) {
        int validationPhase = 1;
        try {
          LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, keys[1], LockType.EX, ccType);
@@ -164,13 +157,11 @@
      try (PreparedStatement payUpdateWhse = this.getPreparedStatement(conn, payUpdateWhseSQL)) {
        payUpdateWhse.setBigDecimal(1, BigDecimal.valueOf(paymentAmount));
        payUpdateWhse.setInt(2, w_id);
-       // MySQL reports deadlocks due to lock upgrades:
-       // t1: read w_id = x; t2: update w_id = x; t1 update w_id = x
        try (ResultSet rs = payUpdateWhse.executeQuery()) {
          if (!rs.next()) {
            throw new RuntimeException("W_ID=" + w_id + " not found!");
          }
-         if (type == CCType.RC_TAILOR | type == CCType.RC_TAILOR_ATTR) {
+         if (type == CCType.RC_TAILOR) {
            versions[0] = rs.getLong("vid");
          }
        }
@@ -270,7 +261,6 @@
        LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.EX);
        // update the
        LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[1], versions[1]);
-       //System.out.println("update customer Pay key:" + keys[1] + " version:" + versions[1]);
      }
    }
  

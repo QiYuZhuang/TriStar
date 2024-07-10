@@ -134,15 +134,14 @@
            throws SQLException {
  
      int d_id1 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
-     // int d_id2 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
+     
      int c_id;
      if (zipftheta > -1.0) {
        c_id = iditer.nextInt();
      } else {
        c_id = TPCCUtil.getCustomerID(gen);
      }
-     // int o_id1 = TPCCUtil.randomNumber(1, 3000, gen);
-     // int o_id2 = TPCCUtil.randomNumber(1, 3000, gen);
+
      int o_id1 = c_id;
 
      if (ccType == CCType.RC_FOR_UPDATE) {
@@ -151,7 +150,6 @@
        updateOrderDetails(conn, w_id, d_id1, o_id1);
  
        updateOrderLines(conn, w_id, d_id1, o_id1);
-       // updateOrderLines(conn, w_id, d_id2, o_id2);
      }
  
      if (ccType == CCType.RC_ELT) {
@@ -162,15 +160,14 @@
      getCustomerById(w_id, d_id1, c_id, versions, ccType, conn);
      keys[0] = ((long) (w_id - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
              + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (long) (c_id - 1));
-     // Validate
-     if (ccType == CCType.RC_TAILOR | ccType == CCType.RC_TAILOR_ATTR) {
-       int idx = 0;
-       LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, keys[idx], LockType.SH, ccType);
-       long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[idx]);
+     // Validate R[Customer]
+     if (ccType == CCType.RC_TAILOR) {
+       LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, keys[0], LockType.SH, ccType);
+       long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[0]);
        if (v >= 0) {
-         if (v != versions[idx]) {
-           String msg = String.format("v1:%d v2:%d Validation failed for customer %d %d %d OrderStatus", v, versions[idx], w_id, d_id1, c_id);
-           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], LockType.SH);
+         if (v != versions[0]) {
+           String msg = String.format("v1:%d v2:%d Validation failed for customer %d %d %d OrderStatus", v, versions[0], w_id, d_id1, c_id);
+           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
            throw new SQLException(msg, "500");
          }
        } else {
@@ -178,20 +175,21 @@
            try (ResultSet rs = getCustStmt.executeQuery()) {
              if (!rs.next()) {
                String msg = String.format("Nothing for customer #%d#%d#%d OrderStatus",  w_id, d_id1, c_id);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
                throw new UserAbortException(msg);
              }
              v = rs.getLong("vid");
-             LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], v);
-             if (v != versions[idx]) {
+             LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[0], v);
+             if (v != versions[0]) {
                String msg = String.format("Validation failed for customer #%d#%d#%d OrderStatus",  w_id, d_id1, c_id);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
                throw new SQLException(msg, "500");
              }
            }
          }
        }
      }
+
      // R[Orders]
      try {
         getOrderStatus(w_id, d_id1, o_id1, versions, ccType, conn);
@@ -203,20 +201,20 @@
      keys[1] = ((long) (w_id - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
              + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (long) (o_id1 - 1));
      
-     if (ccType == CCType.RC_TAILOR | ccType == CCType.RC_TAILOR_ATTR) {
-       int idx = 1;
+    // Validate R[Orders]
+     if (ccType == CCType.RC_TAILOR) {
        try{
-         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_OPENORDER, tid, keys[idx], LockType.SH, ccType);
+         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_OPENORDER, tid, keys[1], LockType.SH, ccType);
        } catch (SQLException ex) {
-         LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-1], LockType.SH);
+         LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
          throw ex;
        }
-       long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, keys[idx]);
+       long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, keys[1]);
        if (v >= 0) {
-         if (v != versions[idx]) {
-           String msg = String.format("v1:%d v2:%d Validation failed for Orders %d %d %d OrderStatus", v, versions[idx], w_id, d_id1, o_id1);
-           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx], LockType.SH);
-           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-1], LockType.SH);
+         if (v != versions[1]) {
+           String msg = String.format("v1:%d v2:%d Validation failed for Orders %d %d %d OrderStatus", v, versions[1], w_id, d_id1, o_id1);
+           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
+           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
            throw new SQLException(msg, "500");
          }
        } else {
@@ -224,16 +222,16 @@
            try (ResultSet rs = getordStmt.executeQuery()) {
              if (!rs.next()) {
                String msg = String.format("Nothing for orders #%d#%d#%d OrderStatus",  w_id, d_id1, o_id1);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx], LockType.SH);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-1], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
                throw new UserAbortException(msg);
              }
              v = rs.getLong("vid");
-             LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, keys[idx], v);
-             if (v != versions[idx]) {
+             LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, keys[1], v);
+             if (v != versions[1]) {
                String msg = String.format("Validation failed for Orders %d %d %d OrderStatus", w_id, d_id1, o_id1);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx], LockType.SH);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-1], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
                throw new SQLException(msg, "500");
              }
            }
@@ -252,23 +250,22 @@
      keys[2] = ((long) (w_id - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
              + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (long) (o_id1 - 1));
  
+     // Validate R[OrderLines]
      if (ccType == CCType.RC_TAILOR | ccType == CCType.RC_TAILOR_ATTR) {
-       int idx = 2;
-       // validationPhase = 2;
        try {
-         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_ORDERLINE, tid, keys[idx], LockType.SH, ccType);
+         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_ORDERLINE, tid, keys[2], LockType.SH, ccType);
        } catch (SQLException ex) {
-         LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx-1], LockType.SH);
-         LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-2], LockType.SH);
+         LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
+         LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
          throw ex;
        }
-       long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[idx]);
+       long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[2]);
        if (v >= 0) {
-         if (v != versions[idx]) {
-           String msg = String.format("v1:%d v2:%d  Validation failed for OrderLine1 %d %d %d OrderStatus", v, versions[idx], w_id, d_id1, o_id1);
-           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx-1], LockType.SH);
-           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-2], LockType.SH);
+         if (v != versions[2]) {
+           String msg = String.format("v1:%d v2:%d  Validation failed for OrderLine1 %d %d %d OrderStatus", v, versions[2], w_id, d_id1, o_id1);
+           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[2], LockType.SH);
+           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
+           LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
            throw new SQLException(msg, "500");
          }
        } else {
@@ -276,185 +273,30 @@
            try (ResultSet rs = getordStmt.executeQuery()) {
              if (!rs.next()) {
                String msg = String.format("Nothing for OrderLine1 #%d#%d#%d OrderStatus",  w_id, d_id1, o_id1);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx-1], LockType.SH);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-2], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[2], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
                throw new UserAbortException(msg);
              }
              v = rs.getLong("vid");
-             LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], v);
-             if (v != versions[idx]) {
+             LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[2], v);
+             if (v != versions[2]) {
                String msg = String.format("Validation failed for OrderLine1 %d %d %d OrderStatus", w_id, d_id1, o_id1);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx-1], LockType.SH);
-               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-2], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[2], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
+               LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
                throw new SQLException(msg, "500");
              }
            }
          }
        }
      }
-       /*
-       getOrderLines(w_id, d_id2, o_id2, versions, ccType, 3, conn);
-       keys[3] = ((long) (w_id - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
-               + (long) (d_id2 - 1) * TPCCConfig.configCustPerDist + (long) (o_id2 - 1))
-        */
-      /*
-      if (ccType == CCType.RC_TAILOR) {
-        // validate R[Customer]
-        int idx = 0;
-        LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, keys[idx], LockType.SH, ccType);
-        long v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[idx]);
-        if (v >= 0) {
-          if (v != versions[idx]) {
-            String msg = String.format("Validation failed for customer %d %d %d OrderStatus", w_id, d_id1, c_id);
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], LockType.SH);
-            throw new SQLException(msg, "500");
-          } else {
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], LockType.SH);
-          }
-        } else {
-          try (PreparedStatement getCustStmt = this.getPreparedStatement(conn, ordStatGetCustSQL, w_id, d_id1, c_id)) {
-            try (ResultSet rs = getCustStmt.executeQuery()) {
-              if (!rs.next()) {
-                String msg = String.format("Nothing for customer #%d#%d#%d OrderStatus",  w_id, d_id1, c_id);
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], LockType.SH);
-                throw new UserAbortException(msg);
-              }
-              v = rs.getLong("vid");
-              LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], v);
-              if (v != versions[idx]) {
-                String msg = String.format("Validation failed for customer #%d#%d#%d OrderStatus",  w_id, d_id1, c_id);
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], LockType.SH);
-                throw new SQLException(msg, "500");
-              }
-              else {
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx], LockType.SH);
-              }
-            }
-          }
-        }
- 
-        // validate R[Orders]
-        idx = 1;
-        LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_OPENORDER, tid, keys[idx], LockType.SH, ccType);
-        v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, keys[idx]);
-        if (v >= 0) {
-          if (v != versions[idx]) {
-            String msg = String.format("Validation failed for Orders %d %d %d OrderStatus", w_id, d_id1, o_id1);
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx], LockType.SH);
-            throw new SQLException(msg, "500");
-          } else {
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx], LockType.SH);
-          }
-        } else {
-          try (PreparedStatement getordStmt = this.getPreparedStatement(conn, ordStatGetNewestOrdSQL, w_id, d_id1, o_id1)) {
-            try (ResultSet rs = getordStmt.executeQuery()) {
-              if (!rs.next()) {
-                String msg = String.format("Nothing for orders #%d#%d#%d OrderStatus",  w_id, d_id1, o_id1);
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx], LockType.SH);
-                throw new UserAbortException(msg);
-              }
-              v = rs.getLong("vid");
-              LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, keys[idx], v);
-              if (v != versions[idx]) {
-                String msg = String.format("Validation failed for Orders %d %d %d OrderStatus", w_id, d_id1, o_id1);
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx], LockType.SH);
-                throw new SQLException(msg, "500");
-              }
-              else {
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx], LockType.SH);
-              }
-            }
-          }
-        }
- 
-        // validate R1[OrderLine]
-        idx = 2;
-        // validationPhase = 2;
-        LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_ORDERLINE, tid, keys[idx], LockType.SH, ccType);
-        v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[idx]);
-        if (v >= 0) {
-          if (v != versions[idx]) {
-            String msg = String.format("Validation failed for OrderLine1 %d %d %d OrderStatus", w_id, d_id1, o_id1);
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-            throw new SQLException(msg, "500");
-          } else {
-            LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-          }
-        } else {
-          try (PreparedStatement getordStmt = this.getPreparedStatement(conn, ordStatGetOrderLinesSQL, w_id, d_id1, o_id1)) {
-            try (ResultSet rs = getordStmt.executeQuery()) {
-              if (!rs.next()) {
-                String msg = String.format("Nothing for OrderLine1 #%d#%d#%d OrderStatus",  w_id, d_id1, o_id1);
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-                throw new UserAbortException(msg);
-              }
-              v = rs.getLong("vid");
-              LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], v);
-              if (v != versions[idx]) {
-                String msg = String.format("Validation failed for OrderLine1 %d %d %d OrderStatus", w_id, d_id1, o_id1);
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-                throw new SQLException(msg, "500");
-              }
-              else {
-                LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-              }
-            }
-          }
-        }
-         /*
-         // validate R2[OrderLine]
-         idx = 3;
-         validationPhase = 3;
-         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_ORDERLINE, tid, keys[idx], LockType.SH, ccType);
-         v = LockTable.getInstance().getHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[idx]);
-         if (v >= 0) {
-           if (v != versions[idx]) {
-             String msg = String.format("Validation failed for OrderLine2 %d %d %d OrderStatus", w_id, d_id2, o_id2);
-             LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-3], LockType.SH);
-             LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx-2], LockType.SH);
-             LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx-1], LockType.SH);
-             LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-             throw new SQLException(msg, "500");
-           }
-         } else {
-           try (PreparedStatement getordStmt = this.getPreparedStatement(conn, ordStatGetOrderLinesSQL, w_id, d_id2, o_id2)) {
-             try (ResultSet rs = getordStmt.executeQuery()) {
-               if (!rs.next()) {
-                 String msg = String.format("Nothing for OrderLine2 #%d#%d#%d OrderStatus",  w_id, d_id2, o_id2);
-                 LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-3], LockType.SH);
-                 LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx-2], LockType.SH);
-                 LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx-1], LockType.SH);
-                 LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-                 throw new UserAbortException(msg);
-               }
-               v = rs.getLong("vid");
-               LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], v);
-               if (v != versions[idx]) {
-                 String msg = String.format("Validation failed for OrderLine2 %d %d %d OrderStatus", w_id, d_id2, o_id2);
-                 LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[idx-3], LockType.SH);
-                 LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[idx-2], LockType.SH);
-                 LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx-1], LockType.SH);
-                 LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[idx], LockType.SH);
-                 throw new SQLException(msg, "500");
-               }
-             }
-           }
-         }
- 
- 
-      }
-      */
    }
  
    private void updateOrderDetails(Connection conn, int w_id, int d_id, int o_id)
            throws SQLException {
      try (PreparedStatement ordStatGetNewestOrd =
                   this.getPreparedStatement(conn, ordStatUpdateNewestOrdSQL)) {
- 
-       // find the newest order for the customer
-       // retrieve the carrier & order date for the most recent order.
  
        ordStatGetNewestOrd.setInt(1, w_id);
        ordStatGetNewestOrd.setInt(2, d_id);
@@ -494,8 +336,6 @@
      }
    }
  
-   // attention duplicated code across trans... ok for now to maintain separate
-   // prepared statements
    public void updateCustomerById(int c_w_id, int c_d_id, int c_id, Connection conn)
            throws SQLException {
  
@@ -609,7 +449,6 @@
        LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[0], LockType.SH);
        LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, keys[1], LockType.SH);
        LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[2], LockType.SH);
-       // LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, keys[3], LockType.SH);
      }
    }
  

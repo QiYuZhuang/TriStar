@@ -33,12 +33,8 @@
  import org.dbiir.tristar.common.CCType;
  import org.dbiir.tristar.common.LockType;
  import org.dbiir.tristar.transaction.concurrency.LockTable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
  
  public class Delivery extends TPCCProcedure {
- 
-   private static final Logger LOG = LoggerFactory.getLogger(Delivery.class);
  
    public SQLStmt delivUpdateOrderStatusSQL =
        new SQLStmt(
@@ -107,10 +103,6 @@ import org.slf4j.LoggerFactory;
  
  
      int d_id1 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
-     int d_id2 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
- 
-     // int no_o_id1 = TPCCUtil.randomNumber(1,3000, gen);
-     // int no_o_id2 = TPCCUtil.randomNumber(1,3000, gen);
  
      int customerId;
      if (zipftheta > -1.0) {
@@ -129,9 +121,7 @@ import org.slf4j.LoggerFactory;
      updateOrderStatus(conn, w_id, d_id1, no_o_id1, versions, ccType);
      
      // Orderline
-     updateDeliveryInfo(conn, w_id, d_id1, no_o_id1, versions, 1, ccType);
- 
-     // updateDeliveryInfo(conn, w_id, d_id2, no_o_id2, versions, 2, ccType);
+     updateDeliveryInfo(conn, w_id, d_id1, no_o_id1, versions, ccType);
  
      float orderLineTotal = (float) (TPCCUtil.randomNumber(100, 500000, gen) / 100.0);
  
@@ -139,37 +129,31 @@ import org.slf4j.LoggerFactory;
      updateBalance(conn, w_id, d_id1, customerId, orderLineTotal, versions, ccType);
  
      if (ccType == CCType.RC_TAILOR) {
-       int validationPhase = 0;
+       int validationPhase;
+
        long key1 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
                + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (no_o_id1 - 1));
-       // long key2 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
-       //         + (long) (d_id2 - 1) * TPCCConfig.configCustPerDist + (no_o_id2 - 1));
        long key2 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
                + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (customerId - 1));
+
        keys[0] = key1;
-       //keys[1] = key2;
        keys[1] = key2;
+
        LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_OPENORDER, tid, key1, LockType.EX, ccType);
        validationPhase = 1;
+
        try {
          LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_ORDERLINE, tid, key1, LockType.EX, ccType);
          validationPhase = 2;
        } catch (SQLException ex) {
-         releaseTailorLock(validationPhase, key1, key2);
+         releaseTailorLock(validationPhase, key1);
          throw ex;
        }
-       /*
-       try {
-         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_ORDERLINE, tid, key2, LockType.EX, ccType);
-         validationPhase = 3;
-       } catch (SQLException ex) {
-         releaseTailorLock(validationPhase, key1, key2);
-       }
-       */
+
        try {
          LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, key2, LockType.EX, ccType);
        } catch (SQLException ex) {
-         releaseTailorLock(validationPhase, key1, key2);
+         releaseTailorLock(validationPhase, key1);
          throw ex;
        }
      }
@@ -198,7 +182,7 @@ import org.slf4j.LoggerFactory;
      }
    }
  
-   private void updateDeliveryInfo(Connection conn, int w_id, int d_id, int no_o_id, long[] versions, int index, CCType type)
+   private void updateDeliveryInfo(Connection conn, int w_id, int d_id, int no_o_id, long[] versions, CCType type)
            throws SQLException {
  
      try (PreparedStatement delivUpdateDeliveryDate =
@@ -217,7 +201,7 @@ import org.slf4j.LoggerFactory;
            throw new RuntimeException(msg);
          }
          if (type == CCType.RC_TAILOR)
-           versions[index] = res.getLong(1);
+           versions[1] = res.getLong(1);
        }
      }
    }
@@ -259,7 +243,7 @@ import org.slf4j.LoggerFactory;
      }
    }
  
-   private void releaseTailorLock(int phase, long key1, long key2) {
+   private void releaseTailorLock(int phase, long key1) {
  
      if (phase == 1) {
        LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
@@ -274,13 +258,12 @@ import org.slf4j.LoggerFactory;
        return;
      if (type == CCType.RC_TAILOR) {
        LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, key2, LockType.EX);
-       // LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, key2, LockType.EX);
        LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, key1, LockType.EX);
        LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
+
        // update the
        LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, key1, versions[0]);
        LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, key1, versions[1]);
-       // LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, key2, versions[2]);
        LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, key2, versions[2]);
      }
    }
