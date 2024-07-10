@@ -76,12 +76,12 @@
        setConflictS(conn, w_id, i_id);
      }
  
-     getStock(conn, w_id, i_id, versions, ccType);
+     getStock(conn, w_id, i_id);
      keys[0] = (long) (w_id - 1) * TPCCConfig.configItemCount + (long) (i_id - 1);
    }
  
  
-   private int getStock(Connection conn, int w_id, int i_id, long[] versions, CCType type)
+   private int getStock(Connection conn, int w_id, int i_id)
        throws SQLException {
      try (PreparedStatement stockGetCountStock =
          this.getPreparedStatement(conn, stockGetStockSQL)) {
@@ -96,9 +96,6 @@
                    w_id, i_id);
  
            throw new RuntimeException(msg);
-         }
-         if (type == CCType.RC_TAILOR) {
-           versions[0] = rs.getLong("vid");
          }
          return rs.getInt("S_QUANTITY");
        }
