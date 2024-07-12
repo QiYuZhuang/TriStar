@@ -105,7 +105,7 @@ def generate_transation(root: ElementTree):
 
 
 def tpcc_skew_warehouse(terminal=128):
-    dir_name = "../../config/tpcc/skew_warehouse-" + str(terminal) + "/postgresql"
+    dir_name = "../config/tpcc/skew_warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     cc = ["SI", "RC_TAILOR", "RC_FOR_UPDATE",  "RC_ELT"]
@@ -119,7 +119,7 @@ def tpcc_skew_warehouse(terminal=128):
 
 
 def tpcc_skew_customer(terminal=128):
-    dir_name = "../../config/tpcc/skew_custom-" + str(terminal) + "/postgresql"
+    dir_name = "../config/tpcc/skew_custom-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     cc = ["SERIALIZABLE", "SI", "RC_TAILOR", "RC_FOR_UPDATE",  "RC_ELT"]
@@ -133,7 +133,7 @@ def tpcc_skew_customer(terminal=128):
 
 
 def tpcc_warehouse(terminal=128):
-    dir_name = "../../config/tpcc/warehouse-" + str(terminal) + "/postgresql"
+    dir_name = "../config/tpcc/warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
@@ -160,7 +160,7 @@ def tpcc_no_ratio(terminal=128):
         generate_mysql_tpcc_config(exp[0], exp[1], weight=exp[2], zipf=exp[3], scalaF=32, dir=dir_name,casename="customer", rationame="neworder", ratio=exp[2][0])
 
 def tpcc_pa_ratio(terminal=128):
-    dir_name = "../../config/tpcc/pa_ratio-" + str(terminal) + "/postgresql"
+    dir_name = "../config/tpcc/pa_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
@@ -176,7 +176,7 @@ def tpcc_pa_ratio(terminal=128):
 
 
 def tpcc_scalability():
-    dir_name = "../../config/tpcc/scalability/postgresql"
+    dir_name = "../config/tpcc/scalability/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
@@ -190,8 +190,8 @@ def tpcc_scalability():
 
 
 if __name__ == '__main__':
-    if not os.path.exists("../../config"):
-        os.mkdir("../../config")
+    if not os.path.exists("../config"):
+        os.mkdir("../config")
 
     scaleFactor = 32
 
