@@ -181,8 +181,6 @@ import java.util.Random;
              int terminalDistrictLowerID,
              int terminalDistrictUpperID,
              CCType ccType,
-             double zipftheta,
-             ZipfianGenerator iditer,
              long tid,
              long[] versions,
              long[] keys,
@@ -191,11 +189,7 @@ import java.util.Random;
  
        int districtID = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
        int customerID;
-       if (zipftheta > -1.0) {
-         customerID = iditer.nextInt();
-       } else {
-         customerID = TPCCUtil.getCustomerID(gen);
-       }
+       customerID = TPCCUtil.getCustomerID(gen);
  
        int numItems = TPCCUtil.randomNumber(5, 15, gen);
        int[] itemIDs = new int[numItems];

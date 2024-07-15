@@ -37,8 +37,6 @@ public abstract class TPCCProcedure extends Procedure {
       int terminalDistrictLowerID,
       int terminalDistrictUpperID,
       CCType ccType,
-      double zipfTheta,
-      ZipfianGenerator iditer,
       long tid,
       long[] versions,
       long[] keys,

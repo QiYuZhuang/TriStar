@@ -125,8 +125,6 @@
            int terminalDistrictLowerID,
            int terminalDistrictUpperID,
            CCType ccType,
-           double zipftheta,
-           ZipfianGenerator iditer,
            long tid,
            long[] versions,
            long[] keys,
@@ -136,11 +134,7 @@
      int d_id1 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
      
      int c_id;
-     if (zipftheta > -1.0) {
-       c_id = iditer.nextInt();
-     } else {
-       c_id = TPCCUtil.getCustomerID(gen);
-     }
+     c_id = TPCCUtil.getCustomerID(gen);
 
      int o_id1 = c_id;
 

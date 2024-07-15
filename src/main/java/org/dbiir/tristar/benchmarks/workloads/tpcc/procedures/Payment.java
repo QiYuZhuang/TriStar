@@ -98,8 +98,6 @@
            int terminalDistrictLowerID,
            int terminalDistrictUpperID,
            CCType ccType,
-           double zipftheta,
-           ZipfianGenerator iditer,
            long tid,
            long[] versions,
            long[] keys,
@@ -113,11 +111,7 @@
      w_id = (w_id % 17) + 1;
      int customerWarehouseID = w_id;
      int customerID;
-     if (zipftheta > -1.0) {
-       customerID = iditer.nextInt();
-     } else {
-       customerID = TPCCUtil.getCustomerID(gen);
-     }
+     customerID = TPCCUtil.getCustomerID(gen);
  
      if (ccType == CCType.RC_ELT) {
        setConflictC(conn, w_id, customerDistrictID, customerID);

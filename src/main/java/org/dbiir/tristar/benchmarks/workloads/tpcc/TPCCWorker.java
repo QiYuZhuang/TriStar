@@ -46,8 +46,6 @@
    private final Random gen = new Random();
  
    private final int numWarehouses;
-   private final double zipfTheta;
-   private final ZipfianGenerator iditer;
    private long tid;
    private final long[] versionBuffer = new long[20];
    private final long[] keyBuffer = new long[80];
@@ -58,16 +56,12 @@
            int terminalWarehouseID,
            int terminalDistrictLowerID,
            int terminalDistrictUpperID,
-           int numWarehouses,
-           double zipf_Theta,
-           ZipfianGenerator id_iter) {
+           int numWarehouses) {
      super(benchmarkModule, id);
  
      this.terminalWarehouseID = terminalWarehouseID;
      this.terminalDistrictLowerID = terminalDistrictLowerID;
      this.terminalDistrictUpperID = terminalDistrictUpperID;
-     this.iditer = id_iter;
-     this.zipfTheta = zipf_Theta;
      this.numWarehouses = numWarehouses;
    }
  
@@ -88,8 +82,6 @@
            terminalDistrictLowerID,
            terminalDistrictUpperID,
            getBenchmark().getCCType(),
-           getBenchmark().getZipFTheta(),
-           iditer,
            tid,
            versionBuffer,
            keyBuffer,

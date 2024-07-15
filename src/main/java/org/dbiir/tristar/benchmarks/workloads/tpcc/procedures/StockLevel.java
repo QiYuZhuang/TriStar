@@ -62,8 +62,6 @@
        int terminalDistrictLowerID,
        int terminalDistrictUpperID,
        CCType ccType,
-       double zipftheta,
-       ZipfianGenerator iditer,
        long tid,
        long[] versions,
        long[] keys,

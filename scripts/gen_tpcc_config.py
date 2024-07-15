@@ -48,13 +48,7 @@ def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.
 
     ElementTree.SubElement(root, "scalefactor").text = str(scalaF)
     ElementTree.SubElement(root, "terminals").text = str(terminals)
-    
-    if casename == "warehouse":
-        ElementTree.SubElement(root, "warehouseSkew").text = "false"
-    elif casename == "customer":
-        ElementTree.SubElement(root, "customerSkew").text = "true"
-    if zipf > 0:
-        ElementTree.SubElement(root, "zipf").text = str(zipf)
+
     works = ElementTree.SubElement(root, "works")
     if int(len(rate)) == int(0):
         generate_work(works, weight, "unlimited")
