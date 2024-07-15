@@ -11,8 +11,8 @@ import lombok.Setter;
 
 public class TransactionCollector {
     private static final TransactionCollector INSTANCE;
-    static public int TRANSACTION_BATCH = 250;
-    private static final double SAMPLE_PROBABILITY = 0.01;
+    static public int TRANSACTION_BATCH = 128;
+    private static final double SAMPLE_PROBABILITY = 0.1;
     private final Random random = new Random();
     static String edgeFormat = "#%d,%d,%d";
     private final Lock lock;

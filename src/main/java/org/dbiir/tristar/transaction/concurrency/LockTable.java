@@ -224,8 +224,8 @@ public class LockTable {
                 int count = 0;
                 while((res = lock.tryLock(tid, type, ccType)) == 0)  {
                     try {
-                        Thread.sleep(0, 10);
-                        // System.out.println("wait for lock " + tid + " " + table + ", lock type is " + type);
+                        Thread.sleep(0, 100);
+                        // System.out.println(Thread.currentThread().getName() + " wait for lock " + key + " " + table + ", lock type is " + type);
                     } catch (InterruptedException ex) {
                         System.out.println("out of the max retry count, lock type is " + type);
                         res = -1;

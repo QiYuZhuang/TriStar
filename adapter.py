@@ -2,11 +2,11 @@ import argparse
 import signal
 import socket
 
-from services.offline import OfflineService
-from services.online import OnlineService
+from tristar_adapter.services.offline import OfflineService
+from tristar_adapter.services.online import OnlineService
 
-server_sockets: list[socket] = []
-client_sockets: list[socket] = []
+server_sockets: list[socket.socket] = []
+client_sockets: list[socket.socket] = []
 workloads = ["ycsb", "tpcc", "smallbank"]
 
 def prepare_for_connect():
@@ -28,7 +28,7 @@ def signal_handler(signal, frame):
     close_service(server_sockets, client_sockets)
 
 
-def close_service(server_ss: list[socket], client_ss: list[socket]):
+def close_service(server_ss: list[socket.socket], client_ss: list[socket.socket]):
     for s in server_ss:
         s.close()
     for s in client_ss:
@@ -66,13 +66,14 @@ if __name__ == "__main__":
         print('Received message:', data)
         variables: list[str] = data.split(",")
         if variables[0].lower() == "online":
-            res = online_service.service(variables[1], variables[2:])
-            reply = str(res)
-            client_socket.sendall(reply.encode())
+            res = online_service.service(variables[1], variables[2].strip())
+            reply = str(res) + "\n"
+            client_socket.sendall(reply.encode('utf-8'))
+            print('Reply:', reply)
         elif variables[0].lower() == "offline":
-            offline_service.service(variables[1], variables[2:])
+            offline_service.service(variables[1], variables[2])
             reply = 'Train Finished!'
-            client_socket.sendall(reply.encode())
+            client_socket.sendall(reply.encode('utf-8'))
 
     # Close the connection
     close_service(server_sockets, client_sockets)

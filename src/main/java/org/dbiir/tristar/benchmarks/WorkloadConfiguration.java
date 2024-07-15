@@ -17,17 +17,18 @@
 
 package org.dbiir.tristar.benchmarks;
 
-import lombok.Getter;
-import lombok.Setter;
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.commons.configuration2.XMLConfiguration;
-import org.dbiir.tristar.adapter.Adapter;
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.api.TransactionTypes;
 import org.dbiir.tristar.benchmarks.types.DatabaseType;
 import org.dbiir.tristar.common.CCType;
 
-import java.sql.Connection;
-import java.util.ArrayList;
-import java.util.List;
+import lombok.Getter;
+import lombok.Setter;
 
 public class WorkloadConfiguration {
 
@@ -171,7 +172,7 @@ public class WorkloadConfiguration {
         break;
       case "DYNAMIC":
         this.concurrencyControlType = CCType.DYNAMIC;
-        Adapter.getInstance().setUse(true);
+        TAdapter.getInstance().setUsed(true);
         break;
       case "RC":
         this.concurrencyControlType = CCType.RC;

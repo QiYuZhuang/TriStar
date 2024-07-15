@@ -1,19 +1,20 @@
 package org.dbiir.tristar.adapter;
 
-import lombok.Getter;
-import lombok.Setter;
+import java.util.List;
+
 import org.dbiir.tristar.benchmarks.api.BenchmarkModule;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.common.CCType;
 
-import java.util.ArrayList;
-import java.util.List;
+import lombok.Getter;
+import lombok.Setter;
 
 public class TAdapter {
     private static final TAdapter INSTANCE;
     @Setter
     private boolean used = false; // true if DYNAMIC
     private CCType currentCCType = CCType.SER;
+    @Getter
     private CCType nextCCType;
     @Getter
     private CCType switchPhaseCCType = CCType.NUM_CC;
@@ -35,6 +36,9 @@ public class TAdapter {
     }
 
     public CCType getCCType() {
+        if (!used) {
+            return benchmark.getCCType();
+        }
         if (inSwitchPhase)
             return switchPhaseCCType;
         else
@@ -47,9 +51,11 @@ public class TAdapter {
 
     public void setNextCCType(CCType ccType) {
         if (!used) {
+            System.out.println("Can't switch isolation level when used = false");
             return;
         }
         nextCCType = ccType;
+        System.out.println("Switch to " + nextCCType + " current: " + currentCCType);
         if (nextCCType == currentCCType) {
             nextCCType = CCType.NUM_CC;
         } else {
@@ -60,23 +66,31 @@ public class TAdapter {
              * 3. travel through the worker list to determine whether all workers finish the switch
              * 4. notify all workers to use the validation in new isolation level
              */
+            System.out.println("=====*===== Switch from " + currentCCType + " to " + nextCCType);
+            long startTime = System.currentTimeMillis();
             setSwitchPhaseCCType();
             inSwitchPhase = true;
             while (!allSwitchPhaseReady()) {}
             allWorkersReadyForSwitch = true;
+            System.out.println("=====*===== All workers ready for switch");
             while (!allSwitchFinish()) {}
-            currentCCType = switchPhaseCCType;
-            resetWorkerStatus();
+            currentCCType = nextCCType;
             inSwitchPhase = false;
+            allWorkersReadyForSwitch = false;
+            resetWorkerStatus();
+            long endTime = System.currentTimeMillis();
+            System.out.println("=====*===== Switch phase takes " + (endTime - startTime) + "ms");
+            nextCCType = CCType.NUM_CC;
         }
     }
 
     public void setNextCCType(String ccType) {
-        if (ccType.equals("1")) {
+        ccType = ccType.trim();
+        if (ccType.equals("0")) {
             this.setNextCCType(CCType.SER);
-        } else if (ccType.equals("2")) {
+        } else if (ccType.equals("1")) {
             this.setNextCCType(CCType.SI_TAILOR);
-        } else if (ccType.equals("3")) {
+        } else if (ccType.equals("2")) {
             this.setNextCCType(CCType.RC_TAILOR);
         } else {
             System.out.println("ERROR");
@@ -86,6 +100,11 @@ public class TAdapter {
     private boolean allSwitchFinish() {
         for (Worker worker: workers) {
             if (!worker.isSwitchFinish()) {
+                System.out.println("worker #" + worker.getId() + " is not finished");
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException e) {
+                }
                 return false;
             }
         }
@@ -103,6 +122,11 @@ public class TAdapter {
         // ready if its validation is
         for (Worker worker: workers) {
             if (!worker.isSwitchPhaseReady()) {
+                System.out.println("worker #" + worker.getId() + " is not ready");
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException e) {
+                }
                 return false;
             }
         }

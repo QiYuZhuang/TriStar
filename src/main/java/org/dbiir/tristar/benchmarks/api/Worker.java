@@ -28,8 +28,6 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import lombok.Getter;
-import lombok.Setter;
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.LatencyRecord;
 import org.dbiir.tristar.benchmarks.Phase;
@@ -46,6 +44,9 @@ import org.dbiir.tristar.benchmarks.util.SQLUtil;
 import org.dbiir.tristar.common.CCType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import lombok.Getter;
+import lombok.Setter;
 
 public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(Worker.class);
@@ -84,6 +85,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   @Getter
   @Setter
   protected boolean switchPhaseReady = false; // validation transaction common, set it to true
+  @Getter
+  @Setter
+  protected CCType realTimeCCType = CCType.NUM_CC; 
+  @Setter
+  @Getter
+  protected boolean validationFinish = false;
 
   public Worker(T benchmark, int id) {
     this.id = id;
@@ -112,6 +119,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             this.conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
             break;
           case SER:
+          case DYNAMIC:
             this.conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
         }
         // read the lasted version
@@ -136,6 +144,26 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
   protected void switchIsolation(Connection conn) throws SQLException {
     switch (TAdapter.getInstance().getSwitchPhaseCCType()) {
+      case RC:
+      case RC_ELT:
+      case RC_FOR_UPDATE:
+      case RC_TAILOR:
+      case RC_TAILOR_LOCK:
+        conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        break;
+      case SI:
+      case SI_ELT:
+      case SI_FOR_UPDATE:
+      case SI_TAILOR:
+        conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        break;
+      case SER:
+        conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    }
+  }
+
+  protected void switchIsolation(Connection conn, CCType ccType) throws SQLException {
+    switch (ccType) {
       case RC:
       case RC_ELT:
       case RC_FOR_UPDATE:
@@ -512,10 +540,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             LOG.debug(String.format("%s %s attempting...", this, transactionType));
           }
 
-          if (TAdapter.getInstance().isInSwitchPhase() && !switchFinish) {
-            switchIsolation(conn);
+          if (TAdapter.getInstance().isInSwitchPhase() && TAdapter.getInstance().isAllWorkersReadyForSwitch() && !switchFinish) {
+            switchIsolation(conn, TAdapter.getInstance().getNextCCType());
             switchFinish = true;
             conn.setAutoCommit(false);
+            System.out.println(Thread.currentThread().getName() + "switch finish: " + TAdapter.getInstance().getNextCCType());
           }
 
           status = this.executeWork(conn, transactionType);

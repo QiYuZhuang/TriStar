@@ -45,9 +45,9 @@ import org.dbiir.tristar.benchmarks.util.JSONUtil;
 import org.dbiir.tristar.benchmarks.util.ResultWriter;
 import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.util.TimeUtil;
+import org.dbiir.tristar.common.CCType;
 
 import lombok.Setter;
-import org.dbiir.tristar.common.CCType;
 
 public class TriStar {
     private static final Logger logger = Logger.getLogger(TriStar.class);
@@ -207,7 +207,8 @@ public class TriStar {
         wrkld.setScaleFactor(xmlConfig.getDouble("scalefactor", 1.0));
         wrkld.setDataDir(xmlConfig.getString("datadir", "."));
         wrkld.setDDLPath(xmlConfig.getString("ddlpath", null));
-        String type = !type_.equals("default") ? type_ : xmlConfig.getString("concurrencyControlType", "SERIALIZABLE");
+        String type = xmlConfig.getString("concurrencyControlType", "SERIALIZABLE");
+        System.out.println("concurrencyControlType: " + type);
         wrkld.setConcurrencyControlType(type);
 
         double selectivity = -1;

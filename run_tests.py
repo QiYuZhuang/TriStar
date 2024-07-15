@@ -19,7 +19,7 @@ workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
              "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
-             "wr_ratio-128"]
+             "wr_ratio-128", "dynamic-128"]
 strategies = ["SERIALIZABLE", "SI_TAILOR", "RC_TAILOR"]
 
 
@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
         if not online_predict and f == "random-128":
             offline_service = OfflineService(args.wl)
-            offline_service.service("train", f, meta_prefix + "/", tss)
+            offline_service.service("train", f, meta_prefix + "/" + args.wl, tss)
             print("success")
 
     print("start time: ", start_time)

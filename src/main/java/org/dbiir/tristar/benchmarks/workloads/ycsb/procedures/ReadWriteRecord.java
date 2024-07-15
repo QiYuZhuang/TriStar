@@ -11,12 +11,10 @@ import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
-
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
+import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
@@ -60,6 +58,8 @@ public class ReadWriteRecord extends Procedure {
         for (int i = 0; i < keyname.length; i++) {
             sortedKeyname[i] = keyname[keyname.length - i - 1];
         }
+
+        System.arraycopy(sortedKeyname, 0, keyname, 0, keyname.length);
 
         int len = keyname.length;
         StringBuilder finalStmt = new StringBuilder();
@@ -152,12 +152,25 @@ public class ReadWriteRecord extends Procedure {
             throw ex;
         }
 
+        while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+            // set current thread ready, block for all thread to ready
+            if (!worker.isSwitchPhaseReady()) {
+                worker.setSwitchPhaseReady(true);
+                type = TAdapter.getInstance().getCCType();
+                // System.out.println(Thread.currentThread().getName() + " is ready for switch");
+            } else {
+                try {
+                    Thread.sleep(1);
+                    // System.out.println(Thread.currentThread().getName() + " waits for switch " + TAdapter.getInstance().isAllWorkersReadyForSwitch());
+                } catch (InterruptedException e) {
+                }
+            }
+        }
+
+        // System.out.println(Thread.currentThread().getName() + "type: " + type);
+        worker.setRealTimeCCType(type);
         if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
             int validationPhase = 0;
-            while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-                // set current thread ready, block for all thread to ready
-                worker.setSwitchPhaseReady(true);
-            }
             for (int i = 0; i < len; i++) {
                 try {
                     if (ops[i] == 1)
@@ -171,6 +184,7 @@ public class ReadWriteRecord extends Procedure {
                 }
             }
         }
+        worker.setValidationFinish(true);
     }
 
     private void releaseTailorCCLock(int phase, int[] keynames, long tid) {
