@@ -10,7 +10,7 @@ public class FlowRate {
     private static final FlowRate INSTANCE;
     private static final int SMALL_BANK_HASH_SIZE = 4000000;
     private static final int YCSB_HASH_SIZE = 1000000;
-    private static final boolean use = true;
+    private static final boolean use = false;
     private int HASH_SIZE;
     private static final int THRESHOLDS = 128;
     private static final double P = 0.3;
