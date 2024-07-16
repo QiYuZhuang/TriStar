@@ -16,7 +16,7 @@ For example, you can run the following command generate your tpcc configuration 
 ```
 python3 gen_tpcc_config.py
 ```
-After you have completed the compilation and generated necessary configuration files, you can run the benchmark tests using the run_test.py script. Our testing program does not include the data loading part.
+After you have completed the compilation and generated necessary configuration files, you can run the benchmark tests using the `run_test.py` script. Our testing program does not include the data loading part.
 That means you should import the data into the database before running the tests.
 
 You can run the following command to get help:
