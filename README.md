@@ -26,14 +26,16 @@ python3 run_test.py -h
 The following options are provided:
 ```
   -h, --help            show this help message and exit
-  -f {scalability,hotspot-128,skew-128,bal_ratio-128,wc_ratio-128,random-128,no_ratio-128,pa_ratio-128,ycsb-wr-128,ycsb-scalability,ycsb-skew} 
-  --function {scalability,hotspot-128,skew-128,bal_ratio-128,wc_ratio-128,random-128,no_ratio-128,pa_ratio-128,ycsb-wr-128,ycsb-scalability,ycsb-skew} 
+  -f {scalability,hotspot-128,skew-128,wc_ratio-256,bal_ratio-128,wc_ratio-128,random-128,no_ratio-128,pa_ratio-128,wr_ratio-128} [{scalability,hotspot-128,skew-128,wc_ratio-256,bal_ratio-128,wc_ratio-
+128,random-128,no_ratio-128,pa_ratio-128,wr_ratio-128} ...], --function {scalability,hotspot-128,skew-128,wc_ratio-256,bal_ratio-128,wc_ratio-128,random-128,no_ratio-128,pa_ratio-128,wr_ratio-128} [{scalability,hotspot-128,skew-128,wc_ratio-256,bal_ratio-128,wc_ratio-128,random-128,no_ratio-128,pa_ratio-128,wr_ratio-128} ...]
                         specify the function
   -w {ycsb,tpcc,smallbank}, --workload {ycsb,tpcc,smallbank}
                         specify the workload
-  -e {mysql,postgresql}, --engine {postgresql}
+  -e {postgresql}, --engine {postgresql}
                         specify the workload
   -n CNT, --cnt CNT     count of execution
+  -p PHASE, --phase PHASE
+                        online predict or offline training
 ```
 For example, you can run the command to execute the hotspot-256 test of the SmallBank benchmark in PostgreSQL:
 ```

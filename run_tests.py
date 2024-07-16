@@ -16,9 +16,9 @@ prefix_cmd = "java -cp target/tristar/tristar/lib/ -jar target/tristar/tristar/t
 result_prefix = "results/"
 meta_prefix = "metas/"
 workloads = ["ycsb", "tpcc", "smallbank"]
-engines = ["mysql", "postgresql"]
-functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
-             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
+engines = ["postgresql"]
+functions = ["scalability", "hotspot-128","skew-128", "wc_ratio-256",
+            "bal_ratio-128", "wc_ratio-128", "random-128", "no_ratio-128", "pa_ratio-128",
              "wr_ratio-128"]
 strategies = ["SERIALIZABLE", "SI_TAILOR", "RC_TAILOR"]
 
