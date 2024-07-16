@@ -1,5 +1,5 @@
 # Usage Guide
-TriSail is an extension based on BenchBase, currently supporting TPC-C, SmallBank, and YCSB benchmarks running on PostgreSQL.
+TriSail is an extension based on [BenchBase](https://github.com/cmu-db/benchbase), currently supporting TPC-C, SmallBank, and YCSB benchmarks running on PostgreSQL.
 ## How to Build
 TriSail requires JDK 21 and Maven 3.9+ for compilation. To run the build scripts, you need to ensure that Python 3.9+ is installed.
 
@@ -10,7 +10,7 @@ python3 build.py
 ```
 This command will automatically compile and extract the relevant files.
 ## How to Run
-We provide python scripts located in the /scripts folder to generate Before running the tests, you should modify the information in the python script to ensure the generation of configuration files that meet the requirements, including the JDBC connection URL to connect to the database, and the database username and password.the corresponding `.xml` configuration files.
+We provide python scripts located in the /scripts folder to generate the corresponding `.xml` configuration files. Before running the tests, you should modify the information in the python script to ensure the generation of configuration files that meet the requirements, including the JDBC connection URL to connect to the database, and the database username and password.
 
 For example, you can run the following command generate your tpcc configuration files:
 ```
