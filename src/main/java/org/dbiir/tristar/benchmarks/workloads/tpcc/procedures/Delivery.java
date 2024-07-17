@@ -64,7 +64,7 @@
        new SQLStmt(
            """
          UPDATE %s
-            SET C_BALANCE = C_BALANCE + ?, vid = vid + 1
+            SET C_BALANCE = C_BALANCE - ?, vid = vid + 1
           WHERE C_W_ID = ?
             AND C_D_ID = ?
             AND C_ID = ?

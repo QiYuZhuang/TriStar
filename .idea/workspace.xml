@@ -5,15 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d0728a80-cc6e-4316-9a91-9eb6b3c68043" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/scripts/gen_tpcc_config.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/gen_tpcc_config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/TPCCBenchmark.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/TPCCBenchmark.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/TPCCWorker.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/TPCCWorker.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/Delivery.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/Delivery.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/NewOrder.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/NewOrder.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/OrderStatus.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/OrderStatus.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/Payment.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/Payment.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/StockLevel.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/StockLevel.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/TPCCProcedure.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/dbiir/tristar/benchmarks/workloads/tpcc/procedures/TPCCProcedure.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -35,7 +27,7 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "mysql",
+    "git-widget-placeholder": "tpcc",
     "kotlin-language-version-configured": "true"
   }
 }]]></component>
