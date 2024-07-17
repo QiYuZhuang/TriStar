@@ -1,5 +1,5 @@
 # Usage Guide
-TxnSails is an extension based on [BenchBase](https://github.com/cmu-db/benchbase), currently supporting TPC-C, SmallBank, and YCSB benchmarks running on PostgreSQL.
+TxnSails, based on [BenchBase](https://github.com/cmu-db/benchbase), currently supports TPC-C, SmallBank, and YCSB benchmarks running on PostgreSQL. Additionally, you can run the TxnSails, Promotion, and ELM methods on the these benchmarks.
 ## How to Build
 TxnSails requires JDK 21 and Maven 3.9+ for compilation. To run the build scripts, you need to ensure that Python 3.9+ is installed.
 
