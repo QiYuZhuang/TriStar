@@ -7,6 +7,7 @@ import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
 
 import lombok.Getter;
+import lombok.Setter;
 
 
 public class ValidationLock {
@@ -21,6 +22,18 @@ public class ValidationLock {
     private final long id;
     @Getter
     long version;
+    @Getter
+    @Setter
+    long versionOldRead;
+    @Getter
+    @Setter
+    long versionOldWrite;
+    @Getter
+    @Setter
+    long versionNewRead;
+    @Getter
+    @Setter
+    long versionNewWrite;
 
     public ValidationLock(long id) {
         this.lock = new ReentrantLock();

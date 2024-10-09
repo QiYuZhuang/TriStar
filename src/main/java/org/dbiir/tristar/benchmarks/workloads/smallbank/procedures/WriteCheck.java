@@ -30,6 +30,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
@@ -296,12 +297,12 @@ public class WriteCheck extends Procedure {
     }
   }
 
-  public void doAfterCommit(long custId0, long custId1, CCType type, boolean success, long[] versions, long tid, int[] checkout) {
+  public void doAfterCommit(long custId0, long custId1, CCType type, boolean success, long[] versions, long tid, int[] checkout, long latency) {
     if (TransactionCollector.getInstance().isSample()) {
-      TransactionCollector.getInstance().addTransactionSample(16,
-              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId1)},
-              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId0)},
-              success?1:0);
+      TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("WriteCheck").getId(),
+              new RWRecord[]{new RWRecord(1, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId1)},
+              new RWRecord[]{new RWRecord(2, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId0)},
+              success?1:0, latency);
     }
 
     /*

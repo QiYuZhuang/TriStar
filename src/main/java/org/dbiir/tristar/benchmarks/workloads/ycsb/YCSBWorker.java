@@ -48,14 +48,18 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   private int[] keynames = new int[10];
   private long tid;
   private final int init_record_count;
-  private final int phaseNum = 8;
-  private final double[] zipfPhases = new double[]{0.1, 0.1, 0.1, 1.3, 0.7, 1.3, 0.7, 0.9};
-  private final double[] ratio1Phases = new double[]{1.0, 1.0, 1.0, 1.0, 0.9, 1.0, 1.0, 1.0};
-  private final double[] ratio2Phases = new double[]{0.1, 0.1, 0.1, 0.95, 0.05, 0.1, 0.1, 0.5};
+  // private final int phaseNum = 8;
+  // private final double[] zipfPhases = new double[]{0.1, 0.1, 0.1, 1.3, 0.7, 1.3, 0.7, 1.1};
+  // private final double[] ratio1Phases = new double[]{1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+  // private final double[] ratio2Phases = new double[]{0.1, 0.1, 0.1, 0.95, 0.05, 0.1, 0.1, 0.1};
+  private final int phaseNum = 4;
+  private final double[] zipfPhases = new double[]{0.1, 0.1, 1.3, 0.7};
+  private final double[] ratio1Phases = new double[]{1.0, 1.0, 1.0, 1.0};
+  private final double[] ratio2Phases = new double[]{0.1, 0.1, 0.1, 0.1};
   private final int phaseInterval = 10000;
   private int phaseCount = 0;
   private long lastPhaseTimestamp = 0L;
-  private final boolean dynamic = true;
+  private final boolean dynamic = false;
 
   public YCSBWorker(YCSBBenchmark benchmarkModule, int id, int init_record_count) {
     super(benchmarkModule, id);
@@ -96,7 +100,8 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     this.checkTransferPhase();
     this.realTimeCCType = CCType.NUM_CC;
     this.validationFinish = false;
-    this.tid = System.nanoTime() << 10 | Thread.currentThread().getId() & 1023L;
+    this.executionFinish = false;
+    this.tid = ((System.nanoTime() << 10) & Long.MAX_VALUE) | Thread.currentThread().getId() & 1023L;
     Class<? extends Procedure> procClass = nextTrans.getProcedureClass();
 
     if (procClass.equals(DeleteRecord.class)) {
@@ -119,6 +124,9 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   }
 
   private void checkTransferPhase() {
+    if (!dynamic) {
+      return;
+    }
     Objects.requireNonNull(this);
     if (this.lastPhaseTimestamp == 0L) {
       this.lastPhaseTimestamp = System.currentTimeMillis();
@@ -128,12 +136,12 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     } else {
       long var10000 = System.currentTimeMillis() - this.lastPhaseTimestamp;
       Objects.requireNonNull(this);
-      if (var10000 > 10000L) {
+      if (var10000 > phaseInterval) {
         this.lastPhaseTimestamp = System.currentTimeMillis();
         ++this.phaseCount;
         int var1 = this.phaseCount;
         Objects.requireNonNull(this);
-        if (var1 >= 8) {
+        if (var1 >= phaseNum) {
           this.phaseCount = 0;
         }
 
@@ -147,18 +155,22 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   }
 
   @Override
-  protected void executeAfterWork(TransactionType txnType, boolean success) throws Procedure.UserAbortException, SQLException {
+  protected void executeAfterWork(TransactionType txnType, boolean success, long latency) throws Procedure.UserAbortException, SQLException {
     if (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-      System.out.println(Thread.currentThread().getName() + " is ready");
+      System.out.println(Thread.currentThread().getName() + " is ready " + System.currentTimeMillis());
       this.switchPhaseReady = true;
     }
     Class<? extends Procedure> procClass = txnType.getProcedureClass();
     if (procClass.equals(ReadWriteRecord.class)) {
       if (this.realTimeCCType != CCType.NUM_CC) {
-        this.procReadWriteRecord.doAfterCommit(this.keynames, this.realTimeCCType, success || this.validationFinish, this.versionBuffer, this.tid);
+        this.procReadWriteRecord.doAfterCommit(this.keynames, this.realTimeCCType, success, this.validationFinish, this.versionBuffer, this.tid, oldTransaction(), latency);
       } else {
-        this.procReadWriteRecord.doAfterCommit(this.keynames, TAdapter.getInstance().getCCType(), success || this.validationFinish, this.versionBuffer, this.tid);
+        this.procReadWriteRecord.doAfterCommit(this.keynames, TAdapter.getInstance().getCCType(), success, this.validationFinish, this.versionBuffer, this.tid, oldTransaction(), latency);
       }
+    } else if (procClass.equals(ReadRecord.class)) {
+      this.procReadRecord.doAfterCommit(this.keynames, success, latency);;
+    } else if (procClass.equals(UpdateRecord.class)) {
+      this.procUpdateRecord.doAfterCommit(this.keynames, success, latency);
     }
 
     while(TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
@@ -175,9 +187,17 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   }
 
   private void updateRecord(Connection conn) throws SQLException {
-    int keyname = this.readRecord.nextInt();
-    this.buildParameters();
-    this.procUpdateRecord.run(conn, keyname, this.params);
+    for (int i = 0; i < totalRequest; i++) {
+      int keyname = 0;
+
+      do {
+        keyname = this.readRecord.nextInt();
+      } while(this.isDuplicatedKey(keyname, i, this.keynames));
+
+      this.keynames[i] = keyname;
+    }
+
+    this.procUpdateRecord.run(conn, this.keynames, this.fixParams);
   }
 
   private void scanRecord(Connection conn) throws SQLException {
@@ -187,8 +207,16 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   }
 
   private void readRecord(Connection conn) throws SQLException {
-    int keyname = this.readRecord.nextInt();
-    this.procReadRecord.run(conn, keyname, this.results);
+    for (int i = 0; i < totalRequest; i++) {
+      int keyname = 0;
+
+      do {
+        keyname = this.readRecord.nextInt();
+      } while(this.isDuplicatedKey(keyname, i, this.keynames));
+
+      this.keynames[i] = keyname;
+    }
+    this.procReadRecord.run(conn, this.keynames);
   }
 
   private void readModifyWriteRecord(Connection conn) throws SQLException {
@@ -218,6 +246,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   }
 
   private void readWriteRead(Connection conn) throws SQLException {
+    CCType ccType = CCType.NUM_CC;
     for (int i = 0; i < totalRequest; i++) {
       int keyname = 0;
 
@@ -228,7 +257,8 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       this.keynames[i] = keyname;
     }
 
-    this.procReadWriteRecord.run(this, conn, this.keynames, this.fixParams, this.ratio1, this.ratio2, this.tid, this.versionBuffer, TAdapter.getInstance().getCCType());
+    this.procReadWriteRecord.run(this, conn, this.keynames, this.fixParams, this.ratio1, this.ratio2, this.tid, this.versionBuffer, 
+                                  TAdapter.getInstance().getCCType(oldTransaction()));
   }
 
   private void buildParameters() {

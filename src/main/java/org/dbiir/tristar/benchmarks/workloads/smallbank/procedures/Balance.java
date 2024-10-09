@@ -30,6 +30,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
@@ -239,13 +240,13 @@ public class Balance extends Procedure {
     }
   }
 
-  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
+  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, long latency) {
     // transaction sample
     if (TransactionCollector.getInstance().isSample()) {
-      TransactionCollector.getInstance().addTransactionSample(2,
-              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId),
-                            new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId)},
-              new RWRecord[]{}, success?1:0);
+      TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("Balance").getId(),
+              new RWRecord[]{new RWRecord(1, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId),
+                            new RWRecord(2, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId)},
+              new RWRecord[]{}, success?1:0, latency);
     }
 
     if (!success)

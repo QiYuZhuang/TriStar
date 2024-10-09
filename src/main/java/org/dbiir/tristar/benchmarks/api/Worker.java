@@ -17,6 +17,8 @@
 
 package org.dbiir.tristar.benchmarks.api;
 
+import static org.dbiir.tristar.benchmarks.types.State.MEASURE;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLRecoverableException;
@@ -37,7 +39,6 @@ import org.dbiir.tristar.benchmarks.WorkloadState;
 import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
 import org.dbiir.tristar.benchmarks.types.DatabaseType;
 import org.dbiir.tristar.benchmarks.types.State;
-import static org.dbiir.tristar.benchmarks.types.State.MEASURE;
 import org.dbiir.tristar.benchmarks.types.TransactionStatus;
 import org.dbiir.tristar.benchmarks.util.Histogram;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
@@ -52,6 +53,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(Worker.class);
   private static final Logger ABORT_LOG =
       LoggerFactory.getLogger("com.oltpbenchmark.api.ABORT_LOG");
+  private static final double THINK_TIME_PROBABILITY = 0.01;
 
   private WorkloadState workloadState;
   private LatencyRecord latencies;
@@ -91,6 +93,18 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   @Setter
   @Getter
   protected boolean validationFinish = false;
+  @Setter
+  @Getter
+  protected boolean executionFinish = false;
+  @Setter
+  @Getter
+  protected boolean preSleep = false;
+  @Setter
+  @Getter
+  protected boolean postSleep = false;
+  @Setter
+  @Getter
+  protected boolean needAbort = false;
 
   public Worker(T benchmark, int id) {
     this.id = id;
@@ -120,6 +134,8 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             break;
           case SER:
           case DYNAMIC:
+          case DYNAMIC_B:
+          case DYNAMIC_A:
             this.conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
         }
         // read the lasted version
@@ -140,6 +156,10 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       this.name_procedures.put(e.getKey().getName(), proc);
       this.class_procedures.put(proc.getClass(), proc);
     }
+  }
+
+  public boolean oldTransaction() {
+    return !switchFinish;
   }
 
   protected void switchIsolation(Connection conn) throws SQLException {
@@ -366,18 +386,29 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
         // weird because if you add more simultaneous clients, you will
         // increase latency (queue delay) but we do this anyway since it is
         // useful sometimes
+        validationFinish = false;
+        executionFinish = false;
 
         // Wait before transaction if specified
+        boolean preDelay = rng().nextDouble() < THINK_TIME_PROBABILITY;
         long preExecutionWaitInMillis = getPreExecutionWaitInMillis(transactionType);
 
-        if (preExecutionWaitInMillis > 0) {
+        if (preExecutionWaitInMillis > 0 && preDelay) {
           try {
             LOG.debug(
                 "{} will sleep for {} ms before executing",
                 transactionType.getName(),
                 preExecutionWaitInMillis);
-
+            preSleep = true;
             Thread.sleep(preExecutionWaitInMillis);
+            preSleep = false;
+            if (needAbort) {
+              needAbort = false;
+              System.out.println("abort for switch");
+              if (rng().nextDouble() < THINK_TIME_PROBABILITY) {
+                Thread.sleep(preExecutionWaitInMillis);
+              }
+            }
           } catch (InterruptedException e) {
             LOG.error("Pre-execution sleep interrupted", e);
           }
@@ -431,17 +462,26 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             // Do nothing
         }
 
-        // wait after transaction if specified
-        long postExecutionWaitInMillis = getPostExecutionWaitInMillis(transactionType);
+        // wait after transaction if specified, simplify configuration, let post = pre in experiments
+        validationFinish = false;
+        executionFinish = false;
 
-        if (postExecutionWaitInMillis > 0) {
+        long postExecutionWaitInMillis = getPostExecutionWaitInMillis(transactionType);
+        preDelay = rng().nextDouble() < THINK_TIME_PROBABILITY;
+
+        if (postExecutionWaitInMillis > 0 && preDelay) {
           try {
             LOG.debug(
                 "{} will sleep for {} ms after executing",
                 transactionType.getName(),
                 postExecutionWaitInMillis);
-
+            postSleep = true;
             Thread.sleep(postExecutionWaitInMillis);
+            postSleep = false;
+            if (needAbort) {
+              needAbort = false;
+              System.out.println("abort for switch");
+            }
           } catch (InterruptedException e) {
             LOG.error("Post-execution sleep interrupted", e);
           }
@@ -533,6 +573,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
 //        this.conn.setTransactionIsolation(transactionType.getTransactionIsolation());
 //        System.out.println("set transaction benchmark: " + transactionType.getTransactionIsolation());
+        long start = System.currentTimeMillis();
 
         try {
 
@@ -545,6 +586,36 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             switchFinish = true;
             conn.setAutoCommit(false);
             System.out.println(Thread.currentThread().getName() + "switch finish: " + TAdapter.getInstance().getNextCCType());
+          }
+
+          boolean needRecord = false;
+          while (TAdapter.getInstance().blockForSwitch()) {
+            if (!switchFinish) {
+              switchIsolation(conn, TAdapter.getInstance().getNextCCType());
+              switchFinish = true;
+            }
+            try {
+              Thread.sleep(1);
+            } catch (InterruptedException ex) {
+              // pass
+            }
+            needRecord = true;
+          }
+
+          while (TAdapter.getInstance().abortForSwitch()) {
+            if (!switchFinish) {
+              switchIsolation(conn, TAdapter.getInstance().getNextCCType());
+              switchFinish = true;
+            }
+            try {
+              Thread.sleep(1);
+            } catch (InterruptedException ex) {
+              // pass
+            }
+            needRecord = true;
+          }
+          if (needRecord) {
+            System.out.println(Thread.currentThread().getName() + "-<586> block time: " + (System.currentTimeMillis() - start) + " ms");
           }
 
           status = this.executeWork(conn, transactionType);
@@ -719,10 +790,13 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             break;
           }
         } finally {
+          long executeLatency = System.currentTimeMillis() - start;
           if (status == TransactionStatus.SUCCESS) {
-            executeAfterWork(transactionType, true);
+            executeAfterWork(transactionType, true, executeLatency);
+            // System.out.println("SUCCESS-758");
           } else {
-            executeAfterWork(transactionType, false);
+            executeAfterWork(transactionType, false, executeLatency);
+            // System.out.println("ERROR-761");
           }
 
           if (this.configuration.getNewConnectionPerTxn() && this.conn != null) {
@@ -860,7 +934,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   protected abstract TransactionStatus executeWork(Connection conn, TransactionType txnType)
       throws UserAbortException, SQLException;
 
-  protected abstract void executeAfterWork(TransactionType txnType, boolean success)
+  protected abstract void executeAfterWork(TransactionType txnType, boolean success, long latency)
           throws UserAbortException, SQLException;
 
   /** Called at the end of the test to do any clean up that may be required. */
@@ -879,10 +953,10 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   protected long getPreExecutionWaitInMillis(TransactionType type) {
-    return 0;
+    return type.getPreExecutionWait();
   }
 
   protected long getPostExecutionWaitInMillis(TransactionType type) {
-    return 0;
+    return type.getPostExecutionWait();
   }
 }

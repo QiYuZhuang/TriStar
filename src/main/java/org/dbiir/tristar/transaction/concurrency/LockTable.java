@@ -20,7 +20,7 @@ import org.dbiir.tristar.common.LockType;
 public class LockTable {
     private static final LockTable INSTANCE;
     private static final int SMALL_BANK_HASH_SIZE = 4000000;
-    private static final int YCSB_HASH_SIZE = 1000000;
+    private static final int YCSB_HASH_SIZE = 100000;
     private int LOAD_THREAD = 16;
     private int HASH_SIZE;
     private HashMap<String, LinkedList<XNORLock>[]> ccLocks = new HashMap<>(4);
@@ -210,6 +210,94 @@ public class LockTable {
         }
     }
 
+    public void trySwitchValidation(String table, long tid, long key, long version, boolean old, boolean read) throws SQLException {
+        int bucketNum = (int)(key % HASH_SIZE);
+        List<ValidationLock> lockList = validationLocks.get(table)[bucketNum];
+        for (ValidationLock lock: lockList) {
+            if (lock.getId() == key) {
+                if (old) {
+                    if (!read) {
+                        if (version >= lock.versionNewRead) {
+                            String msg = "Old transaction #" + tid + " can not keep the sequence of rw dependency in switch phase, case1 key: " + key;
+                            throw new SQLException(msg, "502");
+                        }
+                    }
+                    if (version >= lock.versionNewWrite) {
+                        String msg = "Old transaction #" + tid + " can not keep the sequence of rw dependency in switch phase, case2 key: " + key;
+                        throw new SQLException(msg, "502");
+                    }
+                } else {
+                    if (!read) {
+                        if (version < lock.versionOldRead) {
+                            String msg = "New transaction #" + tid + " can not keep the sequence of rw dependency in switch phase, case3 key: " + key;
+                            throw new SQLException(msg, "502");
+                        }
+                    }
+                    if (version < lock.versionOldWrite) {
+                        String msg = "New transaction #" + tid + " can not keep the sequence of rw dependency in switch phase, case4 key: " + key;
+                        throw new SQLException(msg, "502");
+                    }
+                }
+            }
+        }
+    }
+
+    public void updateSwitchValidationRead(String table, long tid, long key, long version, boolean old) {
+        int bucketNum = (int)(key % HASH_SIZE);
+        List<ValidationLock> lockList = validationLocks.get(table)[bucketNum];
+        for (ValidationLock lock: lockList) {
+            if (lock.getId() == key) {
+                if (old) {
+                    lock.setVersionOldRead(Math.max(version, lock.getVersionOldRead()));
+                } else {
+                    lock.setVersionNewRead(Math.min(version, lock.getVersionNewRead()));
+                }
+            }
+        }
+    }
+
+    public void updateSwitchValidationWrite(String table, long tid, long key, long version, boolean old) {
+        int bucketNum = (int)(key % HASH_SIZE);
+        List<ValidationLock> lockList = validationLocks.get(table)[bucketNum];
+        for (ValidationLock lock: lockList) {
+            if (lock.getId() == key) {
+                if (old) {
+                    lock.setVersionOldWrite(Math.max(version, lock.getVersionOldWrite()));
+                } else {
+                    lock.setVersionNewWrite(Math.min(version, lock.getVersionNewWrite()));
+                }
+            }
+        }
+    }
+
+    /*
+     * invoke this method after all transactions finish their switch phase
+     */
+    public void refreshSwitchValidation(String workload) {
+        System.out.println("refresh switch validation: " + workload);
+        String table = "";
+        if (workload.equals("ycsb")) {
+            table = "usertable";
+        } else {
+            System.out.println("not implemented  workload: " + workload);
+        }
+        if (!validationLocks.containsKey(table)) {
+            String msg = "unknown table name: " + table;
+            throw new RuntimeException(msg);
+        }
+        for (int i = 0; i < HASH_SIZE; i++) {
+            // validationBucketLocks.get(table)[i].writeLock().lock();
+            List<ValidationLock> lockList = validationLocks.get(table)[i];
+            for (ValidationLock lock: lockList) {
+                lock.setVersionOldRead(0);
+                lock.setVersionOldWrite(0);
+                lock.setVersionNewRead(Long.MAX_VALUE);
+                lock.setVersionNewWrite(Long.MAX_VALUE);
+            }
+            // validationBucketLocks.get(table)[i].writeLock().unlock();
+        }
+    }
+
     /*
      * @return: true if you get validation lock, otherwise can not find the validation lock
      */
@@ -245,7 +333,6 @@ public class LockTable {
             }
         }
         validationBucketLocks.get(table)[bucketNum].readLock().unlock();
-        System.out.println("Validation Lock { " + table + ", " + key + ", " + type + ", " + (System.currentTimeMillis() - currentTime) + "ms}");
         return false;
     }
 
@@ -365,12 +452,12 @@ public class LockTable {
         }
     }
 
-    public void updateHotspotVersion(String table, long key, long tid) {
+    public void updateHotspotVersion(String table, long key, long vid) {
         int bucketNum = (int)(key % HASH_SIZE);
         validationBucketLocks.get(table)[bucketNum].readLock().lock();
         for (ValidationLock lock: validationLocks.get(table)[bucketNum]) {
             if (lock.getId() == key) {
-                lock.updateVersion(tid);
+                lock.updateVersion(vid);
                 break;
             }
         }

@@ -30,6 +30,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
@@ -124,12 +125,12 @@ public class DepositChecking extends Procedure {
     }
   }
 
-  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, int[] checkout) {
+  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, int[] checkout, long latency) {
     if (TransactionCollector.getInstance().isSample()) {
-      TransactionCollector.getInstance().addTransactionSample(4,
+      TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("DepositChecking").getId(),
               new RWRecord[]{},
-              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId)},
-              success?1:0);
+              new RWRecord[]{new RWRecord(1, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId)},
+              success?1:0, latency);
     }
 
     if (!success) {

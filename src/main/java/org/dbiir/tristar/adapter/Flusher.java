@@ -16,7 +16,7 @@ import lombok.SneakyThrows;
 public class Flusher implements Runnable {
     private static final String ip = "localhost";
     private static final int port = 7654;
-    private static final CCType[] types = new CCType[]{CCType.SER, CCType.SI_TAILOR, CCType.RC_TAILOR, CCType.DYNAMIC};
+    private static final CCType[] types = new CCType[]{CCType.SER, CCType.SI_TAILOR, CCType.RC_TAILOR};
 
     private final String workload;
     @Setter
@@ -33,7 +33,7 @@ public class Flusher implements Runnable {
             this.ccType = ccType;
             this.online = online;
             this.flushCount = 0;
-            if (online && ccType == CCType.DYNAMIC)
+            if (online && (ccType == CCType.DYNAMIC || ccType == CCType.DYNAMIC_B || ccType == CCType.DYNAMIC_A))
                 this.socket = new Socket(ip, port);
             else
                 this.socket = new Socket();
@@ -43,7 +43,7 @@ public class Flusher implements Runnable {
     }
 
     private boolean needFlush(CCType type) {
-        if (type == CCType.DYNAMIC) {
+        if (type == CCType.DYNAMIC || type == CCType.DYNAMIC_B || type == CCType.DYNAMIC_A) {
             return true;
         }
         for (CCType t: types) {
@@ -63,7 +63,7 @@ public class Flusher implements Runnable {
                     flushCount++;
                     TransactionCollector.getInstance().refreshMetas();
                     try {
-                        Thread.sleep(5000);
+                        Thread.sleep(1000);
                     } catch (InterruptedException ignored) {
                         return;
                     }
@@ -92,23 +92,30 @@ public class Flusher implements Runnable {
                         System.out.println("Send the file name to the server: " + fileName);
                         String data = in.readLine();
                         System.out.println("Receive the prediction result: " + data + "; time consume: " + (System.currentTimeMillis() - startPrediction) + " ms");
-                        // TODO: change the
                         TAdapter.getInstance().setNextCCType(data);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
                 System.out.println("Flush time cost: " + (System.currentTimeMillis() - timestamp) + " ms");
-            }
-            TransactionCollector.getInstance().refreshMetas();
-            try {
-                if (online) {
-                    Thread.sleep(Math.max((1000 - (System.currentTimeMillis() - timestamp)), 0));
-                } else {
-                    Thread.sleep(10000);
+            
+                try {
+                    if (online) {
+                        Thread.sleep(Math.max((500 - (System.currentTimeMillis() - timestamp)), 0));
+                    } else {
+                        Thread.sleep(10000);
+                    }
+                } catch (InterruptedException ignored) {
+                    return;
                 }
-            } catch (InterruptedException ignored) {
-                return;
+                TransactionCollector.getInstance().refreshMetas();
+                // try {
+                //     if (online) {
+                //         Thread.sleep(1000);
+                //     } 
+                // } catch (InterruptedException ignored) {
+                //     return;
+                // }
             }
         }
     }

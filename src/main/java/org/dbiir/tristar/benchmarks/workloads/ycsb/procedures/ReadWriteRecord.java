@@ -1,5 +1,7 @@
 package org.dbiir.tristar.benchmarks.workloads.ycsb.procedures;
 
+import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -14,7 +16,6 @@ import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
-import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
@@ -34,7 +35,7 @@ public class ReadWriteRecord extends Procedure {
 
     public final SQLStmt updateStmt = new SQLStmt(
         "UPDATE " + TABLE_NAME + " SET vid=vid+1, FIELD1=?,FIELD2=?,FIELD3=?,FIELD4=?,FIELD5=?," +
-            "FIELD6=?,FIELD7=?,FIELD8=?,FIELD9=?,FIELD10=? WHERE YCSB_KEY=?;"
+            "FIELD6=?,FIELD7=?,FIELD8=?,FIELD9=?,FIELD10=? WHERE YCSB_KEY=? RETURNING vid;"
     );
 
     public final SQLStmt conflictStmt = new SQLStmt(
@@ -151,26 +152,38 @@ public class ReadWriteRecord extends Procedure {
             releaseTailorCCLock(phase, sortedKeyname, tid);
             throw ex;
         }
-
+        // System.out.println(Thread.currentThread().getName() + " execution status, " + worker.isExecutionFinish());
+        worker.setExecutionFinish(true);
+        // System.out.println(Thread.currentThread().getName() + " finished execution, " + System.currentTimeMillis());
+        boolean needRecord = false;
+        long start = System.currentTimeMillis();
         while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
             // set current thread ready, block for all thread to ready
             if (!worker.isSwitchPhaseReady()) {
                 worker.setSwitchPhaseReady(true);
-                type = TAdapter.getInstance().getCCType();
-                // System.out.println(Thread.currentThread().getName() + " is ready for switch");
+                System.out.println(Thread.currentThread().getName() + " is ready for switch");
             } else {
                 try {
                     Thread.sleep(1);
-                    // System.out.println(Thread.currentThread().getName() + " waits for switch " + TAdapter.getInstance().isAllWorkersReadyForSwitch());
                 } catch (InterruptedException e) {
                 }
             }
+            needRecord = true;
         }
+        if (needRecord)
+            System.out.println(Thread.currentThread().getName() + "-<171> block time: " + (System.currentTimeMillis() - start) + "ms");
 
         // System.out.println(Thread.currentThread().getName() + "type: " + type);
+        if (TAdapter.getInstance().mixForSwitch()) {
+            type = CCType.SWITCH;
+        }
         worker.setRealTimeCCType(type);
-        if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
+        if (TAdapter.getInstance().abortForSwitch() || worker.isNeedAbort()) {
+            throw new SQLException("abort for switch", "501");
+        }
+        if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR || type == CCType.SWITCH) {
             int validationPhase = 0;
+            long startValidationLock = System.currentTimeMillis();
             for (int i = 0; i < len; i++) {
                 try {
                     if (ops[i] == 1)
@@ -183,8 +196,23 @@ public class ReadWriteRecord extends Procedure {
                     throw ex;
                 }
             }
+ 
+            if (type == CCType.SWITCH) {
+                for (int i = 0; i < len; i++) {
+                    try {
+                        if (ops[i] == 1) {
+                            LockTable.getInstance().trySwitchValidation(TABLE_NAME, tid, sortedKeyname[i], versions[i], worker.oldTransaction(), true);
+                        } else {
+                            LockTable.getInstance().trySwitchValidation(TABLE_NAME, tid, sortedKeyname[i], versions[i], worker.oldTransaction(), false);
+                        }
+                    } catch (SQLException ex) {
+                        releaseTailorValidationLock(validationPhase, sortedKeyname);
+                        throw ex;
+                    }
+                }
+            }
+            worker.setValidationFinish(true);
         }
-        worker.setValidationFinish(true);
     }
 
     private void releaseTailorCCLock(int phase, int[] keynames, long tid) {
@@ -206,7 +234,7 @@ public class ReadWriteRecord extends Procedure {
         }
     }
 
-    public void doAfterCommit(int[] keynames, CCType type, boolean success, long[] versions, long tid) {
+    public void doAfterCommit(int[] keynames, CCType type, boolean success, boolean validateFinished, long[] versions, long tid, boolean old, long latency) {
         if (TransactionCollector.getInstance().isSample()) {
             int rset_idx = 0;
             int wset_idx = 0;
@@ -216,34 +244,43 @@ public class ReadWriteRecord extends Procedure {
             }
 
             RWRecord[] reads = new RWRecord[ops.length - write_cnt];
-//                    {new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), (int) custId)};
             RWRecord[] writes = new RWRecord[write_cnt];
             for (int i = 0; i < ops.length; i++) {
                 if (ops[i] == 1) {
-                    reads[rset_idx++] = new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
+                    reads[rset_idx++] = new RWRecord(i + 1, YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
                 } else {
-                    writes[wset_idx++] = new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
+                    writes[wset_idx++] = new RWRecord(i + 1, YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
                 }
             }
-            TransactionCollector.getInstance().addTransactionSample(1, reads, writes, success?1:0);
+            TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("ReadWriteRecord").getId(), reads, writes, success?1:0, latency);
         }
-        if (!success)
+        if (!success && !validateFinished)
             return;
-        if (type == CCType.RC_TAILOR_LOCK) {
-            // todo:
+
+        if (type == CCType.SER && success) {
             for (int i = ops.length - 1; i >= 0; i--) {
-                if (ops[i] == 1) {
-                    LockTable.getInstance().releaseLock(TABLE_NAME, keynames[i], tid);
+                if (ops[i] == 2) {
+                    LockTable.getInstance().updateHotspotVersion(TABLE_NAME, keynames[i], versions[i]);
                 }
             }
         }
-        if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
+        if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR || type == CCType.SWITCH) {
             for (int i = ops.length - 1; i >= 0; i--) {
                 if (ops[i] == 1) {
                     LockTable.getInstance().releaseValidationLock(TABLE_NAME, keynames[i], LockType.SH);
                 } else {
                     LockTable.getInstance().releaseValidationLock(TABLE_NAME, keynames[i], LockType.EX);
-                    LockTable.getInstance().updateHotspotVersion(TABLE_NAME, keynames[i], versions[i]);
+                    if (success)
+                        LockTable.getInstance().updateHotspotVersion(TABLE_NAME, keynames[i], versions[i]);
+                }
+            }
+        }
+        if (type == CCType.SWITCH && success) {
+            for (int i = ops.length - 1; i >= 0; i--) {
+                if (ops[i] == 1) {
+                    LockTable.getInstance().updateSwitchValidationRead(TABLE_NAME, tid, keynames[i], versions[i], old);
+                } else {
+                    LockTable.getInstance().updateSwitchValidationWrite(TABLE_NAME, tid, keynames[i], versions[i], old);
                 }
             }
         }

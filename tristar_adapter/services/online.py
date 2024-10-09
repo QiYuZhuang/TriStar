@@ -29,7 +29,7 @@ class OnlineService:
             print(args[0])
             return self.predict(args[0])
         if service_name.lower() == "ok":
-            return "ok"  
+            return "ok"
 
     def predict(self, filepath: str) -> int:
         start_load_time = time.time_ns()

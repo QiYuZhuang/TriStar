@@ -102,7 +102,7 @@ public final class TPCCWorker extends Worker<TPCCBenchmark> {
   }
 
   @Override
-  protected void executeAfterWork(TransactionType txnType, boolean success)
+  protected void executeAfterWork(TransactionType txnType, boolean success, long latency)
           throws UserAbortException, SQLException {
 
   }

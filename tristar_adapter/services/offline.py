@@ -12,6 +12,7 @@ from torch_geometric.loader import DataLoader
 
 from tristar_adapter.graph_construct.graph import Graph
 from tristar_adapter.graph_training.train import GraphClassificationModel
+from tristar_adapter.graph_training.train_embedding import GraphClassificationModelEmbedding
 from torch.cuda.amp import GradScaler, autocast
 
 
@@ -30,13 +31,14 @@ class OfflineService:
     __graph_batch: list[Data] = []
 
     def __init__(self, workload: str = None):
-        if workload is not None:
-            model_path = self.__model_prefix + workload + self.__model_postfix
-            if os.path.exists(model_path) and os.path.isfile(model_path):
-                self.model = torch.load(model_path)
-                self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
-            else:
-                self.model = None
+        self.model = None
+        # if workload is not None:
+        #     model_path = self.__model_prefix + workload + self.__model_postfix
+        #     if os.path.exists(model_path) and os.path.isfile(model_path):
+        #         self.model = torch.load(model_path)
+        #         self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
+        #     else:
+        #         self.model = None
 
     def service(self, service_name: str, *args: Any, **kwargs: Any) -> Any:
         if service_name.lower() == "train":
@@ -61,6 +63,14 @@ class OfflineService:
         for entry in os.scandir(folder_path):
             if not entry.is_dir():
                 continue
+            flag = False
+            for sub_entry in os.scandir(entry.path):
+                if not sub_entry.is_file():
+                    continue
+                if 'label' in sub_entry.name:
+                    flag = True
+            if not flag:
+                continue
             self.__gs.append([])
             for sub_entry in os.scandir(entry.path):
                 if not sub_entry.is_file():
@@ -74,14 +84,14 @@ class OfflineService:
 
     def train(self):
         if self.model is None:
-            self.model = GraphClassificationModel(in_channels=1, edge_in_channels=2, hidden_channels=64, out_channels=3)
+            self.model = GraphClassificationModelEmbedding(in_channels=4, edge_in_channels=2, hidden_channels=64, out_channels=3)
             if torch.cuda.is_available():
                 self.device = torch.device('cuda')
             else:
                 self.device = torch.device('cpu')
             self.model.to(self.device)
             self.optimizer = optim.Adam(self.model.parameters(), lr=0.005)
-        print("len:", len(self.__gs))
+        print("len:", len(self.__gs), len(self.__g_labels))
         for i in range(len(self.__gs)):
             # if i > 200:
             #     continue
@@ -103,9 +113,9 @@ class OfflineService:
                 # if idx >= 2:
                 #     break;
 
-        train_data, test_data = train_test_split(self.__graph_batch, test_size=0.1, random_state=42)
-        train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
-        test_loader = DataLoader(test_data, batch_size=32, shuffle=False)
+        train_data, test_data = train_test_split(self.__graph_batch, test_size=0.01, random_state=37)
+        train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
+        test_loader = DataLoader(test_data, batch_size=16, shuffle=False)
         self.scaler = GradScaler()
 
         for epoch in range(1, self.epoch_size + 1):
@@ -113,7 +123,7 @@ class OfflineService:
             train_acc = self.test_epoch(test_loader)
             print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}')
         
-        torch.save(self.model, self.__model_prefix + "ycsb" + self.__model_postfix)
+        # torch.save(self.model, self.__model_prefix + "ycsb04" + self.__model_postfix)
 
     def train2(self):
         if self.model is None:
@@ -198,10 +208,10 @@ class OfflineService:
             self.optimizer.zero_grad()
             # print("data.batch" + int(data.batch))
             with autocast():
-                out = self.model(data)
+                out, embed = self.model(data)
                 out = out.flatten()
                 loss = F.cross_entropy(out, data.y)
-            # print(loss)
+            print(loss)
             # loss.backward()
             # self.optimizer.step()
             self.scaler.scale(loss).backward()
@@ -213,11 +223,12 @@ class OfflineService:
         self.model.eval()
         correct = 0
         for data in loader:
-            out = self.model(data)
+            out, _ = self.model(data)
             max_values, _ = torch.max(out, dim=1)
             result = torch.where(out == max_values.unsqueeze(1), 1.0, 0)
             pred = result.flatten()
             # print("data.y", data.y)
             # print("pred", pred)
+            # TODO:
             correct += ((pred == 1.0) & (data.y == 1.0)).sum().item()
         return correct / len(loader.dataset)

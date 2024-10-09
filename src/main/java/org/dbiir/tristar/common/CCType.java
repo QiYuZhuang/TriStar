@@ -1,7 +1,5 @@
 package org.dbiir.tristar.common;
 
-import org.dbiir.tristar.benchmarks.types.DatabaseType;
-
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,9 +16,12 @@ public enum CCType {
     RC_TAILOR("RC_TAILOR"),
     RC_TAILOR_LOCK("RC_TAILOR_LOCK"),
     DYNAMIC("DYNAMIC"),
+    DYNAMIC_B("DYNAMIC_B"),
+    DYNAMIC_A("DYNAMIC_A"),
     /* pure */
     RC("RC"),
     SI("SI"),
+    SWITCH("SWITCH"),
     NUM_CC("NUM_CC");
     private final String name;
 

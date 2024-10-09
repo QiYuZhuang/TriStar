@@ -29,12 +29,13 @@ cc_map = {
     "SI_TAILOR": "SI+TV",
     "RC_TAILOR": "RC+TV",
     "RC_TAILOR_LOCK": "RC+TL",
-    "DYNAMIC": "DYNAMIC"
+    "DYNAMIC": "DYNAMIC",
+    "DYNAMIC_B": "DYNAMIC_B"
 }
 
 
 def generate_mysql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrtup: float, terminals, weight, rate="",
-                               dir="../config"):
+                               dir="../config", case_name=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
@@ -75,6 +76,8 @@ def generate_mysql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrtup: f
     filename += "_wrtup_{:03.2f}".format(wrtup)
     if len(rate):
         filename += "_rate_" + str(rate)
+    if len(case_name) > 0:
+        filename += "_" + case_name + "_" + '-'.join(["{:03.1f}".format(w) for w in weight])
 
     filename += "_cc_" + cc_map[cc_type]
 
@@ -155,11 +158,20 @@ def ycsb_random(terminal=128, cnt=80):
         wrtxn = [random.uniform(0.0, 1.0)]
         wrtup = [random.uniform(0.0, 1.0)]
         cc = ["SERIALIZABLE", "RC_TAILOR", "SI_TAILOR"]
-        weight = [0, 0, 0, 0, 0, 0, 100]
+        r_weight = []
+        total = 100
+        for i in range(2):
+            r_int = random.randint(0, total)
+            r_weight.append(r_int)
+            total -= r_int
+
+        r_weight.append(total)
+        random.shuffle(r_weight)
+        weight = [r_weight[0], 0, 0, r_weight[1], 0, 0, r_weight[2]]
 
         experiments = product(cc, zipf, wrtxn, wrtup, [terminal])
         for exp in experiments:
-            generate_mysql_ycsb_config(exp[0], exp[1], exp[2], exp[3], exp[4], weight, dir=dir_name)
+            generate_mysql_ycsb_config(exp[0], exp[1], exp[2], exp[3], exp[4], weight, dir=dir_name, case_name="w")
 
 
 if __name__ == '__main__':
@@ -170,6 +182,6 @@ if __name__ == '__main__':
     warmupTime = 10
     execTime = 30
     # ycsb_scalability()
-    ycsb_skew(128)
+    # ycsb_skew(128)
     # ycsb_wr(128)
-    # ycsb_random(terminal=128, cnt=100)
+    ycsb_random(terminal=128, cnt=100)

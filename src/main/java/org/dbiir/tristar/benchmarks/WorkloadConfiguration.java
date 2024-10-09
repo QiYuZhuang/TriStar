@@ -174,6 +174,14 @@ public class WorkloadConfiguration {
         this.concurrencyControlType = CCType.DYNAMIC;
         TAdapter.getInstance().setUsed(true);
         break;
+      case "DYNAMIC_B":
+        this.concurrencyControlType = CCType.DYNAMIC_B;
+        TAdapter.getInstance().setUsed(true);
+        break;
+      case "DYNAMIC_A":
+        this.concurrencyControlType = CCType.DYNAMIC_A;
+        TAdapter.getInstance().setUsed(true);
+        break;
       case "RC":
         this.concurrencyControlType = CCType.RC;
         break;

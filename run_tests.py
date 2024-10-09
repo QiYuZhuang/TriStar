@@ -19,7 +19,7 @@ workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
              "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
-             "wr_ratio-128", "dynamic-128"]
+             "wr_ratio-128", "dynamic-128", "switch-128"]
 strategies = ["SERIALIZABLE", "SI_TAILOR", "RC_TAILOR"]
 
 
@@ -93,6 +93,8 @@ def parse_args():
 
 def run_once(f: str, online: bool):
     phase: str = "offline"
+    process: subprocess.Popen = None
+    
     if online:
         phase = "online"
     # traverse the dir
@@ -100,6 +102,9 @@ def run_once(f: str, online: bool):
     print("config_path: " + config_path)
     unique_ts = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     for conf_file in traverse_dir(config_path):
+        if online:
+            process = subprocess.Popen("python3 adapter.py -w ycsb", shell=True, preexec_fn=os.setsid)
+            time.sleep(5)
         result_dir = result_prefix + args.wl + "/" + f + "/" + unique_ts + "/"
         case_name = os.path.splitext(os.path.basename(conf_file))[0]
         output_file = create_output_file(result_dir + case_name)
@@ -110,17 +115,35 @@ def run_once(f: str, online: bool):
         print("Finish config - { " + case_name + " }")
         # time.sleep(5)
         refresh_output_channel()
+        if online:
+            if process is not None:
+                try:
+                    process.communicate(timeout=240)
+                    process = None
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGTERM)
+                    process.communicate()
+            else:
+                print("process is None")
 
     preprocess_cmd = "./scripts/preprocessing.py " + result_prefix + args.wl + "/" + f + "/"
     exec_cmd(preprocess_cmd)
 
     if not online: # generate label
-        meta_dir = meta_prefix + args.wl + "/" + f + "/" + unique_ts
-        for entry in os.scandir(meta_dir):
-            if entry.is_dir():
-                generate_offline_labels(entry.path)
+        preprocess_labels(f, unique_ts)
 
+    time.sleep(5)
     return unique_ts
+
+
+def preprocess_labels(f, unique_ts, wrk=""):
+    if len(wrk) != 0:
+        meta_dir = "metas/" + wrk + "/" + f + "/" + unique_ts
+    else:
+        meta_dir = meta_prefix + args.wl + "/" + f + "/" + unique_ts
+    for entry in os.scandir(meta_dir):
+        if entry.is_dir():
+            generate_offline_labels(entry.path)
 
 
 def generate_offline_labels(meta_folder: str):
@@ -139,10 +162,23 @@ def generate_offline_labels(meta_folder: str):
                 if isolation not in data or goodput > data[isolation]:
                     data[isolation] = goodput
 
-    max_goodput = max(data, key=data.get)
-    max_goodput_index = strategies.index(max_goodput)
-    label = np.zeros(len(strategies), dtype=int)
-    label[max_goodput_index] = 1
+    ''' 
+        proportion 
+    '''
+    if len(data) != len(strategies):
+        return
+    max_goodput_key = max(data, key=data.get)
+    max_goodput = data[max_goodput_key]
+    # print("max_goodput's type:", type(max_goodput))
+    label = [(data[iso] / max_goodput) for iso in strategies]
+
+    '''
+        max_index
+    '''
+    # max_goodput = max(data, key=data.get)
+    # max_goodput_index = strategies.index(max_goodput)
+    # label = np.zeros(len(strategies), dtype=int)
+    # label[max_goodput_index] = 1
 
     label_file_path = meta_folder + '/label'
     with open(label_file_path, 'w') as label_file:
@@ -176,6 +212,7 @@ if __name__ == "__main__":
 
         if not online_predict and f == "random-128":
             offline_service = OfflineService(args.wl)
+            print(f, meta_prefix + "/" + args.wl, tss)
             offline_service.service("train", f, meta_prefix + "/" + args.wl, tss)
             print("success")
 

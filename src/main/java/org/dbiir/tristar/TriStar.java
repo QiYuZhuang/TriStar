@@ -28,6 +28,8 @@ import org.apache.commons.configuration2.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.dbiir.tristar.adapter.Flusher;
+import org.dbiir.tristar.adapter.TAdapter;
+import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.Phase;
 import org.dbiir.tristar.benchmarks.Results;
 import org.dbiir.tristar.benchmarks.ThreadBench;
@@ -163,6 +165,8 @@ public class TriStar {
         WorkloadConfiguration wrkld = new WorkloadConfiguration();
         wrkld.setBenchmarkName(targetBenchmark);
         wrkld.setXmlConfig(xmlConfig);
+        // init TransactionCollecter
+        TransactionCollector.getInstance().setWorkload(targetBenchmark.toLowerCase());
 
         if (targetBenchmark.contains("smallbank")) {
             // load smallbank variables
@@ -284,6 +288,7 @@ public class TriStar {
         // Wrap the list of transactions and save them
         TransactionTypes tt = new TransactionTypes(ttypes);
         wrkld.setTransTypes(tt);
+        TAdapter.getInstance().initTransactionTypes(ttypes);
         logger.debug("Using the following transaction types: %s".formatted(tt));
         benchList.add(bench);
 

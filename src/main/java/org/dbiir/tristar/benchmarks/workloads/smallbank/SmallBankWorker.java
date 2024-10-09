@@ -202,31 +202,32 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
   }
 
   @Override
-  protected void executeAfterWork(TransactionType txnType, boolean success)
+  protected void executeAfterWork(TransactionType txnType, boolean success, long latency)
           throws UserAbortException, SQLException {
     Class<? extends Procedure> procClass = txnType.getProcedureClass();
     // System.out.println("Transaction end #" + tid);
+    // TODO: SIGMOD
     // Amalgamate
     if (procClass.equals(Amalgamate.class)) {
-      this.procAmalgamate.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), success, versionBuffer, tid, checkout);
+      this.procAmalgamate.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), success, versionBuffer, tid, checkout, latency);
 
       // Balance
     } else if (procClass.equals(Balance.class)) {
-      this.procBalance.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid);
+      this.procBalance.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, latency);
 
       // DepositChecking
     } else if (procClass.equals(DepositChecking.class)) {
-      this.procDepositChecking.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout);
+      this.procDepositChecking.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout, latency);
 
       // SendPayment
     } else if (procClass.equals(SendPayment.class)) {
       // TransactSavings
     } else if (procClass.equals(TransactSavings.class)) {
-      this.procTransactSavings.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout);
+      this.procTransactSavings.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout, latency);
 
       // WriteCheck
     } else if (procClass.equals(WriteCheck.class)) {
-      this.procWriteCheck.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout);
+      this.procWriteCheck.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout, latency);
     }
   }
 }
