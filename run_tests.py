@@ -17,9 +17,10 @@ result_prefix = "results/"
 meta_prefix = "metas/"
 workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
-functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
-             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
+functions = ["scalability", "hotspot-128",  "skew-128", 
+             "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128","no_ratio-128", "pa_ratio-128",
              "wr_ratio-128", "dynamic-128", "switch-128"]
+
 strategies = ["SERIALIZABLE", "SI_TAILOR", "RC_TAILOR"]
 
 
