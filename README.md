@@ -1,5 +1,7 @@
 # Usage Guide
-TxnSails, based on [BenchBase](https://github.com/cmu-db/benchbase), currently supports TPC-C, SmallBank, and YCSB benchmarks running on PostgreSQL. Additionally, you can run the TxnSails, Promotion, and ELM methods on the these benchmarks.
+TxnSails, based on [BenchBase](https://github.com/cmu-db/benchbase), currently supports TPC-C, SmallBank, and YCSB benchmarks running on PostgreSQL. Additionally, you can run the TxnSails, Promotion, and ELM methods on the these [benchmarks](BENCHMARK_SQL_Statement.pdf).
+
+We have also implemented an algorithm based on Graph Neural Networks (GNN), which performs offline training and makes online predictions on whether the session's isolation level should be adjusted.
 ## How to Build
 TxnSails requires JDK 21 and Maven 3.9+ for compilation. To run the build scripts, you need to ensure that Python 3.9+ is installed.
 
