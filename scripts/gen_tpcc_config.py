@@ -4,8 +4,8 @@ from xml.etree import ElementTree
 import xml.dom.minidom as minidom
 from itertools import product
 
-warmupTime = 10
-execTime = 30  # ms
+warmupTime = 20
+execTime = 60  # ms
 
 transactionType = [
     "NewOrder",
@@ -102,9 +102,8 @@ def tpcc_skew_warehouse(terminal=128):
     dir_name = "../config/tpcc/skew_warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SI", "RC_TAILOR", "RC_FOR_UPDATE",  "RC_ELT"]
-    #skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
-    skews = [0.1, 0.7, 1.3]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
     experiments = product(cc, [terminal], skews)
@@ -116,8 +115,7 @@ def tpcc_skew_customer(terminal=128):
     dir_name = "../config/tpcc/skew_custom-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_TAILOR", "RC_FOR_UPDATE",  "RC_ELT"]
-    #skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
@@ -132,7 +130,7 @@ def tpcc_warehouse(terminal=128):
         os.makedirs(dir_name, exist_ok=True)
     cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     weight = [45, 43, 4, 4, 4]
-    wn = [1, 2, 4, 8, 16, 32]
+    wn = [1, 2, 4, 8, 16]
 
     experiments = product(cc, [terminal], wn)
     for exp in experiments:
@@ -176,7 +174,7 @@ def tpcc_scalability():
     cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     terminals = [4, 8, 16, 32, 64, 128, 256, 512]
     weight = [45, 43, 4, 4, 4]
-    wn = [1, 2, 4, 8, 16, 32]
+    wn = [1, 2, 4, 8, 16]
 
     experiments = product(cc, terminals, weight)
     for exp in experiments:
@@ -187,7 +185,7 @@ if __name__ == '__main__':
     if not os.path.exists("../config"):
         os.mkdir("../config")
 
-    scaleFactor = 32
+    scaleFactor = 16
 
     #tpcc_skew_warehouse()
     tpcc_pa_ratio()

@@ -76,6 +76,11 @@ def generate_summary(exps: List, case_name: str) -> List[Summary]:
                         results.append(YCSBRateSummary(f.path))
                     else:
                         results.append(RateSummary(f.path))
+                elif case_name.__contains__("random"):
+                    if ycsb_case:
+                        print("can not find Summary class for " + case_name)
+                    else:
+                        results.append(RandomSummary(f.path))
                 elif case_name.__contains__("no_ratio"):
                     results.append(NewOrderSummary(f.path))
                 elif case_name.__contains__("pa_ratio"):

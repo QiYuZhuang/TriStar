@@ -17,6 +17,8 @@
 
 package org.dbiir.tristar.benchmarks.workloads.ycsb;
 
+import java.util.HashMap;
+
 public abstract class YCSBConstants {
 
   public static final int RECORD_COUNT = 1000;
@@ -35,4 +37,10 @@ public abstract class YCSBConstants {
   public static final int MAX_SCAN = 1000;
 
   public static final String TABLE_NAME = "usertable";
+
+  public static final HashMap<String , Integer> TABLENAME_TO_INDEX = new HashMap<>(1);
+
+  static {
+    TABLENAME_TO_INDEX.put(TABLE_NAME, 1);
+  }
 }

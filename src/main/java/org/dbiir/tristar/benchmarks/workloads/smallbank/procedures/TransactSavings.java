@@ -25,19 +25,21 @@
  ***************************************************************************/
 package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 
-import com.mysql.cj.log.Log;
-import org.dbiir.tristar.benchmarks.api.Procedure;
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
-import org.dbiir.tristar.common.CCType;
-import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.LockTable;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.concurrent.locks.Lock;
+
+import org.dbiir.tristar.adapter.TAdapter;
+import org.dbiir.tristar.adapter.TransactionCollector;
+import org.dbiir.tristar.benchmarks.api.Procedure;
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockType;
+import org.dbiir.tristar.transaction.concurrency.FlowRate;
+import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 /**
  * TransactSavings Procedure Original version by Mohammad Alomari and Michael Cahill
@@ -45,12 +47,8 @@ import java.util.concurrent.locks.Lock;
  * @author pavlo
  */
 public class TransactSavings extends Procedure {
-  /*
   public final SQLStmt writeConflict =
           new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_CONFLICT + " WHERE name = ? FOR UPDATE");
-  */
-  public final SQLStmt writeConflict =
-          new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CONFLICT + " SET name = name" + " WHERE custid = ?");
 
   public final SQLStmt GetAccount =
       new SQLStmt("SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?");
@@ -62,21 +60,27 @@ public class TransactSavings extends Procedure {
           new SQLStmt("SELECT bal FROM " + SmallBankConstants.TABLENAME_SAVINGS + " WHERE custid = ? FOR UPDATE");
 
   public final SQLStmt UpdateSavingsBalance =
-          new SQLStmt(
-                  "UPDATE "
-                          + SmallBankConstants.TABLENAME_SAVINGS
-                          + " SET bal = bal + ?, tid = tid + 1 "
-                          + " WHERE custid = ?;"
-                          + " SELECT"
-                          + " tid"
-                          + " FROM "
-                          + SmallBankConstants.TABLENAME_SAVINGS
-                          + " where custid = ?;");
+      new SQLStmt(
+          "UPDATE "
+              + SmallBankConstants.TABLENAME_SAVINGS
+              + "   SET bal = bal + ?, tid = tid + 1 "
+              + " WHERE custid = ? "
+              + " RETURNING tid");
 
-
-  public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid) throws SQLException {
+  public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
     // First convert the custName to the acctId
     long custId;
+
+    if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
+      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
+        try (ResultSet r0 = stmtc.executeQuery()) {
+          if (!r0.next()) {
+            String msg = "Invalid account '" + custName + "'";
+            throw new UserAbortException(msg);
+          }
+        }
+      }
+    }
 
     try (PreparedStatement stmt = this.getPreparedStatement(conn, GetAccount, custName)) {
       try (ResultSet result = stmt.executeQuery()) {
@@ -85,24 +89,6 @@ public class TransactSavings extends Procedure {
           throw new UserAbortException(msg);
         }
         custId = result.getLong(1);
-      }
-    }
-
-    if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
-      try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custId)) {
-        int res = stmtc.executeUpdate();
-        if (res == 0) {
-          String msg = "Invalid account '" + custName + "'";
-          throw new UserAbortException(msg);
-        }
-        /*
-        try (ResultSet r0 = stmtc.executeQuery()) {
-          if (!r0.next()) {
-            String msg = "Invalid account '" + custName + "'";
-            throw new UserAbortException(msg);
-          }
-        }
-        */
       }
     }
 
@@ -139,48 +125,76 @@ public class TransactSavings extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid, LockType.EX);
     }
-    try (PreparedStatement stmt = this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId, custId)) {
-      // TODO: return the savings version for validation
-
-      boolean resultsAvailable = stmt.execute();
-      while (true) {
-        if (resultsAvailable) {
-          ResultSet rs = stmt.getResultSet();
-          if (!rs.next()) {
-            String msg = "can not find the checking version for customer #%d".formatted(custId);
-            throw new UserAbortException(msg);
-          }
-          versions[0] = rs.getLong(1);
-        } else if (stmt.getUpdateCount() < 0) {
-          break;
-        }
-
-        resultsAvailable = stmt.getMoreResults();
+    if (type == CCType.RC_TAILOR) {
+      // flow rate control
+      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId)) {
+        // System.out.println("TS 127 custId: " + custId);
       }
-      /*
+      // System.out.println("TransactSavings transaction #" + tid + " acquire savings #" + custId);
+      checkout[0]++;
+    }
+    if (type == CCType.SI_TAILOR) {
+      if (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId, true)) {
+        String msg = String.format("concurrent update, TS", custId);
+        throw new SQLException(msg, "500");
+      } else {
+        checkout[0]++;
+      }
+    }
+
+    try (PreparedStatement stmt =
+        this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
+      // TODO: return the savings version for validation
       try (ResultSet res = stmt.executeQuery()) {
         if (!res.next()) {
           String msg = "can not find the checking version for customer #%d".formatted(custId);
           throw new UserAbortException(msg);
         }
         versions[0] = res.getLong(1);
-      }*/
+      } 
+    } catch (SQLException ex) {
+      if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, false);
+        checkout[0]--;
+      }
+      throw ex;
     }
 
+    if (type == CCType.RC_TAILOR && versions[0] < 0)
+      System.out.println("custome error 5");
+
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
+      LOG.debug("TransactSavings #" + tid + " acquire EX validation lock - checking #"+custId);
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId, LockType.EX, type);
+      LOG.debug("TransactSavings #" + tid + " acquired EX validation lock - checking #"+custId);
     }
   }
 
-  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid) {
-    if (!success)
+  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, int[] checkout, long latency) {
+    if (TransactionCollector.getInstance().isSample()) {
+      TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("TransactSavings").getId(),
+              new RWRecord[]{},
+              new RWRecord[]{new RWRecord(1, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId)},
+              success?1:0, latency);
+    }
+    if (!success) {
+      if ((type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) && versions[0] >= 0) {
+        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, true);
+        checkout[0]--;
+      }
       return;
+    }
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId, tid);
     }
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId, LockType.EX);
+      LOG.debug("TransactSavings #" + tid + " release EX validation lock - savings #"+custId);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId, versions[0]);
+      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId, true);
+      checkout[0]--;
+      if (checkout[0] != 0)
+        System.out.println("TS Transaction #" + tid + " checkout: " + checkout[0]);
     }
   }
 }

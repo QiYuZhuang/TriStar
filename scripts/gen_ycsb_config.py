@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import os
+import random
 from xml.etree import ElementTree
 import xml.dom.minidom as minidom
 from itertools import product
@@ -28,12 +29,13 @@ cc_map = {
     "SI_TAILOR": "SI+TV",
     "RC_TAILOR": "RC+TV",
     "RC_TAILOR_LOCK": "RC+TL",
-    "DYNAMIC": "DYNAMIC"
+    "DYNAMIC": "DYNAMIC",
+    "DYNAMIC_B": "DYNAMIC_B"
 }
 
 
 def generate_mysql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrtup: float, terminals, weight, rate="",
-                               dir="../config"):
+                               dir="../config", case_name=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
@@ -74,6 +76,8 @@ def generate_mysql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrtup: f
     filename += "_wrtup_{:03.2f}".format(wrtup)
     if len(rate):
         filename += "_rate_" + str(rate)
+    if len(case_name) > 0:
+        filename += "_" + case_name + "_" + '-'.join(["{:03.1f}".format(w) for w in weight])
 
     filename += "_cc_" + cc_map[cc_type]
 
@@ -100,10 +104,11 @@ def ycsb_wr(terminal=128):
     dir_name = "../config/ycsb/wr_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    zipf = [0.3]
+    zipf = [0.1, 0.7, 1.3]
     wrtxn = [1]
-    wrtup = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    wrtup = [0.1, 0.3, 0.5, 0.7, 0.9]
+    cc = ["SERIALIZABLE", "RC_TAILOR", "SI_TAILOR"]
+    # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
     weight = [0, 0, 0, 0, 0, 0, 100]
 
     experiments = product(cc, zipf, wrtxn, wrtup, [terminal])
@@ -118,8 +123,9 @@ def ycsb_scalability():
     terminals = [4, 8, 16, 32, 64, 128, 256, 512]
     zipf = [0.7]
     wrtxn = [1]
-    wrtup = [0.2]
+    wrtup = [0.5]
     cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
     # weight = list(default_weight_by_dis_ration(dis_ratio))
     weight = [0, 0, 0, 0, 0, 0, 100]
 
@@ -132,10 +138,10 @@ def ycsb_skew(terminal=128):
     dir_name = "../config/ycsb/skew-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    zipf = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
-    wrtxn = [1]
-    wrtup = [0.2]
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    zipf = [1.3]
+    wrtxn = [1.0]
+    wrtup = [0.1]
+    cc = ["SERIALIZABLE", "RC_TAILOR", "SI_TAILOR"]
     weight = [0, 0, 0, 0, 0, 0, 100]
 
     experiments = product(cc, zipf, wrtxn, wrtup, [terminal])
@@ -143,11 +149,39 @@ def ycsb_skew(terminal=128):
         generate_mysql_ycsb_config(exp[0], exp[1], exp[2], exp[3], exp[4], weight, dir=dir_name)
 
 
+def ycsb_random(terminal=128, cnt=80):
+    dir_name = "../config/ycsb/random-" + str(terminal) + "/postgresql"
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name, exist_ok=True)
+    for i in range(cnt):
+        zipf = [random.uniform(0.1, 1.3)]
+        wrtxn = [random.uniform(0.0, 1.0)]
+        wrtup = [random.uniform(0.0, 1.0)]
+        cc = ["SERIALIZABLE", "RC_TAILOR", "SI_TAILOR"]
+        r_weight = []
+        total = 100
+        for i in range(2):
+            r_int = random.randint(0, total)
+            r_weight.append(r_int)
+            total -= r_int
+
+        r_weight.append(total)
+        random.shuffle(r_weight)
+        weight = [r_weight[0], 0, 0, r_weight[1], 0, 0, r_weight[2]]
+
+        experiments = product(cc, zipf, wrtxn, wrtup, [terminal])
+        for exp in experiments:
+            generate_mysql_ycsb_config(exp[0], exp[1], exp[2], exp[3], exp[4], weight, dir=dir_name, case_name="w")
+
+
 if __name__ == '__main__':
     if not os.path.exists("../config"):
         os.mkdir("../config")
 
     scaleFactor = 100
-    ycsb_scalability()
-    ycsb_skew(128)
-    ycsb_wr(128)
+    warmupTime = 10
+    execTime = 30
+    # ycsb_scalability()
+    # ycsb_skew(128)
+    # ycsb_wr(128)
+    ycsb_random(terminal=128, cnt=100)

@@ -1,17 +1,15 @@
 package benchmark;
 
-import org.dbiir.tristar.TriStar;
-import org.dbiir.tristar.common.CCType;
-import org.junit.jupiter.api.Test;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.stream.Collectors;
+
+import org.dbiir.tristar.TriStar;
+import org.dbiir.tristar.common.CCType;
+import org.junit.jupiter.api.Test;
 
 public class YCSB {
     private String configPrefix = "config/ycsb/";
@@ -91,9 +89,11 @@ public class YCSB {
             case RC_TAILOR -> "RC+TV";
             case RC_TAILOR_LOCK -> "RC+TL";
             case DYNAMIC -> "DYNAMIC";
+            case DYNAMIC_B -> "DYNAMIC_B";
             case RC -> "RC";
             case SI -> "SI";
             case NUM_CC -> null;
+            default -> throw new IllegalArgumentException("Unexpected value: " + type);
         };
     }
 
