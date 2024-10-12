@@ -23,7 +23,10 @@
  import java.sql.SQLException;
  import java.util.Random;
 
+ import org.dbiir.tristar.adapter.TAdapter;
+ import org.dbiir.tristar.adapter.TransactionCollector;
  import org.dbiir.tristar.benchmarks.api.SQLStmt;
+ import org.dbiir.tristar.benchmarks.catalog.RWRecord;
  import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
@@ -436,7 +439,15 @@
      }
    }
  
-   public void doAfterCommit(long[] keys, CCType type, boolean success, long[] versions) {
+   public void doAfterCommit(long[] keys, CCType type, boolean success, long[] versions, long latency) {
+     if (TransactionCollector.getInstance().isSample()) {
+       TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("Delivery").getId(),
+               new RWRecord[]{new RWRecord(1, TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_CUSTOMER), (int) keys[0])},
+               new RWRecord[]{new RWRecord(2, TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_OPENORDER), (int) keys[1])},
+               new RWRecord[]{new RWRecord(3, TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_ORDERLINE), (int) keys[2])},
+               success?1:0, latency);
+     }
+
      if (!success)
        return;
      if (type == CCType.RC_TAILOR) {
