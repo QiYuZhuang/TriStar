@@ -1,12 +1,14 @@
 package org.dbiir.tristar.transaction.concurrency;
 
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
+import lombok.Getter;
+import lombok.Setter;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.common.LockStrategy;
 import org.dbiir.tristar.common.LockType;
 
-import lombok.Getter;
+import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 
 public class ValidationLock {
@@ -16,10 +18,23 @@ public class ValidationLock {
     private long maxTid;
     private long maxWriteWaitTid;
     private long minWriteWaitTid;
+    private long minReadWaitTid;
     @Getter
     private final long id;
     @Getter
     long version;
+    @Getter
+    @Setter
+    long versionOldRead;
+    @Getter
+    @Setter
+    long versionOldWrite;
+    @Getter
+    @Setter
+    long versionNewRead;
+    @Getter
+    @Setter
+    long versionNewWrite;
 
     public ValidationLock(long id) {
         this.lock = new ReentrantLock();
@@ -28,6 +43,7 @@ public class ValidationLock {
         this.maxTid = 0;
         this.maxWriteWaitTid = 0;
         this.minWriteWaitTid = 0;
+        this.minReadWaitTid = 0;
         this.id = id;
         this.version = -1;
     }
@@ -49,6 +65,8 @@ public class ValidationLock {
             if (lockType == LockType.EX) {
                 minWriteWaitTid = 0;
                 maxWriteWaitTid = 0;
+            } else if (lockType == LockType.SH) {
+                minReadWaitTid = 0;
             }
             this.maxTid = tid;
             result = 1;
@@ -84,6 +102,12 @@ public class ValidationLock {
         } else {
             // this type is EX
             if (lockType == LockType.SH) {
+                if (ccType == CCType.RC_TAILOR) {
+                    if (minReadWaitTid == 0)
+                        minReadWaitTid = tid;
+                    else
+                        minReadWaitTid = Math.min(tid, minReadWaitTid);
+                }
                 result = -1;
             } else {
                 if (ccType == CCType.SI_TAILOR) {
@@ -93,6 +117,16 @@ public class ValidationLock {
                     count++;
                     this.maxTid = Math.max(this.maxTid, tid);
                     result = 1;
+                    // if (minReadWaitTid != 0 && tid > minReadWaitTid) {
+                    //     // System.out.println("Transaction #"+tid + " rollback, minReadWait: " + minReadWaitTid);
+                    //     // result = -1;
+                    //     minWriteWaitTid = minWriteWaitTid == 0 ? tid : Math.min(minWriteWaitTid, tid);
+                    //     result = 0;
+                    // } else {
+                    //     count++;
+                    //     this.maxTid = Math.max(this.maxTid, tid);
+                    //     result = 1;
+                    // }
                 }
             }
         }
@@ -107,10 +141,10 @@ public class ValidationLock {
 
     public void releaseLock(LockType lockType) {
         this.lock.lock();
-        //System.out.println("release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
-        if (this.type != lockType) {
-            System.out.println("failure-release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
-        }
+//        System.out.println("release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
+//        if (this.type != lockType) {
+//            System.out.println("failure-release id: " + id + " " + this.type + ", " + lockType + " count: " + count);
+//        }
         assert (this.type == lockType);
         count--;
         if (count == 0) {

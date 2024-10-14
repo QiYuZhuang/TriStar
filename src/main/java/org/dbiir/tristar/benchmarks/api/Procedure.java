@@ -34,7 +34,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public abstract class Procedure {
-  private static final Logger LOG = LoggerFactory.getLogger(Procedure.class);
+  protected static final Logger LOG = LoggerFactory.getLogger(Procedure.class);
 
   private final String procName;
   private DatabaseType dbType;

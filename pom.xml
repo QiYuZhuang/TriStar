@@ -23,12 +23,6 @@
             <artifactId>postgresql</artifactId>
             <version>42.7.3</version>
         </dependency>
-        <!-- https://central.sonatype.com/artifact/mysql/mysql-connector-java -->
-        <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>8.0.32</version>
-        </dependency>
         <!-- https://mvnrepository.com/artifact/org.hsqldb/hsqldb -->
         <dependency>
             <groupId>org.hsqldb</groupId>
@@ -129,6 +123,12 @@
             <groupId>com.opencsv</groupId>
             <artifactId>opencsv</artifactId>
             <version>5.9</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/org.bytedeco/javacpp -->
+        <dependency>
+            <groupId>org.bytedeco</groupId>
+            <artifactId>javacpp</artifactId>
+            <version>1.5.10</version>
         </dependency>
     </dependencies>
 

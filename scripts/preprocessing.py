@@ -80,6 +80,11 @@ def generate_summary(exps: List, case_name: str) -> List[Summary]:
                     results.append(NewOrderSummary(f.path))
                 elif case_name.__contains__("pa_ratio"):
                     results.append(PaymentSummary(f.path))
+                elif case_name.__contains__("random"):
+                    if ycsb_case:
+                        print("can not find Summary class for " + case_name)
+                    else:
+                        results.append(RandomSummary(f.path))
                 else:
                     print("can not find Summary class for " + case_name)
     return results

@@ -21,9 +21,12 @@ public enum CCType {
     RC_TAILOR_ATTR("RC_TAILOR_ATTR"),
     RC_TAILOR_LOCK("RC_TAILOR_LOCK"),
     DYNAMIC("DYNAMIC"),
+    DYNAMIC_B("DYNAMIC_B"),
+    DYNAMIC_A("DYNAMIC_A"),
     /* pure */
     RC("RC"),
     SI("SI"),
+    SWITCH("SWITCH"),
     NUM_CC("NUM_CC");
     private final String name;
 

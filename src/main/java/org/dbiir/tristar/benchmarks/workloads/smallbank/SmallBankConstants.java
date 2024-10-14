@@ -26,6 +26,8 @@
 
 package org.dbiir.tristar.benchmarks.workloads.smallbank;
 
+import java.util.HashMap;
+
 public abstract class SmallBankConstants {
 
   // ----------------------------------------------------------------
@@ -35,6 +37,13 @@ public abstract class SmallBankConstants {
   public static final String TABLENAME_SAVINGS = "savings";
   public static final String TABLENAME_CHECKING = "checking";
   public static final String TABLENAME_CONFLICT = "conflict";
+  public static final HashMap<String , Integer> TABLENAME_TO_INDEX = new HashMap<>(4);
+
+  static {
+    TABLENAME_TO_INDEX.put(TABLENAME_ACCOUNTS, 0);
+    TABLENAME_TO_INDEX.put(TABLENAME_SAVINGS, 1);
+    TABLENAME_TO_INDEX.put(TABLENAME_CHECKING, 2);
+  }
 
   // ----------------------------------------------------------------
   // ACCOUNT INFORMATION

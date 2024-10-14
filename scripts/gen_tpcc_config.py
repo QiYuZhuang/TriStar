@@ -4,8 +4,8 @@ from xml.etree import ElementTree
 import xml.dom.minidom as minidom
 from itertools import product
 
-warmupTime = 10
-execTime = 30  # ms
+warmupTime = 20
+execTime = 60  # ms
 
 transactionType = [
     "NewOrder",
@@ -16,23 +16,19 @@ transactionType = [
 ]
 
 cc_map = {
-    "SI": "SI",
-    "RC_ELT_ATTR": "RC+E_ATTR",
     "SERIALIZABLE": "SER",
     "SI_ELT": "SI+E",
     "RC_ELT": "RC+E",
     "SI_FOR_UPDATE": "SI+P",
     "RC_FOR_UPDATE": "RC+P",
-    "RC_FOR_UPDATE_ATTR": "RC+P_ATTR",
     "SI_TAILOR": "SI+TV",
     "RC_TAILOR": "RC+TV",
-    "RC_TAILOR_ATTR": "RC+TV_ATTR",
     "RC_TAILOR_LOCK": "RC+TL",
     "DYNAMIC": "DYNAMIC"
 }
 
 
-def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 32, rate="", dir="../../config", casename="", rationame="", ratio:int = 0):
+def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 16, rate="", dir="../config", casename=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
@@ -48,6 +44,11 @@ def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.
 
     ElementTree.SubElement(root, "scalefactor").text = str(scalaF)
     ElementTree.SubElement(root, "terminals").text = str(terminals)
+
+    if casename == "warehouse":
+        ElementTree.SubElement(root, "warehouseSkew").text = "true"
+    elif casename == "customer":
+        ElementTree.SubElement(root, "customerSkew").text = "true"
 
     works = ElementTree.SubElement(root, "works")
     if int(len(rate)) == int(0):
@@ -102,9 +103,8 @@ def tpcc_skew_warehouse(terminal=128):
     dir_name = "../config/tpcc/skew_warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SI", "RC_TAILOR", "RC_FOR_UPDATE",  "RC_ELT"]
-    #skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
-    skews = [0.1, 0.7, 1.3]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
     experiments = product(cc, [terminal], skews)
@@ -116,8 +116,7 @@ def tpcc_skew_customer(terminal=128):
     dir_name = "../config/tpcc/skew_custom-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_TAILOR", "RC_FOR_UPDATE",  "RC_ELT"]
-    #skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
+    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
@@ -132,7 +131,7 @@ def tpcc_warehouse(terminal=128):
         os.makedirs(dir_name, exist_ok=True)
     cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     weight = [45, 43, 4, 4, 4]
-    wn = [1, 2, 4, 8, 16, 32]
+    wn = [1, 2, 4, 8, 16]
 
     experiments = product(cc, [terminal], wn)
     for exp in experiments:
@@ -176,18 +175,18 @@ def tpcc_scalability():
     cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     terminals = [4, 8, 16, 32, 64, 128, 256, 512]
     weight = [45, 43, 4, 4, 4]
-    wn = [1, 2, 4, 8, 16, 32]
+    wn = [1, 2, 4, 8, 16]
 
-    experiments = product(cc, terminals, weight)
+    experiments = product(cc, terminals, wn)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name, casename="customer", rationame="neworder")
+        generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name)
 
 
 if __name__ == '__main__':
     if not os.path.exists("../config"):
         os.mkdir("../config")
 
-    scaleFactor = 32
+    scaleFactor = 16
 
     #tpcc_skew_warehouse()
     tpcc_pa_ratio()

@@ -32,7 +32,7 @@ public class SmallBank {
             long totalMemory = runtime.totalMemory(); // JVM的总内存
             long freeMemory = runtime.freeMemory(); // JVM的空闲内存
             long usedMemory = totalMemory - freeMemory; // 使用的内存
-            //System.out.println("used memory: " + usedMemory * 1.0 / 1024 / 1024 / 1024);
+            System.out.println("used memory: " + usedMemory * 1.0 / 1024 / 1024 / 1024);
         } catch (Exception e) {
             System.setOut(System.out);
             e.printStackTrace();
@@ -45,14 +45,14 @@ public class SmallBank {
         if (!file.getParentFile().exists()) {
             boolean created = file.getParentFile().mkdirs();
             if (created) {
-                //System.out.println("Directory created successfully.");
+                System.out.println("Directory created successfully.");
             } else {
-                //System.out.println("Failed to create directory.");
+                System.out.println("Failed to create directory.");
                 return;
             }
         }
         if (!file.exists() && file.createNewFile())
-            //System.out.println("Create new output file: " + filepath);;
+            System.out.println("Create new output file: " + filepath);;
     }
 
     private String genResultPathWithTimestamp(String oPath) {
@@ -91,9 +91,12 @@ public class SmallBank {
             case RC_TAILOR -> "RC+TV";
             case RC_TAILOR_LOCK -> "RC+TL";
             case DYNAMIC -> "DYNAMIC";
+            case DYNAMIC_B -> "DYNAMIC_B";
+            case DYNAMIC_A -> "DYNAMIC_A";
             case RC -> "RC";
             case SI -> "SI";
             case NUM_CC -> null;
+            default -> throw new IllegalArgumentException("Unexpected value: " + type);
         };
     }
 
