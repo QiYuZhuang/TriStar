@@ -1,0 +1,44 @@
+<?xml version="1.0" ?>
+<parameters>
+	<type>MYSQL</type>
+	<driver>com.mysql.cj.jdbc.Driver</driver>
+	<url>jdbc:mysql://localhost:3306/mysql?useSSL=false&amp;amp;reWriteBatchedInserts=true</url>
+	<username>mysql</username>
+	<password>workload_exp</password>
+	<isolation>TRANSACTION_SERIALIZABLE</isolation>
+	<batchsize>128</batchsize>
+	<concurrencyControlType>SI_FOR_UPDATE</concurrencyControlType>
+	<hotspotNumber>10</hotspotNumber>
+	<hotspotPercentage>0.9</hotspotPercentage>
+	<scalefactor>4</scalefactor>
+	<terminals>128</terminals>
+	<works>
+		<work>
+			<warmup>20</warmup>
+			<time>60</time>
+			<rate>unlimited</rate>
+			<retries>16</retries>
+			<weights>20, 20, 20, 0, 20, 20</weights>
+		</work>
+	</works>
+	<transactiontypes>
+		<transactiontype>
+			<name>Amalgamate</name>
+		</transactiontype>
+		<transactiontype>
+			<name>Balance</name>
+		</transactiontype>
+		<transactiontype>
+			<name>DepositChecking</name>
+		</transactiontype>
+		<transactiontype>
+			<name>SendPayment</name>
+		</transactiontype>
+		<transactiontype>
+			<name>TransactSavings</name>
+		</transactiontype>
+		<transactiontype>
+			<name>WriteCheck</name>
+		</transactiontype>
+	</transactiontypes>
+</parameters>

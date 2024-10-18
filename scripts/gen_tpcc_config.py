@@ -3,6 +3,7 @@ import os
 from xml.etree import ElementTree
 import xml.dom.minidom as minidom
 from itertools import product
+import random
 
 warmupTime = 20
 execTime = 60  # ms
@@ -28,7 +29,7 @@ cc_map = {
 }
 
 
-def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 16, rate="", dir="../config", casename="", rationame="", ratio: int = 0):
+def generate_pg_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 16, rate="", dir="../config", casename="", rationame="", ratio: int = 0, case_name=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
@@ -78,6 +79,9 @@ def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.
     if len(rate):
         filename += "_rate_" + str(rate)
 
+    if len(case_name) > 0:
+        filename += "_" + case_name + "_" + '-'.join(["{:03.1f}".format(w) for w in weight])
+
     filename += "_cc_" + cc_map[cc_type]
 
     f = open(dir + filename + ".xml", 'w', encoding='utf-8')
@@ -109,7 +113,7 @@ def tpcc_skew_warehouse(terminal=128):
 
     experiments = product(cc, [terminal], skews)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight, zipf=exp[2], dir=dir_name, casename="warehouse")
+        generate_pg_tpcc_config(exp[0], exp[1], weight, zipf=exp[2], dir=dir_name, casename="warehouse")
 
 
 def tpcc_skew_customer(terminal=128):
@@ -122,7 +126,7 @@ def tpcc_skew_customer(terminal=128):
 
     experiments = product(cc, [terminal], skews)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight, exp[2], dir=dir_name, casename="customer")
+        generate_pg_tpcc_config(exp[0], exp[1], weight, exp[2], dir=dir_name, casename="customer")
 
 
 def tpcc_warehouse(terminal=128):
@@ -135,7 +139,7 @@ def tpcc_warehouse(terminal=128):
 
     experiments = product(cc, [terminal], wn)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name)
+        generate_pg_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name)
 
 def tpcc_no_ratio(terminal=128):
     dir_name = "../../config/tpcc/no_ratio-" + str(terminal) + "/postgresql"
@@ -150,7 +154,7 @@ def tpcc_no_ratio(terminal=128):
 
     experiments = product(cc, [terminal], weights, skew_list)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight=exp[2], zipf=exp[3], scalaF=32, dir=dir_name,casename="customer", rationame="neworder", ratio=exp[2][0])
+        generate_pg_tpcc_config(exp[0], exp[1], weight=exp[2], zipf=exp[3], scalaF=32, dir=dir_name, casename="customer", rationame="neworder", ratio=exp[2][0])
 
 def tpcc_pa_ratio(terminal=128):
     dir_name = "../config/tpcc/pa_ratio-" + str(terminal) + "/postgresql"
@@ -165,8 +169,35 @@ def tpcc_pa_ratio(terminal=128):
 
     experiments = product(cc, [terminal], weights, skew_list)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight=exp[2], zipf=exp[3], scalaF=32, dir=dir_name,casename="customer", rationame="payment", ratio=exp[2][1])
+        generate_pg_tpcc_config(exp[0], exp[1], weight=exp[2], zipf=exp[3], scalaF=32, dir=dir_name, casename="customer", rationame="payment", ratio=exp[2][1])
 
+def tpcc_random(terminal=128, cnt=80):
+    dir_name = "../config/tpcc/random-" + str(terminal) + "/postgresql"
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_TAILOR", "SI_TAILOR"]
+    for i in range(cnt):
+        rf1, rf2 = random.uniform(0, 1), random.uniform(0, 1)
+        skew = random.uniform(0.1, 1.3)
+        rate = random.randint(5000, 20000)
+        if rf2 < 1:
+            rate = "unlimited"
+        weight = rand_weight()
+        for c in cc:
+            generate_pg_tpcc_config(c, terminals=terminal, weight=weight, zipf=skew, rate=str(rate), dir=dir_name, rationame="pa", case_name="R")
+def rand_weight() -> list:
+    r_weight = []
+    total = 100
+    for i in range(4):
+        r_int = random.randint(0, total)
+        r_weight.append(r_int)
+        total -= r_int
+
+    r_weight.append(total)
+    random.shuffle(r_weight)
+    return r_weight
 
 def tpcc_scalability():
     dir_name = "../config/tpcc/scalability/postgresql"
@@ -179,7 +210,8 @@ def tpcc_scalability():
 
     experiments = product(cc, terminals, wn)
     for exp in experiments:
-        generate_mysql_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name)
+        generate_pg_tpcc_config(exp[0], exp[1], weight, scalaF=exp[2], dir=dir_name)
+
 
 
 if __name__ == '__main__':
@@ -189,6 +221,4 @@ if __name__ == '__main__':
     scaleFactor = 16
 
     #tpcc_skew_warehouse()
-    tpcc_pa_ratio()
-    tpcc_no_ratio()
-    tpcc_skew_customer()
+    tpcc_random()
