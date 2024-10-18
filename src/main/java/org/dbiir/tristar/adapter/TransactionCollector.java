@@ -15,7 +15,7 @@ public class TransactionCollector {
     private static final TransactionCollector INSTANCE;
     private static long LOW_BIT_MASK = 0xFFFFFFFFL;
     private static int MAX_TABLE_NUM = 100;
-    static public int TRANSACTION_BATCH = 128;
+    static public int TRANSACTION_BATCH = 8;
     private static final double SAMPLE_PROBABILITY = 0.1;
     private final Random random = new Random();
     static String edgeFormat = "#%d,%d,%d";
@@ -184,5 +184,9 @@ public class TransactionCollector {
 
     public static TransactionCollector getInstance() {
         return INSTANCE;
+    }
+
+    public boolean isNeedFlush() {
+        return needFlush;
     }
 }

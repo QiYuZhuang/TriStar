@@ -12,7 +12,6 @@ from torch_geometric.loader import DataLoader
 
 from tristar_adapter.graph_construct.graph import Graph
 from tristar_adapter.graph_training.train import GraphClassificationModel
-from tristar_adapter.graph_training.train_embedding import GraphClassificationModelEmbedding
 from torch.cuda.amp import GradScaler, autocast
 
 
@@ -65,6 +64,7 @@ class OfflineService:
                 continue
             flag = False
             for sub_entry in os.scandir(entry.path):
+                print("offline" + sub_entry.name)
                 if not sub_entry.is_file():
                     continue
                 if 'label' in sub_entry.name:
@@ -84,7 +84,7 @@ class OfflineService:
 
     def train(self):
         if self.model is None:
-            self.model = GraphClassificationModelEmbedding(in_channels=4, edge_in_channels=2, hidden_channels=64, out_channels=3)
+            self.model = GraphClassificationModel(in_channels=4, edge_in_channels=2, hidden_channels=64, out_channels=3)
             if torch.cuda.is_available():
                 self.device = torch.device('cuda')
             else:

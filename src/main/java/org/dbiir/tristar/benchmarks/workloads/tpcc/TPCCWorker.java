@@ -115,33 +115,33 @@ public final class TPCCWorker extends Worker<TPCCBenchmark> {
     }
 
     @Override
-    protected void executeAfterWork(TransactionType txnType, boolean success)
+    protected void executeAfterWork(TransactionType txnType, boolean success, long latency)
             throws UserAbortException, SQLException {
         Class<? extends Procedure> procClass = txnType.getProcedureClass();
 
         // Delivery
         if (procClass.equals(Delivery.class)) {
-            this.getProcedure(Delivery.class).doAfterCommit(keyBuffer[0], keyBuffer[1], getBenchmark().getCCType(), success, versionBuffer);
+            this.getProcedure(Delivery.class).doAfterCommit(keyBuffer[0], keyBuffer[1], getBenchmark().getCCType(), success, versionBuffer, latency);
         }
 
         // NewOrder
         if (procClass.equals(NewOrder.class)) {
-            this.getProcedure(NewOrder.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer);
+            this.getProcedure(NewOrder.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer, latency);
         }
 
         // Payment
         if (procClass.equals(Payment.class)) {
-            this.getProcedure(Payment.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer);
+            this.getProcedure(Payment.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer, latency);
         }
 
         // OrderStatus
         if (procClass.equals(OrderStatus.class)) {
-            this.getProcedure(OrderStatus.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer);
+            this.getProcedure(OrderStatus.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer, latency);
         }
 
         // Stock
         if (procClass.equals(StockLevel.class)) {
-            this.getProcedure(StockLevel.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer);
+            this.getProcedure(StockLevel.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer, latency);
         }
     }
 }

@@ -109,8 +109,9 @@ class PaymentSummary(Summary):
     txn_name = "payment"
 
     def __init__(self, filepath: str):
-        filename = filepath.split("/")[-2]
+        filename = filepath.split("/")[-1]
         tokens = filename.split("_")
+        print(tokens)
         s_idx, c_idx = tokens.index("zipf"), tokens.index("cc")
         self.skew = float(tokens[s_idx + 1])
         pa_idx = tokens.index(self.txn_name)
@@ -132,8 +133,9 @@ class SkewSummary(Summary):
     skew: float
 
     def __init__(self, filepath: str):
-        filename = filepath.split("/")[-2]
+        filename = filepath.split("/")[-1]
         tokens = filename.split("_")
+        print("TPCC")
         print(tokens)
         s_idx, c_idx = tokens.index("zipf"), tokens.index("cc")
         self.skew = float(tokens[s_idx + 1])

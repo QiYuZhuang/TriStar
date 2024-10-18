@@ -59,6 +59,7 @@ public class Flusher implements Runnable {
         while (!Thread.currentThread().isInterrupted()) {
             long timestamp = System.currentTimeMillis();
             if (TransactionCollector.getInstance().isNeedFlush() && needFlush(ccType)) {
+                System.out.println("flash 2");
                 if (flushCount == 0) {
                     flushCount++;
                     TransactionCollector.getInstance().refreshMetas();
@@ -98,7 +99,7 @@ public class Flusher implements Runnable {
                     }
                 }
                 System.out.println("Flush time cost: " + (System.currentTimeMillis() - timestamp) + " ms");
-            
+
                 try {
                     if (online) {
                         Thread.sleep(Math.max((500 - (System.currentTimeMillis() - timestamp)), 0));
@@ -112,7 +113,7 @@ public class Flusher implements Runnable {
                 // try {
                 //     if (online) {
                 //         Thread.sleep(1000);
-                //     } 
+                //     }
                 // } catch (InterruptedException ignored) {
                 //     return;
                 // }

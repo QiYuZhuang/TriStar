@@ -24,7 +24,10 @@
  import java.sql.SQLException;
  import java.util.Random;
 
+ import org.dbiir.tristar.adapter.TAdapter;
+ import org.dbiir.tristar.adapter.TransactionCollector;
  import org.dbiir.tristar.benchmarks.api.SQLStmt;
+ import org.dbiir.tristar.benchmarks.catalog.RWRecord;
  import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
@@ -130,7 +133,11 @@
      
      keys[1] = ((long) (customerWarehouseID - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
              + (long) (customerDistrictID - 1) * TPCCConfig.configCustPerDist + (long) (customerID - 1));
- 
+
+     keys[2] = ((long) (customerWarehouseID - 1) * TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist
+             + (long) (customerDistrictID - 1) * TPCCConfig.configCustPerDist);
+
+
      if (ccType == CCType.RC_TAILOR) {
        // lock WAREHOUSE
        LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_WAREHOUSE, tid, keys[0], LockType.EX, ccType);
@@ -240,7 +247,16 @@
      }
    }
  
-   public void doAfterCommit(long[] keys, CCType type, boolean success, long[] versions) {
+   public void doAfterCommit(long[] keys, CCType type, boolean success, long[] versions, long latency) {
+     if (TransactionCollector.getInstance().isSample()) {
+       TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("Payment").getId(),
+               new RWRecord[]{},
+               new RWRecord[]{new RWRecord(1, TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_WAREHOUSE), (int) keys[0]),
+                       new RWRecord(2, TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_CUSTOMER), (int) keys[1]),
+                       new RWRecord(3, TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_DISTRICT), (int) keys[2])},
+               success?1:0, latency);
+     }
+
      if (!success)
        return;
      if (type == CCType.RC_TAILOR) {
@@ -250,11 +266,6 @@
        LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[1], versions[1]);
        LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_WAREHOUSE, keys[0], versions[0]);
        return;
-     }
-     if (type == CCType.RC_TAILOR_ATTR) {
-       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, keys[1], LockType.EX);
-       // update the
-       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, keys[1], versions[1]);
      }
    }
  

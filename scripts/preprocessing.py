@@ -40,7 +40,6 @@ def read_files(case_name: str, ts=""):
     for d in os.scandir(case_dir):
         if d.is_dir():
             exps.append(d)
-
     return generate_summary(exps=exps, case_name=case_name), case_dir
 
 
@@ -62,6 +61,7 @@ def generate_summary(exps: List, case_name: str) -> List[Summary]:
                     if ycsb_case:
                         results.append(YCSBBaseSummary(f.path))
                     else:
+                        print(f.path)
                         results.append(SkewSummary(f.path))
                 elif case_name.__contains__("hotspot"):
                     results.append(HotspotSummary(f.path))
@@ -186,7 +186,6 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     if len(args) > 0:
         path = args[0]
-
     res, case_path = read_files(path)
     res.sort()
     create_output_file(case_path)

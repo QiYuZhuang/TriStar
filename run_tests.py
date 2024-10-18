@@ -18,7 +18,7 @@ meta_prefix = "metas/"
 workloads = ["ycsb", "tpcc", "smallbank"]
 engines = ["mysql", "postgresql"]
 functions = ["scalability", "hotspot-128", "hotspot-256", "skew-128", "skew-256", "wc_ratio-256", "bal_ratio-256",
-             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128",
+             "rate-256", "bal_ratio-128", "rate-128", "wc_ratio-128", "random-128", "pa_ratio-128", "no_ratio-128"
              "wr_ratio-128", "dynamic-128", "switch-128"]
 strategies = ["SERIALIZABLE", "SI_TAILOR", "RC_TAILOR"]
 
@@ -64,7 +64,7 @@ def create_output_file(filepath: str):
     file_path = os.path.join(filepath, file_name)
     open(file_path, 'w').close()
 
-    sys.stdout = open(file_path, 'w')
+    #sys.stdout = open(file_path, 'w')
 
     print("create new file: " + file_path)
     return file_path

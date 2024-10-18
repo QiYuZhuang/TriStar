@@ -17,18 +17,29 @@
 
 package org.dbiir.tristar.benchmarks.workloads.tpcc;
 
+import java.util.HashMap;
+
 public abstract class TPCCConstants {
   public static final String TABLENAME_DISTRICT = "district";
   public static final String TABLENAME_WAREHOUSE = "warehouse";
-  public static final String TABLENAME_ITEM = "item";
   public static final String TABLENAME_STOCK = "stock";
   public static final String TABLENAME_CUSTOMER = "customer";
-  public static final String TABLENAME_HISTORY = "history";
   public static final String TABLENAME_OPENORDER = "orders";
   public static final String TABLENAME_ORDERLINE = "order_line";
-  public static final String TABLENAME_NEWORDER = "new_order";
   public static final String TABLENAME_CONFLICT_STOCK = "conflict_s";
   public static final String TABLENAME_CONFLICT_CUSTOMER = "conflict_c";
   public static final String TABLENAME_CONFLICT_WAREHOUSE = "conflict_w";
-  
+  public static final HashMap<String , Integer> TABLENAME_TO_INDEX = new HashMap<>(7);
+
+
+  static {
+    TABLENAME_TO_INDEX.put(TABLENAME_DISTRICT, 0);
+    TABLENAME_TO_INDEX.put(TABLENAME_WAREHOUSE, 1);
+    TABLENAME_TO_INDEX.put(TABLENAME_STOCK, 2);
+    TABLENAME_TO_INDEX.put(TABLENAME_CUSTOMER, 3);
+    TABLENAME_TO_INDEX.put(TABLENAME_OPENORDER, 4);
+    TABLENAME_TO_INDEX.put(TABLENAME_ORDERLINE, 5);
+  }
+
+
 }

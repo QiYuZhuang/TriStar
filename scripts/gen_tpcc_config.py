@@ -28,7 +28,7 @@ cc_map = {
 }
 
 
-def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 16, rate="", dir="../config", casename=""):
+def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.1, scalaF = 16, rate="", dir="../config", casename="", rationame="", ratio: int = 0):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
@@ -37,7 +37,7 @@ def generate_mysql_tpcc_config(cc_type: str, terminals, weight, zipf: float = 0.
     ElementTree.SubElement(root, "url").text = ("jdbc:postgresql://localhost:5432/tpcc?sslmode=disable&amp"
                                                 ";ApplicationName=tpcc&amp;reWriteBatchedInserts=true")
     ElementTree.SubElement(root, "username").text = "postgres"
-    ElementTree.SubElement(root, "password").text = "Ss123!@#"
+    ElementTree.SubElement(root, "password").text = "tristar"
     ElementTree.SubElement(root, "isolation").text = "TRANSACTION_SERIALIZABLE"
     ElementTree.SubElement(root, "batchsize").text = "128"
     ElementTree.SubElement(root, "concurrencyControlType").text = cc_type
@@ -103,7 +103,7 @@ def tpcc_skew_warehouse(terminal=128):
     dir_name = "../config/tpcc/skew_warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
@@ -116,7 +116,7 @@ def tpcc_skew_customer(terminal=128):
     dir_name = "../config/tpcc/skew_custom-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     skews = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3]
     weight = [45, 43, 4, 4, 4]
 
@@ -129,7 +129,7 @@ def tpcc_warehouse(terminal=128):
     dir_name = "../config/tpcc/warehouse-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     weight = [45, 43, 4, 4, 4]
     wn = [1, 2, 4, 8, 16]
 
@@ -141,7 +141,7 @@ def tpcc_no_ratio(terminal=128):
     dir_name = "../../config/tpcc/no_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     #weights = [[22.5, 22.5, 22.5, 0, 22.5, 10], [17.5, 17.5, 17.5, 0, 17.5, 30], [12.5, 12.5, 12.5, 0, 12.5, 50], [7.5, 7.5, 7.5, 0, 7.5, 70],
                #[2.5, 2.5, 2.5, 0, 2.5, 90]]
     weights = [[90, 2.5, 2.5, 2.5, 2.5], [70, 7.5, 7.5, 7.5, 7.5], [50, 12.5, 12.5, 12.5, 12.5], [30, 17.5, 17.5, 17.5, 17.5],
@@ -156,7 +156,7 @@ def tpcc_pa_ratio(terminal=128):
     dir_name = "../config/tpcc/pa_ratio-" + str(terminal) + "/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     #weights = [[22.5, 22.5, 22.5, 0, 22.5, 10], [17.5, 17.5, 17.5, 0, 17.5, 30], [12.5, 12.5, 12.5, 0, 12.5, 50], [7.5, 7.5, 7.5, 0, 7.5, 70],
                #[2.5, 2.5, 2.5, 0, 2.5, 90]]
     weights = [[2.5, 90, 2.5, 2.5, 2.5], [7.5, 70, 7.5, 7.5, 7.5], [12.5, 50, 12.5, 12.5, 12.5], [17.5, 30, 17.5, 17.5, 17.5],
@@ -172,7 +172,7 @@ def tpcc_scalability():
     dir_name = "../config/tpcc/scalability/postgresql"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-    cc = ["SERIALIZABLE", "SI", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_ELT", "RC_FOR_UPDATE", "RC_TAILOR"]
     terminals = [4, 8, 16, 32, 64, 128, 256, 512]
     weight = [45, 43, 4, 4, 4]
     wn = [1, 2, 4, 8, 16]
