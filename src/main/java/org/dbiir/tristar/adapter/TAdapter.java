@@ -14,6 +14,7 @@ public class TAdapter {
     @Setter
     private boolean used = false; // true if DYNAMIC
     private CCType currentCCType = CCType.SER;
+    @Getter
     private CCType nextCCType;
     @Getter
     private CCType switchPhaseCCType = CCType.NUM_CC;
@@ -60,23 +61,46 @@ public class TAdapter {
              * 3. travel through the worker list to determine whether all workers finish the switch
              * 4. notify all workers to use the validation in new isolation level
              */
+            System.out.println("=====*===== Switch from " + currentCCType + " to " + nextCCType);
+            long startTime = System.currentTimeMillis();
             setSwitchPhaseCCType();
             inSwitchPhase = true;
-            while (!allSwitchPhaseReady()) {}
+            while (!allSwitchPhaseReady() && !Thread.interrupted()) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    System.out.println("Thread interrupted");
+                }
+            }
             allWorkersReadyForSwitch = true;
-            while (!allSwitchFinish()) {}
-            currentCCType = switchPhaseCCType;
-            resetWorkerStatus();
+            long endTime = System.currentTimeMillis();
+            System.out.println("=====*===== All workers ready for switch" + (endTime - startTime) + "ms");
+            while (!allSwitchFinish() && !Thread.interrupted()) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    System.out.println("Thread interrupted");
+                }
+            }
+            currentCCType = nextCCType;
             inSwitchPhase = false;
+            allWorkersReadyForSwitch = false;
+            resetWorkerStatus();
+            endTime = System.currentTimeMillis();
+            System.out.println("=====*===== All workers finish switchment" + (endTime - startTime) + "ms");
+            endTime = System.currentTimeMillis();
+            System.out.println("=====*===== Switch phase takes " + (endTime - startTime) + "ms");
+            nextCCType = CCType.NUM_CC;
         }
     }
 
     public void setNextCCType(String ccType) {
-        if (ccType.equals("1")) {
+        ccType = ccType.trim();
+        if (ccType.equals("0")) {
             this.setNextCCType(CCType.SER);
-        } else if (ccType.equals("2")) {
+        } else if (ccType.equals("1")) {
             this.setNextCCType(CCType.SI_TAILOR);
-        } else if (ccType.equals("3")) {
+        } else if (ccType.equals("2")) {
             this.setNextCCType(CCType.RC_TAILOR);
         } else {
             System.out.println("ERROR");
@@ -86,6 +110,11 @@ public class TAdapter {
     private boolean allSwitchFinish() {
         for (Worker worker: workers) {
             if (!worker.isSwitchFinish()) {
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException e) {
+                    System.out.println("Thread.sleep() interrupted");
+                }
                 return false;
             }
         }
@@ -103,6 +132,10 @@ public class TAdapter {
         // ready if its validation is
         for (Worker worker: workers) {
             if (!worker.isSwitchPhaseReady()) {
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException e) {
+                }
                 return false;
             }
         }

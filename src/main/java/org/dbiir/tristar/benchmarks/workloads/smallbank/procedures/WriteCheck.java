@@ -30,14 +30,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 
 /**
@@ -80,7 +81,7 @@ public class WriteCheck extends Procedure {
               + " WHERE custid = ?"
               + " RETURNING tid");
 
-  public void run(Connection conn, String custName, long custId1, double amount, CCType type, Connection conn2, long[] versions, long tid, int[] checkout) throws SQLException {
+  public void run(Worker worker, Connection conn, String custName, long custId1, double amount, CCType type, Connection conn2, long[] versions, long tid, int[] checkout) throws SQLException {
     // First convert the custName to the custId
     long custId;
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
@@ -111,12 +112,6 @@ public class WriteCheck extends Procedure {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid, LockType.SH);
       phase = 1;
     }
-    if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
-      if (!FlowRate.getInstance().readOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId)) {
-        String msg = String.format("Read too much update for customer #%d, checking, WriteCheck", custId);
-        throw new SQLException(msg, "500");
-      }
-    }
     try (PreparedStatement balStmt0 = switch (type) {
       case RC_FOR_UPDATE, SI_FOR_UPDATE -> this.getPreparedStatement(conn, GetSavingsBalanceForUpdate, custId1);
       default -> this.getPreparedStatement(conn, GetSavingsBalance, custId1);
@@ -135,6 +130,22 @@ public class WriteCheck extends Procedure {
       }
     }
 
+    while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+      // set current thread ready, block for all thread to ready
+      if (!worker.isSwitchPhaseReady()) {
+        worker.setSwitchPhaseReady(true);
+        System.out.println(Thread.currentThread().getName() + " is ready for switch");
+      } else {
+        try {
+          Thread.sleep(1);
+        } catch (InterruptedException e) {
+        }
+      }
+    }
+    if (TAdapter.getInstance().isInSwitchPhase()) {
+      type = TAdapter.getInstance().getSwitchPhaseCCType();
+    }
+
     if (type == CCType.SI_TAILOR || type == CCType.RC_TAILOR) {
       LOG.debug("WriteCheck #" + tid + " acquire validation lock on savings #"+custId1);
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId1, LockType.SH, type);
@@ -148,30 +159,29 @@ public class WriteCheck extends Procedure {
           LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, LockType.SH);
           throw new SQLException(msg, "500");
         }
+      } else {
+        try (PreparedStatement balStmt1 = this.getPreparedStatement(conn, GetSavingsBalance, custId1)) {
+          try (ResultSet balRes1 = balStmt1.executeQuery()) {
+            if (!balRes1.next()) {
+              LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, LockType.SH);
+              String msg = String.format("Validation failed for customer #%d, savings",custId1);
+              throw new UserAbortException(msg);
+            }
+            v = balRes1.getLong(2);
+            LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId1, v);
+            if (v != versions[0]) {
+              LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, LockType.SH);
+              String msg = String.format("Validation failed for customer #%d, savings", custId1);
+              throw new SQLException(msg, "500");
+            }
+          }
+        }
       }
     }
-    // try {
-    //   Thread.sleep(5);
-    // } catch (InterruptedException e) {
-    // }
 
     double checkingBalance;
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
-    }
-    if (type == CCType.RC_TAILOR) {
-      // flow rate control
-      int count = 0;
-      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId)) {
-        System.out.println("WC 140 custId: " + custId);
-        count++;
-        if (count > 10) {
-          String msg = String.format("Too much concurrent update for customer #%d, checking, WriteCheck", custId);
-          LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, LockType.SH);
-          throw new SQLException(msg, "500");
-        }
-      }
-      checkout[0]++;
     }
     phase = 2;
     try (PreparedStatement balStmt1 = switch (type) {
@@ -190,10 +200,6 @@ public class WriteCheck extends Procedure {
           versions[1] = balRes1.getLong(2);
       } 
     } catch (SQLException ex) {
-      if (type == CCType.RC_TAILOR) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, false);
-        checkout[0]--;
-      }
       if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR)
         LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, LockType.SH);
       throw ex;
@@ -309,10 +315,6 @@ public class WriteCheck extends Procedure {
      * into ww-dependency
      */
     if (!success) {
-      if (type == CCType.RC_TAILOR && versions[1] >= 0) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
-        checkout[0]--;
-      }
       return;
     }
 
@@ -325,10 +327,6 @@ public class WriteCheck extends Procedure {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId0, LockType.EX);
       LOG.debug("WriteCheck #" + tid + " release validation lock on checking #" + custId0);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId0, versions[2]);
-      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
-      checkout[0]--;
-      if (checkout[0] != 0)
-        System.out.println("WriteCheck Transaction #" + tid + " checkout: " + checkout[0]);
     }
     if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, LockType.SH);

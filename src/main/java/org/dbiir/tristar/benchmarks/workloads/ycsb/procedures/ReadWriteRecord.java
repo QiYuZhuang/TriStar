@@ -50,7 +50,7 @@ public class ReadWriteRecord extends Procedure {
      * @param ratio1: <read transaction : write transaction> (read transaction represents read-only)
      * @param ratio2: <read operation : write operation> (in write transaction)
      */
-    public void run(Worker worker, Connection conn, int[] keyname, String[][] vals, double ratio1, double ratio2, long tid, long[] versions, CCType type) throws SQLException {
+    public void run(Worker worker, Connection conn, Connection conn2, int[] keyname, String[][] vals, double ratio1, double ratio2, long tid, long[] versions, CCType type) throws SQLException {
         /*
          * if ratio1 = 0, it is a read-only transaction;
          * if ratio2 = 0, the transaction's operations are read operation;
@@ -152,6 +152,23 @@ public class ReadWriteRecord extends Procedure {
             throw ex;
         }
 
+        while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+            // set current thread ready, block for all thread to ready
+            if (!worker.isSwitchPhaseReady()) {
+                worker.setSwitchPhaseReady(true);
+                System.out.println(Thread.currentThread().getName() + " is ready for switch");
+            } else {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                }
+            }
+        }
+
+        if (TAdapter.getInstance().isInSwitchPhase()) {
+            type = TAdapter.getInstance().getSwitchPhaseCCType();
+        }
+
         if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
             int validationPhase = 0;
             while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
@@ -165,6 +182,33 @@ public class ReadWriteRecord extends Procedure {
                     else
                         LockTable.getInstance().tryValidationLock(TABLE_NAME, tid, sortedKeyname[i], LockType.EX, type);
                     validationPhase++;
+                    if (ops[i] == 1) {
+                        long v = LockTable.getInstance().getHotspotVersion(TABLE_NAME, (long) sortedKeyname[i]);
+                        if (v >= 0) {
+                            if (v != versions[i]) {
+                                releaseTailorValidationLock(validationPhase, sortedKeyname);
+                                String msg = String.format("Validation failed for ycsb_key #%d, usertable", sortedKeyname[i]);
+                                throw new SQLException(msg, "500");
+                            }
+                        } else {
+                            try (PreparedStatement balStmt1 = this.getPreparedStatement(conn, readStmt, sortedKeyname[i])) {
+                                try (ResultSet balRes1 = balStmt1.executeQuery()) {
+                                    if (!balRes1.next()) {
+                                        releaseTailorValidationLock(validationPhase, sortedKeyname);
+                                        String msg = String.format("Validation failed for ycsb_key #%d, usertable", sortedKeyname[i]);
+                                        throw new UserAbortException(msg);
+                                    }
+                                    v = balRes1.getLong(2);
+                                    LockTable.getInstance().updateHotspotVersion(TABLE_NAME, sortedKeyname[i], v);
+                                    if (v != versions[i]) {
+                                        releaseTailorValidationLock(validationPhase, sortedKeyname);
+                                        String msg = String.format("Validation failed for ycsb_key #%d, usertable", sortedKeyname[i]);
+                                        throw new SQLException(msg, "500");
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } catch (SQLException ex) {
                     releaseTailorValidationLock(validationPhase, sortedKeyname);
                     throw ex;

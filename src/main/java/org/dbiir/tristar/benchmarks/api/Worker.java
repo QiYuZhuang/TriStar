@@ -135,7 +135,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   protected void switchIsolation(Connection conn) throws SQLException {
-    switch (TAdapter.getInstance().getSwitchPhaseCCType()) {
+    switch (TAdapter.getInstance().getNextCCType()) {
       case RC:
       case RC_ELT:
       case RC_FOR_UPDATE:
@@ -512,10 +512,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             LOG.debug(String.format("%s %s attempting...", this, transactionType));
           }
 
-          if (TAdapter.getInstance().isInSwitchPhase() && !switchFinish) {
+          if (TAdapter.getInstance().isInSwitchPhase() && TAdapter.getInstance().isAllWorkersReadyForSwitch() && !switchFinish) {
             switchIsolation(conn);
             switchFinish = true;
             conn.setAutoCommit(false);
+            System.out.println(Thread.currentThread().getName() + "switch finish: " + TAdapter.getInstance().getNextCCType());
           }
 
           status = this.executeWork(conn, transactionType);

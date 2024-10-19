@@ -30,9 +30,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
@@ -60,7 +62,7 @@ public class DepositChecking extends Procedure {
               + " WHERE custid = ?"
               + " RETURNING tid");
 
-  public void run(Connection conn, String custName, double amount, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
+  public void run(Worker worker, Connection conn, String custName, double amount, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
     // First convert the custName to the custId
     long custId;
     if (type == CCType.RC_ELT) {
@@ -88,18 +90,6 @@ public class DepositChecking extends Procedure {
     if (type == CCType.RC_TAILOR_LOCK) {
       LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
     }
-    if (type == CCType.RC_TAILOR) {
-      // flow rate control
-      int count = 0;
-      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId)) {
-        if (count > 10) {
-          String msg = String.format("Too much concurrent update for customer #%d, checking, DepositChecking", custId);
-          throw new SQLException(msg, "500");
-        }
-        count++;
-      }
-      checkout[0]++;
-    }
     try (PreparedStatement stmt1 =
         this.getPreparedStatement(conn, UpdateCheckingBalance, amount, custId)) {
       try (ResultSet res = stmt1.executeQuery()) {
@@ -109,14 +99,25 @@ public class DepositChecking extends Procedure {
         versions[0] = res.getLong(1);
       }
     } catch (SQLException ex) {
-      if (type == CCType.RC_TAILOR) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, false);
-        checkout[0]--;
-      }
       throw ex;
     }
     if (type == CCType.RC_TAILOR && versions[0] < 0)
       System.out.println("custome error 4");
+    while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+      // set current thread ready, block for all thread to ready
+      if (!worker.isSwitchPhaseReady()) {
+        worker.setSwitchPhaseReady(true);
+        System.out.println(Thread.currentThread().getName() + " is ready for switch");
+      } else {
+        try {
+          Thread.sleep(1);
+        } catch (InterruptedException e) {
+        }
+      }
+    }
+    if (TAdapter.getInstance().isInSwitchPhase()) {
+      type = TAdapter.getInstance().getSwitchPhaseCCType();
+    }
     if (type == CCType.RC_TAILOR) {
       LOG.debug("DepositChecking #" + tid + " acquire EX validation lock - checking #"+custId);
       LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId, LockType.EX, type);
@@ -133,10 +134,6 @@ public class DepositChecking extends Procedure {
     }
 
     if (!success) {
-      if (type == CCType.RC_TAILOR && versions[0] >= 0) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, true);
-        checkout[0]--;
-      }
       return;
     }
     if (type == CCType.RC_TAILOR_LOCK) {
@@ -146,10 +143,6 @@ public class DepositChecking extends Procedure {
       LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId, LockType.EX);
       LOG.debug("DepositChecking #" + tid + " release EX validation lock - checking #"+custId);
       LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId, versions[0]);
-      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId, true);
-      checkout[0]--;
-      if (checkout[0] != 0)
-        System.out.println("DC Transaction #" + tid + " checkout: " + checkout[0]);
     }
   }
 }

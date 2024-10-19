@@ -30,9 +30,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
@@ -66,7 +68,7 @@ public class Balance extends Procedure {
                   " AS old WHERE new.custid = ? " +
                   " AND old.custid=new.custid RETURNING old.bal");
 
-  public double run(Connection conn, String custName, CCType type, long[] versions, long tid) throws SQLException {
+  public double run(Worker worker, Connection conn, String custName, CCType type, long[] versions, long tid) throws SQLException {
     // First convert the acctName to the acctId
     long custId;
     if (type == CCType.RC_ELT) {
@@ -143,6 +145,22 @@ public class Balance extends Procedure {
         if (type == CCType.RC_TAILOR)
           versions[1] = balRes1.getLong(2);
       }
+    }
+
+    while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+      // set current thread ready, block for all thread to ready
+      if (!worker.isSwitchPhaseReady()) {
+        worker.setSwitchPhaseReady(true);
+        System.out.println(Thread.currentThread().getName() + " is ready for switch");
+      } else {
+        try {
+          Thread.sleep(1);
+        } catch (InterruptedException e) {
+        }
+      }
+    }
+    if (TAdapter.getInstance().isInSwitchPhase()) {
+      type = TAdapter.getInstance().getSwitchPhaseCCType();
     }
 
     LOG.debug("Balance #" + tid + " enter validation");
