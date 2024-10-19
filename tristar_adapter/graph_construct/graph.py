@@ -1,12 +1,15 @@
 
 
 class Graph:
-    nodes: list[int] = []
+    nodes: list[list[int]] = []
     edges: list = [[], []]
     edge_feature: list = []
     label: list
 
     def __init__(self, filepath: str, delim1: str = '#', delim2: str = ','):
+        self.nodes = []
+        self.edges = [[], []]
+        self.edge_feature = []
         with open(filepath, 'r') as file:
             for line in file:
                 line = line.strip()
@@ -16,8 +19,12 @@ class Graph:
 
     def process_node_and_edge_list(self, row: list[str], delim: str) -> None:
         # process the node
-        self.nodes.append(int(row[0].split(delim)[1]))
+        # self.nodes.append([int(row[0].split(delim)[1])])
         src = int(row[0].split(delim)[0])
+        read_cnt, write_cnt = int(row[0].split(delim)[1]), int(row[0].split(delim)[2])
+        success = int(row[0].split(delim)[3])
+        self.nodes.append([read_cnt, write_cnt])
+        # process edge
         edges = row[1:]
         for edge in edges:
             if len(edge) <= 0:
@@ -29,3 +36,6 @@ class Graph:
             self.edges[0].append(src)
             self.edges[1].append(dst)
             self.edge_feature.append([ty, ta])
+        self.edges[0].append(1)
+        self.edges[1].append(2)
+        self.edge_feature.append([0, 1])
