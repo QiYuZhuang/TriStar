@@ -29,6 +29,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
@@ -40,6 +43,7 @@ import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 /**
  * TransactSavings Procedure Original version by Mohammad Alomari and Michael Cahill
@@ -66,6 +70,28 @@ public class TransactSavings extends Procedure {
               + "   SET bal = bal + ?, tid = tid + 1 "
               + " WHERE custid = ? "
               + " RETURNING tid");
+
+  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+  static {
+    clientServerIndexMap.put(0, -1);
+    clientServerIndexMap.put(1, -1);
+  }
+
+  @Override
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+  }
+
+  @Override
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+    templateSQLMetas.add(new TemplateSQLMeta("TransactSavings", 0, SmallBankConstants.TABLENAME_ACCOUNTS,
+            0, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("TransactSavings", 1, SmallBankConstants.TABLENAME_SAVINGS,
+            1, "UPDATE " + SmallBankConstants.TABLENAME_SAVINGS
+            + " SET bal = bal + ?, WHERE custid = ? "));
+    return templateSQLMetas;
+  }
 
   public void run(Worker worker, Connection conn, String custName, double amount, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
     // First convert the custName to the acctId

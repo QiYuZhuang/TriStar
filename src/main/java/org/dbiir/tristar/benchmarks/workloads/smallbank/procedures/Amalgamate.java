@@ -29,6 +29,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
@@ -40,6 +43,7 @@ import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 /**
  * Amalgamate Procedure Original version by Mohammad Alomari and Michael Cahill
@@ -107,6 +111,43 @@ public class Amalgamate extends Procedure {
                           + SmallBankConstants.TABLENAME_SAVINGS
                           + "   SET bal = 0.0 "
                           + " WHERE custid = ?");
+
+  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+  static {
+    clientServerIndexMap.put(0, -1);
+    clientServerIndexMap.put(1, -1);
+    clientServerIndexMap.put(2, -1);
+    clientServerIndexMap.put(3, -1);
+    clientServerIndexMap.put(4, -1);
+  }
+
+  @Override
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+  }
+
+  @Override
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 0, SmallBankConstants.TABLENAME_ACCOUNTS,
+            0, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 0, SmallBankConstants.TABLENAME_ACCOUNTS,
+            1, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_SAVINGS,
+            2, "UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
+            " AS new SET bal = 0.0 FROM " + SmallBankConstants.TABLENAME_SAVINGS +
+            " AS old WHERE new.custid = ? AND old.custid = new.custid" +
+            " RETURNING old.bal"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_CHECKING,
+            3, "UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
+            " AS new SET bal = 0.0 FROM " + SmallBankConstants.TABLENAME_CHECKING +
+            " AS old WHERE new.custid = ? AND old.custid = new.custid " +
+            " RETURNING old.bal"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_SAVINGS,
+            4, "UPDATE " + SmallBankConstants.TABLENAME_SAVINGS
+            + " SET bal = bal - ? WHERE custid = ?"));
+    return templateSQLMetas;
+  }
 
   public void run(Worker worker, Connection conn, long custId0, long custId1, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
     if (type == CCType.RC_ELT) {

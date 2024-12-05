@@ -84,6 +84,9 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   @Getter
   @Setter
   protected boolean switchPhaseReady = false; // validation transaction common, set it to true
+  @Getter
+  @Setter
+  protected String buffer = null; // buffer the response (the execution result) from the txnSails server
 
   public Worker(T benchmark, int id) {
     this.id = id;
