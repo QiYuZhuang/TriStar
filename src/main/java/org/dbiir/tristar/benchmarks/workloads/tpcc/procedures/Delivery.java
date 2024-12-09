@@ -18,6 +18,7 @@
 package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.workloads.TPCC.TPCCConstants;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
@@ -28,6 +29,10 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.util.Random;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 public class Delivery extends TPCCProcedure {
 
@@ -108,6 +113,28 @@ public class Delivery extends TPCCProcedure {
            AND C_ID = ?
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
+  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+  static {
+    clientServerIndexMap.put(0, -1);
+    clientServerIndexMap.put(1, -1);
+    clientServerIndexMap.put(2, -1);
+  }
+  @Override
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+  }
+  @Override
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+    templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_OPENORDER,
+            0, "UPDATE " + TPCCConstants.TABLENAME_OPENORDER + " SET O_STATUS  = ? WHERE OL_O_ID = ? AND OL_D_ID = ? AND OL_W_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_ORDERLINE,
+            1, "UPDATE " + TPCCConstants.TABLENAME_ORDERLINE + " SET OL_DELIVERY_INFO = ? WHERE OL_O_ID = ? AND OL_D_ID = ? AND OL_W_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_CUSTOMER,
+            2, "UPDATE " + TPCCConstants.TABLENAME_CUSTOMER +" SET C_BALANCE = C_BALANCE - ? WHERE C_W_ID = ? AND C_D_ID = ? AND C_ID = ?"));
+    return templateSQLMetas;
+  }
 
   public void run(
       Connection conn,

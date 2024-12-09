@@ -25,12 +25,16 @@ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Customer;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.District;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Warehouse;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Random;
 
 public class Payment extends TPCCProcedure {
@@ -148,6 +152,28 @@ public class Payment extends TPCCProcedure {
          ORDER BY C_FIRST
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
+  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+  static {
+    clientServerIndexMap.put(0, -1);
+    clientServerIndexMap.put(1, -1);
+    clientServerIndexMap.put(2, -1);
+  }
+  @Override
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+  }
+  @Override
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+    templateSQLMetas.add(new TemplateSQLMeta("Payment", 1, TPCCConstants.TABLENAME_WAREHOUSE,
+            0, "UPDATE " + TPCCConstants.TABLENAME_WAREHOUSE + " SET W_YTD = W_YTD + ? WHERE W_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Payment", 1, TPCCConstants.TABLENAME_DISTRICT,
+            1, "UPDATE " + TPCCConstants.TABLENAME_DISTRICT + " SET D_YTD = D_YTD + ? WHERE D_W_ID = ? AND D_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Payment", 1, TPCCConstants.TABLENAME_CUSTOMER,
+            2, "UPDATE " + TPCCConstants.TABLENAME_CUSTOMER +" SET C_BALANCE = C_BALANCE + ? WHERE C_W_ID = ? AND C_D_ID = ? AND C_ID = ?"));
+    return templateSQLMetas;
+  }
 
   public void run(
       Connection conn,

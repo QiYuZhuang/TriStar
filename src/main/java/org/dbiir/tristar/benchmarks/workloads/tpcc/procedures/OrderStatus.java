@@ -23,6 +23,7 @@ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Customer;
 import org.dbiir.tristar.benchmarks.workloads.tpcc.pojo.Oorder;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +32,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 
@@ -53,7 +56,7 @@ public class OrderStatus extends TPCCProcedure {
   public SQLStmt ordStatGetOrderLinesSQL =
       new SQLStmt(
           """
-        SELECT OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DELIVERY_D
+        SELECT OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_OrderStatus_D
           FROM  %s
          WHERE OL_O_ID = ?
            AND OL_D_ID = ?
@@ -87,6 +90,28 @@ public class OrderStatus extends TPCCProcedure {
          ORDER BY C_FIRST
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+  
+  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+  static {
+    clientServerIndexMap.put(0, -1);
+    clientServerIndexMap.put(1, -1);
+    clientServerIndexMap.put(2, -1);
+  }
+  @Override
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+  }
+  @Override
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+    templateSQLMetas.add(new TemplateSQLMeta("OrderStatus", 0, TPCCConstants.TABLENAME_CUSTOMER,
+            0, "SELECT C_INFO, C_BALANCE " + TPCCConstants.TABLENAME_CUSTOMER + " WHERE C_W_ID = ? AND C_D_ID = ? AND C_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("OrderStatus", 0, TPCCConstants.TABLENAME_OPENORDER,
+            1, "SELECT O_STATUS FROM " + TPCCConstants.TABLENAME_OPENORDER + " WHERE O_W_ID = ? AND O_D_ID = ? AND O_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("OrderStatus", 0, TPCCConstants.TABLENAME_ORDERLINE,
+            2, "SELECT OL_DELIVERY_INFO, OL_QUANTITY " + TPCCConstants.TABLENAME_ORDERLINE +" WHERE OL_W_ID = ? AND OL_D_ID = ? AND OL_O_ID = ?"));
+    return templateSQLMetas;
+  }
 
   public void run(
       Connection conn,
@@ -158,7 +183,7 @@ public class OrderStatus extends TPCCProcedure {
         sb.append(o.o_carrier_id);
         sb.append("\n\n");
         if (orderLines.size() != 0) {
-          sb.append(" [Supply_W - Item_ID - Qty - Amount - Delivery-Date]\n");
+          sb.append(" [Supply_W - Item_ID - Qty - Amount - OrderStatus-Date]\n");
           for (String orderLine : orderLines) {
             sb.append(" ");
             sb.append(orderLine);
@@ -227,8 +252,8 @@ public class OrderStatus extends TPCCProcedure {
           sb.append(" - ");
           sb.append(TPCCUtil.formattedDouble(rs.getDouble("OL_AMOUNT")));
           sb.append(" - ");
-          if (rs.getTimestamp("OL_DELIVERY_D") != null) {
-            sb.append(rs.getTimestamp("OL_DELIVERY_D"));
+          if (rs.getTimestamp("OL_OrderStatus_D") != null) {
+            sb.append(rs.getTimestamp("OL_OrderStatus_D"));
           } else {
             sb.append("99-99-9999");
           }

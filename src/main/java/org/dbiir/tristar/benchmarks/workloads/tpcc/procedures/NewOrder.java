@@ -28,6 +28,10 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.Random;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 public class NewOrder extends TPCCProcedure {
 
@@ -131,6 +135,38 @@ public class NewOrder extends TPCCProcedure {
          VALUES (?,?,?,?,?,?,?,?,?)
     """
               .formatted(TPCCConstants.TABLENAME_ORDERLINE));
+
+  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+  static {
+    clientServerIndexMap.put(0, -1);
+    clientServerIndexMap.put(1, -1);
+    clientServerIndexMap.put(2, -1);
+    clientServerIndexMap.put(3, -1);
+    clientServerIndexMap.put(4, -1);
+    clientServerIndexMap.put(5, -1);
+  }
+  @Override
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+  }
+  @Override
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+    templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 0, TPCCConstants.TABLENAME_WAREHOUSE,
+            0, "SELECT W_INFO FROM " + TPCCConstants.TABLENAME_WAREHOUSE + " WHERE W_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 1, TPCCConstants.TABLENAME_ORDERLINE,
+            1, "UPDATE " + TPCCConstants.TABLENAME_DISTRICT + " SET D_NEXT_O_ID = D_NEXT_O_ID + 1 WHERE D_W_ID = ? AND D_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 0, TPCCConstants.TABLENAME_CUSTOMER,
+            2, "SELECT C_INFO FROM " + TPCCConstants.TABLENAME_CUSTOMER +" WHERE C_W_ID = ? AND C_D_ID = ? AND C_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 1, TPCCConstants.TABLENAME_OPENORDER,
+            3, "UPDATE " + TPCCConstants.TABLENAME_OPENORDER + " SET O_STATUS = 'renewed' WHERE O_W_ID = ? AND O_D_ID = ? AND O_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 1, TPCCConstants.TABLENAME_STOCK,
+            4, "UPDATE " + TPCCConstants.TABLENAME_STOCK + " SET S_QUANTITY = S_QUANTITY - ? WHERE S_I_ID = ? AND S_W_ID = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 1, TPCCConstants.TABLENAME_ORDERLINE,
+            5, "UPDATE " + TPCCConstants.TABLENAME_ORDERLINE + " SET OL_DELIVERY_INFO = 'renewed' WHERE OL_W_ID = ? AND OL_D_ID = ? AND OL_O_ID = ? AND OL_NUMBER = ?"));
+    return templateSQLMetas;
+  }
+
 
   public void run(
       Connection conn,
