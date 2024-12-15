@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2020 by OLTPBenchmark Project
  *
@@ -15,341 +16,296 @@
  *
  */
 
-package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
+ package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+ import java.math.BigDecimal;
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.util.Random;
 
-import java.math.BigDecimal;
+ import org.dbiir.tristar.adapter.TAdapter;
+ import org.dbiir.tristar.adapter.TransactionCollector;
+ import org.dbiir.tristar.benchmarks.api.SQLStmt;
+ import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+ import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
+ import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
+ import org.dbiir.tristar.common.CCType;
+ import org.dbiir.tristar.common.LockType;
+ import org.dbiir.tristar.transaction.concurrency.LockTable;
+
 import java.sql.*;
 import java.util.Random;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
-
-public class Delivery extends TPCCProcedure {
-
-  private static final Logger LOG = LoggerFactory.getLogger(Delivery.class);
-
-  public SQLStmt delivGetOrderIdSQL =
-      new SQLStmt(
-          """
-            SELECT NO_O_ID FROM %s
-             WHERE NO_D_ID = ?
-               AND NO_W_ID = ?
-             ORDER BY NO_O_ID ASC
-             LIMIT 1
-        """
-              .formatted(TPCCConstants.TABLENAME_NEWORDER));
-
-  public SQLStmt delivDeleteNewOrderSQL =
-      new SQLStmt(
-          """
-            DELETE FROM %s
-            WHERE NO_O_ID = ?
-            AND NO_D_ID = ?
-            AND NO_W_ID = ?
-        """
-              .formatted(TPCCConstants.TABLENAME_NEWORDER));
-
-  public SQLStmt delivGetCustIdSQL =
-      new SQLStmt(
-          """
-            SELECT O_C_ID FROM %s
-            WHERE O_ID = ?
+ 
+ public class Delivery extends TPCCProcedure {
+ 
+   public SQLStmt delivUpdateOrderStatusSQL =
+       new SQLStmt(
+           """
+         UPDATE %s
+            SET O_STATUS = ?, vid = vid + 1
+          WHERE O_ID = ?
             AND O_D_ID = ?
             AND O_W_ID = ?
-        """
-              .formatted(TPCCConstants.TABLENAME_OPENORDER));
-
-  public SQLStmt delivUpdateCarrierIdSQL =
-      new SQLStmt(
-          """
-        UPDATE %s
-           SET O_CARRIER_ID = ?
-         WHERE O_ID = ?
-           AND O_D_ID = ?
-           AND O_W_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_OPENORDER));
-
-  public SQLStmt delivUpdateDeliveryDateSQL =
-      new SQLStmt(
-          """
-        UPDATE %s
-           SET OL_DELIVERY_D = ?
-         WHERE OL_O_ID = ?
-           AND OL_D_ID = ?
-           AND OL_W_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_ORDERLINE));
-
-  public SQLStmt delivSumOrderAmountSQL =
-      new SQLStmt(
-          """
-        SELECT SUM(OL_AMOUNT) AS OL_TOTAL
-          FROM %s
-         WHERE OL_O_ID = ?
-           AND OL_D_ID = ?
-           AND OL_W_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_ORDERLINE));
-
-  public SQLStmt delivUpdateCustBalDelivCntSQL =
-      new SQLStmt(
-          """
-        UPDATE %s
-           SET C_BALANCE = C_BALANCE + ?,
-               C_DELIVERY_CNT = C_DELIVERY_CNT + 1
-         WHERE C_W_ID = ?
-           AND C_D_ID = ?
-           AND C_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
-
-  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
-  static {
-    clientServerIndexMap.put(0, -1);
-    clientServerIndexMap.put(1, -1);
-    clientServerIndexMap.put(2, -1);
-  }
-  @Override
-  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
-    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
-  }
-  @Override
-  public List<TemplateSQLMeta> getTemplateSQLMetas() {
-    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
-    templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_OPENORDER,
-            0, "UPDATE " + TPCCConstants.TABLENAME_OPENORDER + " SET O_STATUS  = ? WHERE OL_O_ID = ? AND OL_D_ID = ? AND OL_W_ID = ?"));
-    templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_ORDERLINE,
-            1, "UPDATE " + TPCCConstants.TABLENAME_ORDERLINE + " SET OL_DELIVERY_INFO = ? WHERE OL_O_ID = ? AND OL_D_ID = ? AND OL_W_ID = ?"));
-    templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_CUSTOMER,
-            2, "UPDATE " + TPCCConstants.TABLENAME_CUSTOMER +" SET C_BALANCE = C_BALANCE - ? WHERE C_W_ID = ? AND C_D_ID = ? AND C_ID = ?"));
-    return templateSQLMetas;
-  }
-
-  public void run(
-      Connection conn,
-      Random gen,
-      int w_id,
-      int numWarehouses,
-      int terminalDistrictLowerID,
-      int terminalDistrictUpperID,
-      TPCCWorker w)
-      throws SQLException {
-
-    int o_carrier_id = TPCCUtil.randomNumber(1, 10, gen);
-
-    int d_id;
-
-    int[] orderIDs = new int[10];
-
-    for (d_id = 1; d_id <= terminalDistrictUpperID; d_id++) {
-      Integer no_o_id = getOrderId(conn, w_id, d_id);
-
-      if (no_o_id == null) {
-        continue;
-      }
-
-      orderIDs[d_id - 1] = no_o_id;
-
-      deleteOrder(conn, w_id, d_id, no_o_id);
-
-      int customerId = getCustomerId(conn, w_id, d_id, no_o_id);
-
-      updateCarrierId(conn, w_id, o_carrier_id, d_id, no_o_id);
-
-      updateDeliveryDate(conn, w_id, d_id, no_o_id);
-
-      float orderLineTotal = getOrderLineTotal(conn, w_id, d_id, no_o_id);
-
-      updateBalanceAndDelivery(conn, w_id, d_id, customerId, orderLineTotal);
+            RETURNING vid
+     """
+               .formatted(TPCCConstants.TABLENAME_OPENORDER));
+ 
+   public SQLStmt delivUpdateDeliveryInfoSQL =
+           new SQLStmt(
+                   """
+                 UPDATE %s
+                    SET ol_delivery_info = ?, vid = vid + 1
+                  WHERE OL_O_ID = ?
+                    AND OL_D_ID = ?
+                    AND OL_W_ID = ?
+                    RETURNING vid
+             """
+                           .formatted(TPCCConstants.TABLENAME_ORDERLINE));
+ 
+   public SQLStmt delivUpdateCustBalSQL =
+       new SQLStmt(
+           """
+         UPDATE %s
+            SET C_BALANCE = C_BALANCE - ?, vid = vid + 1
+          WHERE C_W_ID = ?
+            AND C_D_ID = ?
+            AND C_ID = ?
+            RETURNING vid
+     """
+               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+ 
+   public final SQLStmt stmtUpdateConflictCSQL =
+           new SQLStmt(
+                   """
+                 SELECT *
+                  FROM %s
+                  WHERE C_W_ID = ?
+                    AND C_D_ID = ?
+                    AND C_ID = ?
+                  FOR UPDATE
+             """
+                           .formatted(TPCCConstants.TABLENAME_CONFLICT_CUSTOMER));
+ 
+    static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+    static {
+        clientServerIndexMap.put(0, -1);
+        clientServerIndexMap.put(1, -1);
+        clientServerIndexMap.put(2, -1);
     }
-
-    if (LOG.isTraceEnabled()) {
-      StringBuilder terminalMessage = new StringBuilder();
-      terminalMessage.append(
-          "\n+---------------------------- DELIVERY ---------------------------+\n");
-      terminalMessage.append(" Date: ");
-      terminalMessage.append(TPCCUtil.getCurrentTime());
-      terminalMessage.append("\n\n Warehouse: ");
-      terminalMessage.append(w_id);
-      terminalMessage.append("\n Carrier:   ");
-      terminalMessage.append(o_carrier_id);
-      terminalMessage.append("\n\n Delivered Orders\n");
-      for (int i = 1; i <= TPCCConfig.configDistPerWhse; i++) {
-        if (orderIDs[i - 1] >= 0) {
-          terminalMessage.append("  District ");
-          terminalMessage.append(i < 10 ? " " : "");
-          terminalMessage.append(i);
-          terminalMessage.append(": Order number ");
-          terminalMessage.append(orderIDs[i - 1]);
-          terminalMessage.append(" was delivered.\n");
-        }
-      }
-      terminalMessage.append(
-          "+-----------------------------------------------------------------+\n\n");
-      LOG.trace(terminalMessage.toString());
+    @Override
+    public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+        clientServerIndexMap.put(clientSideIndex, serverSideIndex);
     }
-  }
-
-  private Integer getOrderId(Connection conn, int w_id, int d_id) throws SQLException {
-
-    try (PreparedStatement delivGetOrderId = this.getPreparedStatement(conn, delivGetOrderIdSQL)) {
-      delivGetOrderId.setInt(1, d_id);
-      delivGetOrderId.setInt(2, w_id);
-
-      try (ResultSet rs = delivGetOrderId.executeQuery()) {
-
-        if (!rs.next()) {
-          // This district has no new orders.  This can happen but should be rare
-
-          LOG.warn(String.format("District has no new orders [W_ID=%d, D_ID=%d]", w_id, d_id));
-
-          return null;
-        }
-
-        return rs.getInt("NO_O_ID");
-      }
+    @Override
+    public List<TemplateSQLMeta> getTemplateSQLMetas() {
+        List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+        templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_OPENORDER,
+                0, "UPDATE " + TPCCConstants.TABLENAME_OPENORDER + " SET O_STATUS  = ? WHERE OL_O_ID = ? AND OL_D_ID = ? AND OL_W_ID = ?"));
+        templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_ORDERLINE,
+                1, "UPDATE " + TPCCConstants.TABLENAME_ORDERLINE + " SET OL_DELIVERY_INFO = ? WHERE OL_O_ID = ? AND OL_D_ID = ? AND OL_W_ID = ?"));
+        templateSQLMetas.add(new TemplateSQLMeta("Delivery", 1, TPCCConstants.TABLENAME_CUSTOMER,
+                2, "UPDATE " + TPCCConstants.TABLENAME_CUSTOMER +" SET C_BALANCE = C_BALANCE - ? WHERE C_W_ID = ? AND C_D_ID = ? AND C_ID = ?"));
+        return templateSQLMetas;
     }
-  }
+                         
 
-  private void deleteOrder(Connection conn, int w_id, int d_id, int no_o_id) throws SQLException {
-    try (PreparedStatement delivDeleteNewOrder =
-        this.getPreparedStatement(conn, delivDeleteNewOrderSQL)) {
-      delivDeleteNewOrder.setInt(1, no_o_id);
-      delivDeleteNewOrder.setInt(2, d_id);
-      delivDeleteNewOrder.setInt(3, w_id);
+   public void run(
+       Connection conn,
+       Random gen,
+       int w_id,
+       int numWarehouses,
+       int terminalDistrictLowerID,
+       int terminalDistrictUpperID,
+       CCType ccType,
+       long tid,
+       long[] versions,
+       long[] keys,
+       TPCCWorker w)
+       throws SQLException {
+ 
+ 
+ 
+     int d_id1 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
+ 
+     int customerId;
+     customerId = TPCCUtil.getCustomerID(gen);
 
-      int result = delivDeleteNewOrder.executeUpdate();
+     int no_o_id1 = customerId;
+     
+     if (ccType == CCType.RC_ELT) {
+       setConflictC(conn, w_id, d_id1, customerId);
+     }
+ 
+     // Orders
+     updateOrderStatus(conn, w_id, d_id1, no_o_id1, versions, ccType);
+     
+     // Orderline
+     updateDeliveryInfo(conn, w_id, d_id1, no_o_id1, versions, ccType);
+ 
+     float orderLineTotal = (float) (TPCCUtil.randomNumber(100, 500000, gen) / 100.0);
+ 
+     // Customer
+     updateBalance(conn, w_id, d_id1, customerId, orderLineTotal, versions, ccType);
+ 
+     if (ccType == CCType.RC_TAILOR) {
+       int validationPhase;
 
-      if (result != 1) {
-        // This code used to run in a loop in an attempt to make this work
-        // with MySQL's default weird consistency level. We just always run
-        // this as SERIALIZABLE instead. I don't *think* that fixing this one
-        // error makes this work with MySQL's default consistency.
-        // Careful auditing would be required.
-        String msg =
-            String.format(
-                "NewOrder delete failed. Not running with SERIALIZABLE benchmark? [w_id=%d, d_id=%d, no_o_id=%d]",
-                w_id, d_id, no_o_id);
-        throw new UserAbortException(msg);
-      }
-    }
-  }
+       long key1 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
+               + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (no_o_id1 - 1));
+       long key2 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
+               + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (customerId - 1));
 
-  private int getCustomerId(Connection conn, int w_id, int d_id, int no_o_id) throws SQLException {
+       keys[0] = key1;
+       keys[1] = key2;
 
-    try (PreparedStatement delivGetCustId = this.getPreparedStatement(conn, delivGetCustIdSQL)) {
-      delivGetCustId.setInt(1, no_o_id);
-      delivGetCustId.setInt(2, d_id);
-      delivGetCustId.setInt(3, w_id);
+       LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_OPENORDER, tid, key1, LockType.EX, ccType);
+       validationPhase = 1;
 
-      try (ResultSet rs = delivGetCustId.executeQuery()) {
+       try {
+         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_ORDERLINE, tid, key1, LockType.EX, ccType);
+         validationPhase = 2;
+       } catch (SQLException ex) {
+         releaseTailorLock(validationPhase, key1);
+         throw ex;
+       }
 
-        if (!rs.next()) {
-          String msg =
-              String.format(
-                  "Failed to retrieve ORDER record [W_ID=%d, D_ID=%d, O_ID=%d]",
-                  w_id, d_id, no_o_id);
-          throw new RuntimeException(msg);
-        }
+       try {
+         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, key2, LockType.EX, ccType);
+       } catch (SQLException ex) {
+         releaseTailorLock(validationPhase, key1);
+         throw ex;
+       }
+     }
+   }
+ 
+   private void updateOrderStatus(Connection conn, int w_id, int d_id, int no_o_id, long[] versions, CCType type)
+           throws SQLException {
+ 
+     try (PreparedStatement delivUpdateCarrierId =
+                  this.getPreparedStatement(conn, delivUpdateOrderStatusSQL)) {
+       delivUpdateCarrierId.setString(1, "delivered");
+       delivUpdateCarrierId.setInt(2, no_o_id);
+       delivUpdateCarrierId.setInt(3, d_id);
+       delivUpdateCarrierId.setInt(4, w_id);
+ 
+       try(ResultSet res = delivUpdateCarrierId.executeQuery()) {
+         if (!res.next()) {
+           String msg =
+                   String.format(
+                           "Failed to update ORDER record [W_ID=%d, D_ID=%d, O_ID=%d]", w_id, d_id, no_o_id);
+           throw new RuntimeException(msg);
+         }
+         if (type == CCType.RC_TAILOR)
+           versions[0] = res.getLong(1);
+       }
+     }
+   }
+ 
+   private void updateDeliveryInfo(Connection conn, int w_id, int d_id, int no_o_id, long[] versions, CCType type)
+           throws SQLException {
+ 
+     try (PreparedStatement delivUpdateDeliveryDate =
+                  this.getPreparedStatement(conn, delivUpdateDeliveryInfoSQL)) {
+       delivUpdateDeliveryDate.setString(1, "delivered");
+       delivUpdateDeliveryDate.setInt(2, no_o_id);
+       delivUpdateDeliveryDate.setInt(3, d_id);
+       delivUpdateDeliveryDate.setInt(4, w_id);
+ 
+       try(ResultSet res = delivUpdateDeliveryDate.executeQuery()) {
+         if (!res.next()) {
+           String msg =
+                   String.format(
+                           "Failed to update ORDER_LINE records [W_ID=%d, D_ID=%d, O_ID=%d]",
+                           w_id, d_id, no_o_id);
+           throw new RuntimeException(msg);
+         }
+         if (type == CCType.RC_TAILOR)
+           versions[1] = res.getLong(1);
+       }
+     }
+   }
+ 
+ 
+   private void updateBalance(
+       Connection conn, int w_id, int d_id, int c_id, float orderLineTotal, long[] versions, CCType type) throws SQLException {
+ 
+     try (PreparedStatement delivUpdateCustBalDelivCnt =
+         this.getPreparedStatement(conn, delivUpdateCustBalSQL)) {
+       delivUpdateCustBalDelivCnt.setBigDecimal(1, BigDecimal.valueOf(orderLineTotal));
+       delivUpdateCustBalDelivCnt.setInt(2, w_id);
+       delivUpdateCustBalDelivCnt.setInt(3, d_id);
+       delivUpdateCustBalDelivCnt.setInt(4, c_id);
+ 
+       try(ResultSet res = delivUpdateCustBalDelivCnt.executeQuery()) {
+         if (!res.next()) {
+           String msg =
+                   String.format(
+                           "Failed to update CUSTOMER record [W_ID=%d, D_ID=%d, C_ID=%d]", w_id, d_id, c_id);
+           throw new RuntimeException(msg);
+         }
+         if (type == CCType.RC_TAILOR)
+           versions[2] = res.getLong(1);
+       }
+     }
+   }
+ 
+   private void setConflictC(Connection conn, int w_id, int d_id, int c_id) throws SQLException {
+     try (PreparedStatement stmtSetConfC = this.getPreparedStatement(conn, stmtUpdateConflictCSQL)) {
+       stmtSetConfC.setInt(1, w_id);
+       stmtSetConfC.setInt(2, d_id);
+       stmtSetConfC.setInt(3, c_id);
+       try (ResultSet rs = stmtSetConfC.executeQuery()) {
+         if (!rs.next()) {
+           throw new RuntimeException("C_D_ID=" + d_id + " C_ID=" + c_id + " not found!");
+         }
+       }
+     }
+   }
+ 
+   private void releaseTailorLock(int phase, long key1) {
+ 
+     if (phase == 1) {
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
+     } else if (phase == 2) {
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, key1, LockType.EX);
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
+     }
+   }
+ 
+   public void doAfterCommit(long key1, long key2, CCType type, boolean success, long[] versions) {
 
-        return rs.getInt("O_C_ID");
-      }
-    }
-  }
+     if (TransactionCollector.getInstance().isSample()) {
+       TransactionCollector.getInstance().addTransactionSample(1,
+               new RWRecord[]{},
+               new RWRecord[]{new RWRecord(TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_OPENORDER), (int) key1),
+                       new RWRecord(TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_ORDERLINE), (int) key1),
+                       new RWRecord(TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_CUSTOMER), (int) key2)},
+               success?1:0);
+     }
 
-  private void updateCarrierId(Connection conn, int w_id, int o_carrier_id, int d_id, int no_o_id)
-      throws SQLException {
-    try (PreparedStatement delivUpdateCarrierId =
-        this.getPreparedStatement(conn, delivUpdateCarrierIdSQL)) {
-      delivUpdateCarrierId.setInt(1, o_carrier_id);
-      delivUpdateCarrierId.setInt(2, no_o_id);
-      delivUpdateCarrierId.setInt(3, d_id);
-      delivUpdateCarrierId.setInt(4, w_id);
+     if (!success)
+       return;
+     if (type == CCType.RC_TAILOR) {
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, key2, LockType.EX);
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, key1, LockType.EX);
+       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
 
-      int result = delivUpdateCarrierId.executeUpdate();
-
-      if (result != 1) {
-        String msg =
-            String.format(
-                "Failed to update ORDER record [W_ID=%d, D_ID=%d, O_ID=%d]", w_id, d_id, no_o_id);
-        throw new RuntimeException(msg);
-      }
-    }
-  }
-
-  private void updateDeliveryDate(Connection conn, int w_id, int d_id, int no_o_id)
-      throws SQLException {
-    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
-
-    try (PreparedStatement delivUpdateDeliveryDate =
-        this.getPreparedStatement(conn, delivUpdateDeliveryDateSQL)) {
-      delivUpdateDeliveryDate.setTimestamp(1, timestamp);
-      delivUpdateDeliveryDate.setInt(2, no_o_id);
-      delivUpdateDeliveryDate.setInt(3, d_id);
-      delivUpdateDeliveryDate.setInt(4, w_id);
-
-      int result = delivUpdateDeliveryDate.executeUpdate();
-
-      if (result == 0) {
-        String msg =
-            String.format(
-                "Failed to update ORDER_LINE records [W_ID=%d, D_ID=%d, O_ID=%d]",
-                w_id, d_id, no_o_id);
-        throw new RuntimeException(msg);
-      }
-    }
-  }
-
-  private float getOrderLineTotal(Connection conn, int w_id, int d_id, int no_o_id)
-      throws SQLException {
-    try (PreparedStatement delivSumOrderAmount =
-        this.getPreparedStatement(conn, delivSumOrderAmountSQL)) {
-      delivSumOrderAmount.setInt(1, no_o_id);
-      delivSumOrderAmount.setInt(2, d_id);
-      delivSumOrderAmount.setInt(3, w_id);
-
-      try (ResultSet rs = delivSumOrderAmount.executeQuery()) {
-        if (!rs.next()) {
-          String msg =
-              String.format(
-                  "Failed to retrieve ORDER_LINE records [W_ID=%d, D_ID=%d, O_ID=%d]",
-                  w_id, d_id, no_o_id);
-          throw new RuntimeException(msg);
-        }
-
-        return rs.getFloat("OL_TOTAL");
-      }
-    }
-  }
-
-  private void updateBalanceAndDelivery(
-      Connection conn, int w_id, int d_id, int c_id, float orderLineTotal) throws SQLException {
-
-    try (PreparedStatement delivUpdateCustBalDelivCnt =
-        this.getPreparedStatement(conn, delivUpdateCustBalDelivCntSQL)) {
-      delivUpdateCustBalDelivCnt.setBigDecimal(1, BigDecimal.valueOf(orderLineTotal));
-      delivUpdateCustBalDelivCnt.setInt(2, w_id);
-      delivUpdateCustBalDelivCnt.setInt(3, d_id);
-      delivUpdateCustBalDelivCnt.setInt(4, c_id);
-
-      int result = delivUpdateCustBalDelivCnt.executeUpdate();
-
-      if (result == 0) {
-        String msg =
-            String.format(
-                "Failed to update CUSTOMER record [W_ID=%d, D_ID=%d, C_ID=%d]", w_id, d_id, c_id);
-        throw new RuntimeException(msg);
-      }
-    }
-  }
-}
+       // update the
+       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, key1, versions[0]);
+       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, key1, versions[1]);
+       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, key2, versions[2]);
+     }
+   }
+ 
+ }
+ 
