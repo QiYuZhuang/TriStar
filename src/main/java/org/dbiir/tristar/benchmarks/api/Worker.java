@@ -30,6 +30,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import lombok.Getter;
 import lombok.Setter;
+
+import org.dbiir.tristar.TriStar;
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.LatencyRecord;
 import org.dbiir.tristar.benchmarks.Phase;
@@ -39,13 +41,24 @@ import org.dbiir.tristar.benchmarks.WorkloadState;
 import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
 import org.dbiir.tristar.benchmarks.types.DatabaseType;
 import org.dbiir.tristar.benchmarks.types.State;
+
+import static org.dbiir.tristar.benchmarks.types.State.DONE;
+import static org.dbiir.tristar.benchmarks.types.State.EXIT;
+import static org.dbiir.tristar.benchmarks.types.State.LATENCY_COMPLETE;
 import static org.dbiir.tristar.benchmarks.types.State.MEASURE;
 import org.dbiir.tristar.benchmarks.types.TransactionStatus;
 import org.dbiir.tristar.benchmarks.util.Histogram;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
 import org.dbiir.tristar.common.CCType;
+import org.postgresql.translation.messages_bg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioSocketChannel;
 
 public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(Worker.class);
@@ -86,6 +99,8 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   protected boolean switchPhaseReady = false; // validation transaction common, set it to true
   @Getter
   @Setter
+  protected ChannelFuture channelFuture;
+
   protected String buffer = null; // buffer the response (the execution result) from the txnSails server
 
   public Worker(T benchmark, int id) {
@@ -96,36 +111,46 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     this.currStatement = null;
     this.transactionTypes = this.configuration.getTransTypes();
 
-    if (!this.configuration.getNewConnectionPerTxn()) {
+    if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
+      EventLoopGroup eventExecutors = new NioEventLoopGroup();
       try {
-        this.conn = this.benchmark.makeConnection();
-        this.conn.setAutoCommit(false);
-        switch (benchmark.getCCType()) {
-          case RC:
-          case RC_ELT:
-          case RC_FOR_UPDATE:
-          case RC_TAILOR:
-          case RC_TAILOR_LOCK:
-            this.conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-            break;
-          case SI:
-          case SI_ELT:
-          case SI_FOR_UPDATE:
-          case SI_TAILOR:
-            this.conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
-            break;
-          case SER:
-            this.conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
-        }
-        // read the lasted version
-        this.conn2 = this.benchmark.makeConnection();
-        this.conn2.setAutoCommit(true);
-        this.conn2.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
-
-//        this.conn.setTransactionIsolation(this.configuration.getIsolationMode());
-      } catch (SQLException ex) {
-        throw new RuntimeException("Failed to connect to database", ex);
+        System.out.println("connect to txnSails server");
+        Bootstrap bootstrap =  new Bootstrap();
+        bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new TriStar.NettyClientInitializer());
+        channelFuture = bootstrap.connect(benchmark.workConf.getTxnSailsServerIp(),9876).sync();
+      } catch (InterruptedException e) {
+        throw new RuntimeException("Failed to connect to txnSails server", e);
       }
+    } else if (!this.configuration.getNewConnectionPerTxn()) {
+        try {
+          this.conn = this.benchmark.makeConnection();
+          this.conn.setAutoCommit(false);
+          switch (benchmark.getCCType()) {
+            case RC:
+            case RC_ELT:
+            case RC_FOR_UPDATE:
+            // case RC_TAILOR:
+            case RC_TAILOR_LOCK:
+              this.conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+              break;
+            case SI:
+            case SI_ELT:
+            case SI_FOR_UPDATE:
+            // case SI_TAILOR:
+              this.conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+              break;
+            case SER:
+              this.conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+          }
+          // read the lasted version
+          this.conn2 = this.benchmark.makeConnection();
+          this.conn2.setAutoCommit(true);
+          this.conn2.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+
+  //        this.conn.setTransactionIsolation(this.configuration.getIsolationMode());
+        } catch (SQLException ex) {
+          throw new RuntimeException("Failed to connect to database", ex);
+        }
     }
 
     // Generate all the Procedures that we're going to need
@@ -263,172 +288,178 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
   @Override
   public final void run() {
-    Thread t = Thread.currentThread();
-    t.setName(this.toString());
 
-    // In case of reuse reset the measurements
-    latencies = new LatencyRecord(workloadState.getTestStartNs());
-
-    // Invoke initialize callback
-    try {
-      this.initialize();
-    } catch (Throwable ex) {
-      throw new RuntimeException("Unexpected error when initializing " + this, ex);
+    if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
+      channelFuture.channel();
     }
+    else{
+      Thread t = Thread.currentThread();
+      t.setName(this.toString());
 
-    // wait for start
-    workloadState.blockForStart();
+      // In case of reuse reset the measurements
+      latencies = new LatencyRecord(workloadState.getTestStartNs());
 
-    while (true) {
-
-      // PART 1: Init and check if done
-
-      State preState = workloadState.getGlobalState();
-
-      // Do nothing
-      if (preState == State.DONE) {
-        if (!seenDone) {
-          // This is the first time we have observed that the
-          // test is done notify the global test state, then
-          // continue applying load
-          seenDone = true;
-          workloadState.signalDone();
-          break;
-        }
+      // Invoke initialize callback
+      try {
+        this.initialize();
+      } catch (Throwable ex) {
+        throw new RuntimeException("Unexpected error when initializing " + this, ex);
       }
 
-      // PART 2: Wait for work
+      // wait for start
+      workloadState.blockForStart();
 
-      // Sleep if there's nothing to do.
-      workloadState.stayAwake();
+      while (true) {
 
-      Phase prePhase = workloadState.getCurrentPhase();
-      if (prePhase == null) {
-        continue;
-      }
+        // PART 1: Init and check if done
 
-      // Grab some work and update the state, in case it changed while we
-      // waited.
+        State preState = workloadState.getGlobalState();
 
-      SubmittedProcedure pieceOfWork = workloadState.fetchWork();
-
-      prePhase = workloadState.getCurrentPhase();
-      if (prePhase == null) {
-        continue;
-      }
-
-      preState = workloadState.getGlobalState();
-
-      switch (preState) {
-        case DONE, EXIT, LATENCY_COMPLETE -> {
-          // Once a latency run is complete, we wait until the next
-          // phase or until DONE.
-          LOG.warn("preState is {}? will continue...", preState);
-          continue;
-        }
-        default -> {}
-          // Do nothing
-      }
-
-      // PART 3: Execute work
-
-      TransactionType transactionType =
-          getTransactionType(pieceOfWork, prePhase, preState, workloadState);
-
-      if (!transactionType.equals(TransactionType.INVALID)) {
-
-        // TODO: Measuring latency when not rate limited is ... a little
-        // weird because if you add more simultaneous clients, you will
-        // increase latency (queue delay) but we do this anyway since it is
-        // useful sometimes
-
-        // Wait before transaction if specified
-        long preExecutionWaitInMillis = getPreExecutionWaitInMillis(transactionType);
-
-        if (preExecutionWaitInMillis > 0) {
-          try {
-            LOG.debug(
-                "{} will sleep for {} ms before executing",
-                transactionType.getName(),
-                preExecutionWaitInMillis);
-
-            Thread.sleep(preExecutionWaitInMillis);
-          } catch (InterruptedException e) {
-            LOG.error("Pre-execution sleep interrupted", e);
+        // Do nothing
+        if (preState == State.DONE) {
+          if (!seenDone) {
+            // This is the first time we have observed that the
+            // test is done notify the global test state, then
+            // continue applying load
+            seenDone = true;
+            workloadState.signalDone();
+            break;
           }
         }
 
-        long start = System.nanoTime();
+        // PART 2: Wait for work
 
-        doWork(configuration.getDatabaseType(), transactionType);
+        // Sleep if there's nothing to do.
+        workloadState.stayAwake();
 
-        long end = System.nanoTime();
+        Phase prePhase = workloadState.getCurrentPhase();
+        if (prePhase == null) {
+          continue;
+        }
 
-        // PART 4: Record results
+        // Grab some work and update the state, in case it changed while we
+        // waited.
 
-        State postState = workloadState.getGlobalState();
+        SubmittedProcedure pieceOfWork = workloadState.fetchWork();
 
-        switch (postState) {
-          case MEASURE:
-            // Non-serial measurement. Only measure if the state both
-            // before and after was MEASURE, and the phase hasn't
-            // changed, otherwise we're recording results for a query
-            // that either started during the warmup phase or ended
-            // after the timer went off.
-            Phase postPhase = workloadState.getCurrentPhase();
+        prePhase = workloadState.getCurrentPhase();
+        if (prePhase == null) {
+          continue;
+        }
 
-            if (postPhase == null) {
-              // Need a null check on postPhase since current phase being null is used in
-              // WorkloadState
-              // and ThreadBench as the indication that the benchmark is over. However, there's a
-              // race
-              // condition with postState not being changed from MEASURE to DONE yet, so we entered
-              // the
-              // switch. In this scenario, just break from the switch.
-              break;
-            }
-            if (preState == MEASURE && postPhase.getId() == prePhase.getId()) {
-              latencies.addLatency(transactionType.getId(), start, end, this.id, prePhase.getId());
-              intervalRequests.incrementAndGet();
-            }
-            if (prePhase.isLatencyRun()) {
-              workloadState.startColdQuery();
-            }
-            break;
-          case COLD_QUERY:
-            // No recording for cold runs, but next time we will since
-            // it'll be a hot run.
-            if (preState == State.COLD_QUERY) {
-              workloadState.startHotQuery();
-            }
-            break;
-          default:
+        preState = workloadState.getGlobalState();
+
+        switch (preState) {
+          case DONE, EXIT, LATENCY_COMPLETE -> {
+            // Once a latency run is complete, we wait until the next
+            // phase or until DONE.
+            LOG.warn("preState is {}? will continue...", preState);
+            continue;
+          }
+          default -> {}
             // Do nothing
         }
 
-        // wait after transaction if specified
-        long postExecutionWaitInMillis = getPostExecutionWaitInMillis(transactionType);
+        // PART 3: Execute work
 
-        if (postExecutionWaitInMillis > 0) {
-          try {
-            LOG.debug(
-                "{} will sleep for {} ms after executing",
-                transactionType.getName(),
-                postExecutionWaitInMillis);
+        TransactionType transactionType =
+            getTransactionType(pieceOfWork, prePhase, preState, workloadState);
 
-            Thread.sleep(postExecutionWaitInMillis);
-          } catch (InterruptedException e) {
-            LOG.error("Post-execution sleep interrupted", e);
+        if (!transactionType.equals(TransactionType.INVALID)) {
+
+          // TODO: Measuring latency when not rate limited is ... a little
+          // weird because if you add more simultaneous clients, you will
+          // increase latency (queue delay) but we do this anyway since it is
+          // useful sometimes
+
+          // Wait before transaction if specified
+          long preExecutionWaitInMillis = getPreExecutionWaitInMillis(transactionType);
+
+          if (preExecutionWaitInMillis > 0) {
+            try {
+              LOG.debug(
+                  "{} will sleep for {} ms before executing",
+                  transactionType.getName(),
+                  preExecutionWaitInMillis);
+
+              Thread.sleep(preExecutionWaitInMillis);
+            } catch (InterruptedException e) {
+              LOG.error("Pre-execution sleep interrupted", e);
+            }
+          }
+
+          long start = System.nanoTime();
+
+          doWork(configuration.getDatabaseType(), transactionType);
+
+          long end = System.nanoTime();
+
+          // PART 4: Record results
+
+          State postState = workloadState.getGlobalState();
+
+          switch (postState) {
+            case MEASURE:
+              // Non-serial measurement. Only measure if the state both
+              // before and after was MEASURE, and the phase hasn't
+              // changed, otherwise we're recording results for a query
+              // that either started during the warmup phase or ended
+              // after the timer went off.
+              Phase postPhase = workloadState.getCurrentPhase();
+
+              if (postPhase == null) {
+                // Need a null check on postPhase since current phase being null is used in
+                // WorkloadState
+                // and ThreadBench as the indication that the benchmark is over. However, there's a
+                // race
+                // condition with postState not being changed from MEASURE to DONE yet, so we entered
+                // the
+                // switch. In this scenario, just break from the switch.
+                break;
+              }
+              if (preState == MEASURE && postPhase.getId() == prePhase.getId()) {
+                latencies.addLatency(transactionType.getId(), start, end, this.id, prePhase.getId());
+                intervalRequests.incrementAndGet();
+              }
+              if (prePhase.isLatencyRun()) {
+                workloadState.startColdQuery();
+              }
+              break;
+            case COLD_QUERY:
+              // No recording for cold runs, but next time we will since
+              // it'll be a hot run.
+              if (preState == State.COLD_QUERY) {
+                workloadState.startHotQuery();
+              }
+              break;
+            default:
+              // Do nothing
+          }
+
+          // wait after transaction if specified
+          long postExecutionWaitInMillis = getPostExecutionWaitInMillis(transactionType);
+
+          if (postExecutionWaitInMillis > 0) {
+            try {
+              LOG.debug(
+                  "{} will sleep for {} ms after executing",
+                  transactionType.getName(),
+                  postExecutionWaitInMillis);
+
+              Thread.sleep(postExecutionWaitInMillis);
+            } catch (InterruptedException e) {
+              LOG.error("Post-execution sleep interrupted", e);
+            }
           }
         }
+
+        workloadState.finishedWork();
       }
 
-      workloadState.finishedWork();
+      LOG.debug("worker calling teardown");
+
+      tearDown();
     }
-
-    LOG.debug("worker calling teardown");
-
-    tearDown();
   }
 
   private TransactionType getTransactionType(
@@ -494,9 +525,17 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
                 LOG.info("(Re)connecting to database.");
               }
             }
-            this.conn = this.benchmark.makeConnection();
-            this.conn.setAutoCommit(false);
-            switchIsolation(this.conn);
+            if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
+              try {
+                channelFuture.channel().writeAndFlush("commit").sync();
+              } catch (InterruptedException ex) {
+                // pass
+              }
+            } else {
+              this.conn = this.benchmark.makeConnection();
+              this.conn.setAutoCommit(false);
+              switchIsolation(this.conn);
+            }
           } catch (SQLException ex) {
             if (LOG.isDebugEnabled()) {
               LOG.debug(String.format("%s failed to open a connection...", this));
@@ -510,20 +549,20 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 //        System.out.println("set transaction benchmark: " + transactionType.getTransactionIsolation());
 
         try {
-
           if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("%s %s attempting...", this, transactionType));
           }
 
-          if (TAdapter.getInstance().isInSwitchPhase() && TAdapter.getInstance().isAllWorkersReadyForSwitch() && !switchFinish) {
+          if (!(benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC)){
+            if (TAdapter.getInstance().isInSwitchPhase() && TAdapter.getInstance().isAllWorkersReadyForSwitch() && !switchFinish) {
             switchIsolation(conn);
             switchFinish = true;
             conn.setAutoCommit(false);
             System.out.println(Thread.currentThread().getName() + "switch finish: " + TAdapter.getInstance().getNextCCType());
+            }
+            status = this.executeWork(conn, transactionType);
           }
-
-          status = this.executeWork(conn, transactionType);
-
+        
           if (LOG.isDebugEnabled()) {
             LOG.debug(
                 String.format(
@@ -533,14 +572,27 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("%s %s committing...", this, transactionType));
           }
-
-          conn.commit();
-
+          if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
+            try{
+              channelFuture.channel().writeAndFlush("commit").sync();
+            } catch (InterruptedException ex) {
+              // pass
+            }
+          } else {
+            conn.commit();
+          }
           break;
-
         } catch (Procedure.UserAbortException ex) {
           try {
-            conn.rollback();
+            if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
+              try{
+                channelFuture.channel().writeAndFlush("rollback").sync();
+              } catch (InterruptedException e) {
+                // pass
+              }
+            } else {
+              conn.rollback();
+            }
           } catch (SQLException ex2) {
             LOG.error("SQLException caught while rolling back transaction.", ex2);
             // force a reconnection
@@ -694,30 +746,36 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             break;
           }
         } finally {
-          if (status == TransactionStatus.SUCCESS) {
-            executeAfterWork(transactionType, true);
-          } else {
-            executeAfterWork(transactionType, false);
-          }
-
-          if (this.configuration.getNewConnectionPerTxn() && this.conn != null) {
-            try {
-              this.conn.close();
-              this.conn = null;
-            } catch (SQLException e) {
-              LOG.error("Connection couldn't be closed.", e);
+          if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
+            if (status == TransactionStatus.SUCCESS) {
+              
             }
-          } else if (this.conn == null) {
-            LOG.warn("Connection error detected.");
+          } else {
+            if (status == TransactionStatus.SUCCESS) {
+              executeAfterWork(transactionType, true);
+            } else {
+              executeAfterWork(transactionType, false);
+            }
+            
+            if (this.configuration.getNewConnectionPerTxn() && this.conn != null) {
+              try {
+                this.conn.close();
+                this.conn = null;
+              } catch (SQLException e) {
+                LOG.error("Connection couldn't be closed.", e);
+              }
+            } else if (this.conn == null) {
+              LOG.warn("Connection error detected.");
+            }
           }
-
+          
           switch (status) {
-            case UNKNOWN -> this.txnUnknown.put(transactionType);
-            case SUCCESS -> this.txnSuccess.put(transactionType);
-            case USER_ABORTED -> this.txnAbort.put(transactionType);
-            case RETRY -> this.txnRetry.put(transactionType);
-            case RETRY_DIFFERENT -> this.txtRetryDifferent.put(transactionType);
-            case ERROR -> this.txnErrors.put(transactionType);
+            case UNKNOWN : this.txnUnknown.put(transactionType);
+            case SUCCESS : this.txnSuccess.put(transactionType);
+            case USER_ABORTED : this.txnAbort.put(transactionType);
+            case RETRY : this.txnRetry.put(transactionType);
+            case RETRY_DIFFERENT : this.txtRetryDifferent.put(transactionType);
+            case ERROR : this.txnErrors.put(transactionType);
           }
         }
       }

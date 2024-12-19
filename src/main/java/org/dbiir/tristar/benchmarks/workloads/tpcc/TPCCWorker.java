@@ -70,7 +70,7 @@
      protected TransactionStatus executeWork(Connection conn, TransactionType nextTransaction)
              throws UserAbortException, SQLException {
          long mask = 0x7FFFFFFFFFFFFFFFL;
-         this.tid = ((System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff)) & mask ; ;
+         this.tid = ((System.nanoTime() << 10) | (Thread.currentThread().getId() & 0x3ff)) & mask;
          //System.out.println(Thread.currentThread().getName() + " #" + tid + " transactionType: " + nextTransaction);
          try {
              TPCCProcedure proc = (TPCCProcedure) this.getProcedure(nextTransaction.getProcedureClass());
