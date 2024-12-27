@@ -77,6 +77,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll(";", "!");
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll("\"", ".");
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll("'", "~");
+        this.fixParams[i][j] = this.fixParams[i][j].replaceAll("#", "~");
       }
     }
 
@@ -208,6 +209,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       this.params[i] = this.params[i].replaceAll(";", "!");
       this.params[i] = this.params[i].replaceAll("\"", ".");
       this.params[i] = this.params[i].replaceAll("'", "~");
+      this.params[i] = this.params[i].replaceAll("#", "~");
     }
   }
 }

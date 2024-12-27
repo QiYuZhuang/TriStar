@@ -776,7 +776,7 @@ public class TriStar {
                     sb.append(t.getOriginSQL());
                 } else {
                     sb.append(t.getOriginSQL()).append("#");
-                    sb.append(t.getIndexInClientSide());
+                    sb.append(t.getSkipIndex());
                 }
                 sendMsgToTxnSailsServer(ctx, sb.toString() + "\n");
                 // update the server side index

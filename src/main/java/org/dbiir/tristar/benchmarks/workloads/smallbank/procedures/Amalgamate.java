@@ -143,9 +143,9 @@ public class Amalgamate extends Procedure {
             " AS new SET bal = 0.0 FROM " + SmallBankConstants.TABLENAME_CHECKING +
             " AS old WHERE new.custid = ? AND old.custid = new.custid " +
             " RETURNING old.bal"));
-    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_SAVINGS,
-            4, "UPDATE " + SmallBankConstants.TABLENAME_SAVINGS
-            + " SET bal = bal - ? WHERE custid = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_CHECKING,
+            4, "UPDATE " + SmallBankConstants.TABLENAME_CHECKING
+            + " SET bal = bal + ? WHERE custid = ?"));
     return templateSQLMetas;
   }
 
@@ -255,7 +255,7 @@ public class Amalgamate extends Procedure {
     }
 
     try (PreparedStatement updateStmt1 =
-        this.getPreparedStatement(conn, UpdateSavingsBalance, total, custId1)) {
+        this.getPreparedStatement(conn, UpdateCheckingBalance, total, custId1)) {
       try (ResultSet res = updateStmt1.executeQuery()) {
         if (!res.next()) {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId1);

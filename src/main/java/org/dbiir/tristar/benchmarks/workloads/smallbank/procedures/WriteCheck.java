@@ -109,7 +109,7 @@ public class WriteCheck extends Procedure {
             2, "SELECT bal FROM " + SmallBankConstants.TABLENAME_CHECKING + " WHERE custid = ?"));
     templateSQLMetas.add(new TemplateSQLMeta("WriteCheck", 1, SmallBankConstants.TABLENAME_CHECKING,
             3, "UPDATE " + SmallBankConstants.TABLENAME_CHECKING
-            + " SET bal = bal - ? WHERE custid = ?"));
+            + " SET bal = bal - ? WHERE custid = ?", 2));
     return templateSQLMetas;
   }
 

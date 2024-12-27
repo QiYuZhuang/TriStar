@@ -21,4 +21,13 @@ public class TemplateSQLMeta {
         this.indexInClientSide = indexInClientSide;
         this.originSQL = originSQL;
     }
+
+    public TemplateSQLMeta(String templateName, int op, String relationName, int indexInClientSide, String originSQL, int skipIndex) {
+        this.templateName = templateName;
+        this.op = op;
+        this.relationName = relationName;
+        this.indexInClientSide = indexInClientSide;
+        this.originSQL = originSQL;
+        this.skipIndex = skipIndex;
+    }
 }
