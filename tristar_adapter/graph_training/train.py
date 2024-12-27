@@ -36,7 +36,11 @@ class GraphClassificationModel(torch.nn.Module):
         # Define a fully connected layer for classification
         self.fc1 = Linear(hidden_channels, hidden_channels)
         self.fc2 = Linear(hidden_channels, out_channels)
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> origin/syp_branch
         self.dropout = Dropout(0.5)
 
     def forward(self, data):
@@ -62,18 +66,11 @@ class GraphClassificationModel(torch.nn.Module):
 
         return F.log_softmax(x, dim=1)
 
+        # Global mean pooling
+        x = global_mean_pool(x, batch)
 
-# Example: Create a list of graphs
-graph1 = Data(x=torch.tensor([[1, 2], [3, 4]], dtype=torch.float),
-              edge_index=torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
-              y=torch.tensor([0]))  # Label for graph1
+        # Apply fully connected layers
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
 
-graph2 = Data(x=torch.tensor([[5, 6], [7, 8], [9, 10]], dtype=torch.float),
-              edge_index=torch.tensor([[0, 1], [1, 2], [2, 0]], dtype=torch.long),
-              y=torch.tensor([1]))  # Label for graph2
-
-# Combine graphs into a list
-dataset = [graph1, graph2]
-
-# Create DataLoader to handle batches
-loader = DataLoader(dataset, batch_size=2, shuffle=True)
+        return F.log_softmax(x, dim=1)

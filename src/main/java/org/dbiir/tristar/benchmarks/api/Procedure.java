@@ -23,13 +23,11 @@ import java.lang.reflect.Modifier;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import org.dbiir.tristar.benchmarks.jdbc.AutoIncrementPreparedStatement;
 import org.dbiir.tristar.benchmarks.types.DatabaseType;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -187,6 +185,14 @@ public abstract class Procedure {
       }
     }
     return (stmts);
+  }
+
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    return null;
+  }
+
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    return;
   }
 
   @Override

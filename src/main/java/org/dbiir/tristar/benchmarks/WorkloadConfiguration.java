@@ -102,6 +102,9 @@ public class WorkloadConfiguration {
   @Getter
   @Setter
   private boolean warehouseSkew = false;
+  @Getter
+  @Setter
+  private String txnSailsServerIp = "";
 
   /**
    * -- GETTER --

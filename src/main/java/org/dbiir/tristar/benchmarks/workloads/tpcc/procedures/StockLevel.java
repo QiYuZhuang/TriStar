@@ -15,122 +15,116 @@
  *
  */
 
-package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
+ package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.util.Random;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Random;
+ import org.dbiir.tristar.adapter.TAdapter;
+ import org.dbiir.tristar.adapter.TransactionCollector;
+ import org.dbiir.tristar.benchmarks.api.SQLStmt;
+ import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+ import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
+ import org.dbiir.tristar.common.CCType;
+ 
+ public class StockLevel extends TPCCProcedure {
 
-public class StockLevel extends TPCCProcedure {
-
-  private static final Logger LOG = LoggerFactory.getLogger(StockLevel.class);
-
-  public SQLStmt stockGetDistOrderIdSQL =
-      new SQLStmt(
-          """
-        SELECT D_NEXT_O_ID
+   public final SQLStmt stmtUpdateConflictSSQL =
+           new SQLStmt(
+                   """
+                 SELECT *
+                  FROM %s
+                  WHERE ol_w_id = ?
+                    AND ol_i_id = ?
+                  FOR UPDATE
+             """
+                           .formatted(TPCCConstants.TABLENAME_CONFLICT_STOCK));
+ 
+   public SQLStmt stockGetStockSQL =
+       new SQLStmt(
+           """
+         SELECT S_QUANTITY
           FROM  %s
-         WHERE D_W_ID = ?
-           AND D_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_DISTRICT));
+          WHERE s_w_id = ?
+          AND s_i_id = ?
+     """
+               .formatted(TPCCConstants.TABLENAME_STOCK));
+ 
+   public void run(
+       Connection conn,
+       Random gen,
+       int w_id,
+       int numWarehouses,
+       int terminalDistrictLowerID,
+       int terminalDistrictUpperID,
+       CCType ccType,
+       long tid,
+       long[] versions,
+       long[] keys,
+       TPCCWorker w)
+       throws SQLException {
+ 
+     int i_id = TPCCUtil.getItemID(gen);
+ 
+     if (ccType == CCType.RC_ELT) {
+       setConflictS(conn, w_id, i_id);
+     }
+ 
+     getStock(conn, w_id, i_id);
+     keys[0] = (long) (w_id - 1) * TPCCConfig.configItemCount + (long) (i_id - 1);
+   }
+ 
+ 
+   private int getStock(Connection conn, int w_id, int i_id)
+       throws SQLException {
+     try (PreparedStatement stockGetCountStock =
+         this.getPreparedStatement(conn, stockGetStockSQL)) {
+       stockGetCountStock.setInt(1, w_id);
+       stockGetCountStock.setInt(2, i_id);
+ 
+       try (ResultSet rs = stockGetCountStock.executeQuery()) {
+         if (!rs.next()) {
+           String msg =
+               String.format(
+                   "Failed to get StockLevel result for query [W_ID=%d, I_ID=%d]",
+                   w_id, i_id);
+ 
+           throw new RuntimeException(msg);
+         }
+         return rs.getInt("S_QUANTITY");
+       }
+     }
+   }
+   private void setConflictS(Connection conn, int w_id, int i_id) throws SQLException {
+     try (PreparedStatement stmtSetConfC = this.getPreparedStatement(conn, stmtUpdateConflictSSQL)) {
+       stmtSetConfC.setInt(1, w_id);
+       stmtSetConfC.setInt(2, i_id);
+       try (ResultSet rs = stmtSetConfC.executeQuery()) {
+         if (!rs.next()) {
+           throw new RuntimeException("ol_w_id=" + w_id + " ol_i_id=" + i_id + " not found!");
+         }
+       }
+     }
+   }
+ 
+   public void doAfterCommit(long[] keys, CCType type, boolean success, long[] versions) {
+       if (TransactionCollector.getInstance().isSample()) {
+           TransactionCollector.getInstance().addTransactionSample(5,
+                   new RWRecord[]{new RWRecord(TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_STOCK), (int) keys[0])},
+                   new RWRecord[]{},
+                   success?1:0);
+       }
 
-  public SQLStmt stockGetCountStockSQL =
-      new SQLStmt(
-          """
-        SELECT COUNT(DISTINCT (S_I_ID)) AS STOCK_COUNT
-         FROM  %s, %s
-         WHERE OL_W_ID = ?
-         AND OL_D_ID = ?
-         AND OL_O_ID < ?
-         AND OL_O_ID >= ?
-         AND S_W_ID = ?
-         AND S_I_ID = OL_I_ID
-         AND S_QUANTITY < ?
-    """
-              .formatted(TPCCConstants.TABLENAME_ORDERLINE, TPCCConstants.TABLENAME_STOCK));
-
-  public void run(
-      Connection conn,
-      Random gen,
-      int w_id,
-      int numWarehouses,
-      int terminalDistrictLowerID,
-      int terminalDistrictUpperID,
-      TPCCWorker w)
-      throws SQLException {
-
-    int threshold = TPCCUtil.randomNumber(10, 20, gen);
-    int d_id = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
-
-    int o_id = getOrderId(conn, w_id, d_id);
-
-    int stock_count = getStockCount(conn, w_id, threshold, d_id, o_id);
-
-    if (LOG.isTraceEnabled()) {
-      String terminalMessage =
-          "\n+-------------------------- STOCK-LEVEL --------------------------+"
-              + "\n Warehouse: "
-              + w_id
-              + "\n District:  "
-              + d_id
-              + "\n\n Stock Level Threshold: "
-              + threshold
-              + "\n Low Stock Count:       "
-              + stock_count
-              + "\n+-----------------------------------------------------------------+\n\n";
-      LOG.trace(terminalMessage);
-    }
-  }
-
-  private int getOrderId(Connection conn, int w_id, int d_id) throws SQLException {
-    try (PreparedStatement stockGetDistOrderId =
-        this.getPreparedStatement(conn, stockGetDistOrderIdSQL)) {
-      stockGetDistOrderId.setInt(1, w_id);
-      stockGetDistOrderId.setInt(2, d_id);
-
-      try (ResultSet rs = stockGetDistOrderId.executeQuery()) {
-
-        if (!rs.next()) {
-          throw new RuntimeException("D_W_ID=" + w_id + " D_ID=" + d_id + " not found!");
-        }
-        return rs.getInt("D_NEXT_O_ID");
-      }
-    }
-  }
-
-  private int getStockCount(Connection conn, int w_id, int threshold, int d_id, int o_id)
-      throws SQLException {
-    try (PreparedStatement stockGetCountStock =
-        this.getPreparedStatement(conn, stockGetCountStockSQL)) {
-      stockGetCountStock.setInt(1, w_id);
-      stockGetCountStock.setInt(2, d_id);
-      stockGetCountStock.setInt(3, o_id);
-      stockGetCountStock.setInt(4, o_id - 20);
-      stockGetCountStock.setInt(5, w_id);
-      stockGetCountStock.setInt(6, threshold);
-
-      try (ResultSet rs = stockGetCountStock.executeQuery()) {
-        if (!rs.next()) {
-          String msg =
-              String.format(
-                  "Failed to get StockLevel result for COUNT query [W_ID=%d, D_ID=%d, O_ID=%d]",
-                  w_id, d_id, o_id);
-
-          throw new RuntimeException(msg);
-        }
-
-        return rs.getInt("STOCK_COUNT");
-      }
-    }
-  }
-}
+     if (!success)
+       return;
+   }
+ }
+ 
+ 

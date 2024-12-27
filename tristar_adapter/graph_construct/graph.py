@@ -38,3 +38,6 @@ class Graph:
             self.edges[0].append(src)
             self.edges[1].append(dst)
             self.edge_feature.append([ty, ta])
+        self.edges[0].append(1)
+        self.edges[1].append(2)
+        self.edge_feature.append([0, 1])

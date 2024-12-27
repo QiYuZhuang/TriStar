@@ -184,6 +184,16 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       }
     }
 
+    while(TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+      if (!this.switchPhaseReady) {
+        this.switchPhaseReady = true;
+      }
+
+      try {
+        Thread.sleep(1L);
+      } catch (InterruptedException var5) {
+      }
+    }
   }
 
   private void updateRecord(Connection conn) throws SQLException {
@@ -257,8 +267,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       this.keynames[i] = keyname;
     }
 
-    this.procReadWriteRecord.run(this, conn, this.keynames, this.fixParams, this.ratio1, this.ratio2, this.tid, this.versionBuffer, 
-                                  TAdapter.getInstance().getCCType(oldTransaction()));
+    this.procReadWriteRecord.run(this, conn, this.conn2, keynames, fixParams, ratio1, ratio2, tid, versionBuffer, TAdapter.getInstance().getCCType());
   }
 
   private void buildParameters() {

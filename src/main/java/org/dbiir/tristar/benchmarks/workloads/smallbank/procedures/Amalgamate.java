@@ -29,17 +29,21 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 /**
  * Amalgamate Procedure Original version by Mohammad Alomari and Michael Cahill
@@ -108,7 +112,44 @@ public class Amalgamate extends Procedure {
                           + "   SET bal = 0.0 "
                           + " WHERE custid = ?");
 
-  public void run(Connection conn, long custId0, long custId1, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
+  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+  static {
+    clientServerIndexMap.put(0, -1);
+    clientServerIndexMap.put(1, -1);
+    clientServerIndexMap.put(2, -1);
+    clientServerIndexMap.put(3, -1);
+    clientServerIndexMap.put(4, -1);
+  }
+
+  @Override
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+  }
+
+  @Override
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 0, SmallBankConstants.TABLENAME_ACCOUNTS,
+            0, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 0, SmallBankConstants.TABLENAME_ACCOUNTS,
+            1, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_SAVINGS,
+            2, "UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
+            " AS new SET bal = 0.0 FROM " + SmallBankConstants.TABLENAME_SAVINGS +
+            " AS old WHERE new.custid = ? AND old.custid = new.custid" +
+            " RETURNING old.bal"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_CHECKING,
+            3, "UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
+            " AS new SET bal = 0.0 FROM " + SmallBankConstants.TABLENAME_CHECKING +
+            " AS old WHERE new.custid = ? AND old.custid = new.custid " +
+            " RETURNING old.bal"));
+    templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_SAVINGS,
+            4, "UPDATE " + SmallBankConstants.TABLENAME_SAVINGS
+            + " SET bal = bal - ? WHERE custid = ?"));
+    return templateSQLMetas;
+  }
+
+  public void run(Worker worker, Connection conn, long custId0, long custId1, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
     if (type == CCType.RC_ELT) {
       try (PreparedStatement stmtc0 = this.getPreparedStatement(conn, writeConflict, custId0)) {
         try (ResultSet r0 = stmtc0.executeQuery()) {
@@ -128,237 +169,99 @@ public class Amalgamate extends Procedure {
       }
     }
 
-    // Get Account Information
-    try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custId0)) {
-      try (ResultSet r0 = stmt0.executeQuery()) {
-        if (!r0.next()) {
-          String msg = "Invalid account '" + custId0 + "'";
-          throw new UserAbortException(msg);
+    if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR || type == CCType.DYNAMIC) {
+      try{
+        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(0, GetAccount, custId0)).sync();
+        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(1, GetAccount, custId1)).sync();
+        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(2, GetAndZeroSavingsBalance, custId0)).sync();
+        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(3, GetAndZeroCheckingBalance, custId0)).sync();
+        // TODO: read results from middleware
+        double checkingBalance = 0.0, savingsBalance = 0.0;
+        double total = checkingBalance + savingsBalance;
+        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(4, UpdateSavingsBalance, total, custId1)).sync();
+      } catch (InterruptedException ex) {
+        // pass
+      }
+    } else {
+      try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custId0)) {
+        try (ResultSet r0 = stmt0.executeQuery()) {
+          if (!r0.next()) {
+            String msg = "Invalid account '" + custId0 + "'";
+            throw new UserAbortException(msg);
+          }
         }
       }
-    }
-
-    try (PreparedStatement stmt1 = this.getPreparedStatement(conn, GetAccount, custId1)) {
-      try (ResultSet r1 = stmt1.executeQuery()) {
-        if (!r1.next()) {
-          String msg = "Invalid account '" + custId1 + "'";
-          throw new UserAbortException(msg);
+      // Get Account Information
+      try (PreparedStatement stmt1 = this.getPreparedStatement(conn, GetAccount, custId1)) {
+        try (ResultSet r1 = stmt1.executeQuery()) {
+          if (!r1.next()) {
+            String msg = "Invalid account '" + custId1 + "'";
+            throw new UserAbortException(msg);
+          }
         }
       }
-    }
 
-    // Get Balance Information
-    int phase = 0;
-    if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid, LockType.EX);
-      phase = 1;
-    }
-    if (type == CCType.RC_TAILOR) {
-      while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId0)) {
-        
-      }
-      // System.out.println("Amalgamate transaction #" + tid + " acquire savings #" + custId0);
-      checkout[0] ++;
-    }
-    if (type == CCType.SI_TAILOR) {
-      if (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_SAVINGS, custId0, true)) {
-        String msg = String.format("concurrent update, Amg", custId0);
-        throw new SQLException(msg, "500");
-      }
-      // System.out.println("Amalgamate transaction #" + tid + " acquire savings #" + custId0);
-      checkout[0] ++;
-    }
-    double savingsBalance;
-    try (PreparedStatement balStmt0 = this.getPreparedStatement(conn, GetAndZeroSavingsBalance, custId0)) {
-      try (ResultSet balRes0 = balStmt0.executeQuery()) {
-        if (!balRes0.next()) {
-          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
-          if (type == CCType.RC_TAILOR_LOCK)
-            releaseTailorLock(phase, custId0, custId1, tid);
-          throw new UserAbortException(msg);
-        }
-        savingsBalance = balRes0.getDouble(1);
-        versions[0] = balRes0.getLong(2);
-      } 
-    } catch (SQLException ex) {
-      if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId0, false);
-        checkout[0]--;
-      }
-      throw ex;
-    }
-
-    if (type == CCType.RC_TAILOR && versions[0] < 0)
-      System.out.println("custome error 1");
-    if (type == CCType.RC_TAILOR_LOCK) {
-      try {
-        LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid, LockType.EX);
-        phase = 2;
+      double savingsBalance;
+      try (PreparedStatement balStmt0 = this.getPreparedStatement(conn, GetAndZeroSavingsBalance, custId0)) {
+        try (ResultSet balRes0 = balStmt0.executeQuery()) {
+          if (!balRes0.next()) {
+            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
+            throw new UserAbortException(msg);
+          }
+          savingsBalance = balRes0.getDouble(1);
+          versions[0] = balRes0.getLong(2);
+        } 
       } catch (SQLException ex) {
-        releaseTailorLock(phase, custId0, custId1, tid);
         throw ex;
       }
-    }
-    if (type == CCType.RC_TAILOR) {
-      int count = 0;
-      if (custId0 < custId1) {
-        while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId0)) {
-          System.out.println("Amg 189 custId0: " + custId0);
-        }
-        checkout[0]++;
-        while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId1)) {
-          System.out.println("Amg 192 custId1: " + custId1 + " - locked savings-" + custId0 + ", checking-" + custId0);
-        }
-        checkout[0]++;
-      } else {
-        if (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId1, true)) {
-          String msg = String.format("Too much concurrent update for customer #%d, checking, Amalgamate", custId1);
-          throw new SQLException(msg, "500");
-        }
-        checkout[0]++;
-        if (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId0, true)) {
-          FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1);
-          checkout[0]--;
-          String msg = String.format("Too much concurrent update for customer #%d, checking, Amalgamate", custId0);
-          throw new SQLException(msg, "500");
-        }
-        // while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId1)) {
-        //   System.out.println("Amg 196 custId1: " + custId1);
-        //   count++;
-        //   if (count > 10) {
-        //     String msg = String.format("Too much concurrent update for customer #%d, checking, Amalgamate", custId1);
-        //     throw new SQLException(msg, "500");
-        //   }
-        // }
-        checkout[0]++;
-        // count = 0;
-        // while (!FlowRate.getInstance().writeOperationAdmission(SmallBankConstants.TABLENAME_CHECKING, custId0)) {
-        //   System.out.println("Amg 199 custId0: " + custId0 + " - locked savings-" + custId0 + ", checking-" + custId1);
-        //   count++;
-        //   if (count > 10) {
-        //     String msg = String.format("Too much concurrent update for customer #%d, checking, Amalgamate", custId0);
-        //     FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1);
-        //     checkout[0]--;
-        //     throw new SQLException(msg, "500");
-        //   }
-        // }
-        // checkout[0]++;
-      }
-    }
-    double checkingBalance;
-    try (PreparedStatement balStmt1 = this.getPreparedStatement(conn, GetAndZeroCheckingBalance, custId0)) {
-      try (ResultSet balRes1 = balStmt1.executeQuery()) {
-        if (!balRes1.next()) {
-          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId0);
-          if (type == CCType.RC_TAILOR_LOCK)
-            releaseTailorLock(phase, custId0, custId1, tid);
-          throw new UserAbortException(msg);
-        }
 
-        checkingBalance = balRes1.getDouble(1);
-        versions[1] = balRes1.getLong(2);
-      } 
-    } catch (SQLException ex) {
-      if (type == CCType.RC_TAILOR) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, false);
-        checkout[0]--;
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1);
-        checkout[0]--;
-      }
-      throw ex;
-    }
-    if (type == CCType.RC_TAILOR && versions[1] < 0)
-      System.out.println("custome error 2");
 
-    double total = checkingBalance + savingsBalance;
-    // assert(total >= 0);
+      double checkingBalance;
+      try (PreparedStatement balStmt1 = this.getPreparedStatement(conn, GetAndZeroCheckingBalance, custId0)) {
+        try (ResultSet balRes1 = balStmt1.executeQuery()) {
+          if (!balRes1.next()) {
+            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId0);
+            throw new UserAbortException(msg);
+          }
 
-    // Update Balance Information
-//    try (PreparedStatement updateStmt0 =
-//        this.getPreparedStatement(conn, ZeroCheckingBalance, custId0)) {
-//      updateStmt0.executeUpdate();
-//    }
-//
-//    try (PreparedStatement updateStmt0 =
-//                 this.getPreparedStatement(conn, ZeroSavingsBalance, custId0)) {
-//      updateStmt0.executeUpdate();
-//    }
-    if (type == CCType.RC_TAILOR_LOCK) {
-      try {
-        LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid, LockType.EX);
-        phase = 3;
+          checkingBalance = balRes1.getDouble(1);
+          versions[1] = balRes1.getLong(2);
+        } 
       } catch (SQLException ex) {
-        releaseTailorLock(phase, custId0, custId1, tid);
         throw ex;
       }
-    }
 
-    try (PreparedStatement updateStmt1 =
+      double total = checkingBalance + savingsBalance;
+
+      try (PreparedStatement updateStmt1 =
         this.getPreparedStatement(conn, UpdateSavingsBalance, total, custId1)) {
-      try (ResultSet res = updateStmt1.executeQuery()) {
-        if (!res.next()) {
-          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId1);
-          if (type == CCType.RC_TAILOR_LOCK)
-            releaseTailorLock(phase, custId0, custId1, tid);
-          throw new UserAbortException(msg);
-        }
+        try (ResultSet res = updateStmt1.executeQuery()) {
+          if (!res.next()) {
+            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId1);
+            throw new UserAbortException(msg);
+          }
 
-        versions[2] = res.getLong(1);
-      } 
-    } catch (SQLException ex) {
-      if (type == CCType.RC_TAILOR) {
-        FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1, false);
-        checkout[0]--;
+          versions[2] = res.getLong(1);
+        } 
+      } catch (SQLException ex) {
+        throw ex;
       }
-      throw ex;
     }
-    if (type == CCType.RC_TAILOR && versions[2] < 0)
-      System.out.println("custome error 3");
-    if (type == CCType.RC_TAILOR) {
-      int validationPhase;
-      LOG.debug("Amalgamate #" + tid + " acquire EX validation lock - savings #"+custId0);
-      LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_SAVINGS, tid, custId0, LockType.EX, type);
-      LOG.debug("Amalgamate #" + tid + " acquired EX validation lock - savings #"+custId0);
-      validationPhase = 1;
-      if (custId0 < custId1) {
-        try {
-          LOG.debug("Amalgamate #" + tid + " acquire EX validation lock - checking #"+custId0);
-          LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId0, LockType.EX, type);
-          LOG.debug("Amalgamate #" + tid + " acquired EX validation lock - checking #"+custId0);
-          validationPhase = 2;
-        } catch (SQLException ex) {
-          releaseTailorValidationLock(validationPhase, custId0, custId1, tid);
-          throw ex;
-        }
-        try {
-          LOG.debug("Amalgamate #" + tid + " acquire EX validation lock - checking #"+custId1);
-          LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId1, LockType.EX, type);
-          LOG.debug("Amalgamate #" + tid + " acquired EX validation lock - checking #"+custId1);
-          validationPhase = 3;
-        } catch (SQLException ex) {
-          releaseTailorValidationLock(validationPhase, custId0, custId1, tid);
-          throw ex;
-        }
+
+    while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
+      // set current thread ready, block for all thread to ready
+      if (!worker.isSwitchPhaseReady()) {
+        worker.setSwitchPhaseReady(true);
+        System.out.println(Thread.currentThread().getName() + " is ready for switch");
       } else {
         try {
-          LOG.debug("Amalgamate #" + tid + " acquire EX validation lock - checking #"+custId1);
-          LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId1, LockType.EX, type);
-          LOG.debug("Amalgamate #" + tid + " acquired EX validation lock - checking #"+custId1);
-          validationPhase = 2;
-        } catch (SQLException ex) {
-          releaseTailorValidationLock(validationPhase, custId0, custId1, tid);
-          throw ex;
-        }
-        try {
-          LOG.debug("Amalgamate #" + tid + " acquire EX validation lock - checking #"+custId0);
-          LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId0, LockType.EX, type);
-          LOG.debug("Amalgamate #" + tid + " acquired EX validation lock - checking #"+custId0);
-          validationPhase = 3;
-        } catch (SQLException ex) {
-          releaseTailorValidationLock(validationPhase, custId0, custId1, tid);
-          throw ex;
+          Thread.sleep(1);
+        } catch (InterruptedException e) {
         }
       }
+    }
+    if (TAdapter.getInstance().isInSwitchPhase()) {
+      type = TAdapter.getInstance().getSwitchPhaseCCType();
     }
   }
 
@@ -410,55 +313,29 @@ public class Amalgamate extends Procedure {
     }
 
     if (!success) {
-      if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
-        if (versions[0] >= 0) {
-          FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId0, true);
-          checkout[0]--;
-        }
-      }
-      if (type == CCType.RC_TAILOR) {
-        if (versions[1] >= 0) {
-          FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
-          checkout[0]--;
-        }
-        if (versions[2] >= 0) {
-          FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1, true);
-          checkout[0]--;
-        }
-      }
       return;
     }
+  }
 
-    if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId1, tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid);
+
+  public static String joinValuesWithHash(Object... values) {
+    // If input is empty, return an empty string
+    if (values == null || values.length == 0) {
+        return "";
     }
-    if (type == CCType.RC_TAILOR) {
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId1, LockType.EX);
-      LOG.debug("Amalgamate #" + tid + " release EX validation lock - checking #"+custId1);
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId0, LockType.EX);
-      LOG.debug("Amalgamate #" + tid + " release EX validation lock - checking #"+custId0);
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, LockType.EX);
-      LOG.debug("Amalgamate #" + tid + " release EX validation lock - savings #"+custId0);
-      // update the
-      LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_SAVINGS, custId0, versions[0]);
-      LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId0, versions[1]);
-      LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId1, versions[2]);
-      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId0, true);
-      checkout[0]--;
-      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId0, true);
-      checkout[0]--;
-      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_CHECKING, custId1, true);
-      checkout[0]--;
-      if (checkout[0] != 0)
-        LOG.debug("Amg Transaction #" + tid + " checkout: " + checkout[0]);
+    
+    // Use StringBuilder to efficiently concatenate strings
+    StringBuilder result = new StringBuilder();
+    
+    // Iterate through each value and join them with #
+    for (int i = 0; i < values.length; i++) {
+        result.append(String.valueOf(values[i]));  // Convert to string
+        // If it's not the last value, append a # separator
+        if (i < values.length - 1) {
+            result.append("#");
+        }
     }
-    if (type == CCType.SI_TAILOR) {
-      FlowRate.getInstance().writeOperationFinish(SmallBankConstants.TABLENAME_SAVINGS, custId0, true);
-      checkout[0]--;
-      if (checkout[0] != 0)
-        LOG.debug("Amg Transaction #" + tid + " checkout: " + checkout[0]);
-    }
+    
+    return result.toString();
   }
 }

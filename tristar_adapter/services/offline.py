@@ -2,6 +2,8 @@ import os
 import time
 from typing import Any
 
+import numpy as np
+from sklearn.metrics import f1_score
 import torch.nn
 import torch.nn.functional as F
 from sklearn.model_selection import KFold, train_test_split
@@ -9,6 +11,7 @@ from torch import optim
 from torch.utils.data import Subset
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
+import random
 
 from tristar_adapter.graph_construct.graph import Graph
 from tristar_adapter.graph_training.train import GraphClassificationModel
@@ -56,7 +59,9 @@ class OfflineService:
         labels = []
         with open(file_path, 'r') as file:
             for line in file:
-                labels.extend([float(label) for label in line.strip().split(',')])
+                l = np.array([float(label) for label in line.strip().split(',')])
+                result = np.where(l == 1.0, 1.0, 0.0)
+                labels.extend(result)
         return labels
 
     def traverse_folders(self, folder_path):
