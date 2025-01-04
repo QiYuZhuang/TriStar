@@ -132,21 +132,20 @@ public class TriStar {
             benchmark.refreshCatalog();
         }
 
-        // register transaction templates
-        for (BenchmarkModule benchmark : benchList) {
-            NettyClientInitializer.benchmark = benchmark;
-            EventLoopGroup eventExecutors = new NioEventLoopGroup();
-            try {
-                System.out.println("connect to txnSails server");
-                Bootstrap bootstrap =  new Bootstrap();
-                bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new NettyClientInitializer());
-                ChannelFuture channelFuture = bootstrap.connect(wrkld.getTxnSailsServerIp(),9876).sync();
-
+        // register and analyse transaction templates
+        EventLoopGroup eventExecutors = new NioEventLoopGroup();
+        try {
+            System.out.println("connect to txnSails server");
+            Bootstrap bootstrap =  new Bootstrap();
+            bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new NettyClientInitializer());
+            ChannelFuture channelFuture = bootstrap.connect(wrkld.getTxnSailsServerIp(),9876).sync();
+            for (BenchmarkModule benchmark : benchList) {
                 registerTemplateSQLs(channelFuture.channel(), benchmark.getProcedures());
-                channelFuture.channel().closeFuture().sync();
-            }finally {
-                eventExecutors.shutdownGracefully();
             }
+            analyseTemplates(channelFuture.channel());
+            channelFuture.channel().closeFuture().sync();
+        } finally {
+            eventExecutors.shutdownGracefully();
         }
 
         // Execute Workload
@@ -720,15 +719,11 @@ public class TriStar {
 
     // interact with txnSails server
     public static class NettyClientInitializer extends ChannelInitializer<SocketChannel> {
-        public static BenchmarkModule benchmark = null;
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
-            if (benchmark != null) {
-                NettyClientHandler.b = benchmark;
-            }
             ChannelPipeline pipeline = ch.pipeline();
             // Decoder
-            pipeline.addLast(new LengthFieldBasedFrameDecoder(1024, 0, 4, 0, 4));
+            pipeline.addLast(new LengthFieldBasedFrameDecoder(4096, 0, 4, 0, 4));
             // Encoder
             pipeline.addLast(new LengthFieldPrepender(4));
             pipeline.addLast(new StringEncoder(CharsetUtil.UTF_8));
@@ -739,7 +734,6 @@ public class TriStar {
 
 
     public static class NettyClientHandler extends SimpleChannelInboundHandler<String> {
-        public static BenchmarkModule b = null;
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
             System.out.println("response: " + msg);
@@ -769,7 +763,7 @@ public class TriStar {
             if (entry.getKey().equals(TransactionType.INVALID)) {
                 continue;
             }
-            sendMsgToTxnSailsServer(ctx, "register_begin#" + entry.getKey().getName() + "\n");
+//            sendMsgToTxnSailsServer(ctx, "register_begin#" + entry.getKey().getName() + "\n");
             if (entry.getValue().getTemplateSQLMetas() == null) {
                 continue;
             }
@@ -789,12 +783,16 @@ public class TriStar {
                 // update the server side index
                 updateTheServerSideIndex(entry.getValue(), t);
             }
-            sendMsgToTxnSailsServer(ctx, "register_end#" + entry.getKey().getName() + "\n");
+//            sendMsgToTxnSailsServer(ctx, "register_end#" + entry.getKey().getName() + "\n");
         }
 
         lockWaitForResponse();
         ctx.close();
         unlockWaitForResponse();
+    }
+
+    private static void analyseTemplates(Channel ctx) throws InterruptedException {
+        sendMsgToTxnSailsServer(ctx, "analysis\n");
     }
 
     private static void updateTheServerSideIndex(Procedure proc, TemplateSQLMeta t) {

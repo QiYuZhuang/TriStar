@@ -39,6 +39,7 @@ import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
@@ -71,9 +72,8 @@ public class Amalgamate extends Procedure {
       new SQLStmt(
           "UPDATE "
               + SmallBankConstants.TABLENAME_SAVINGS
-              + "   SET bal = bal - ?, tid = tid + 1 "
-              + " WHERE custid = ?"
-      + " RETURNING tid");
+              + "   SET bal = bal - ?"
+              + " WHERE custid = ?");
 
   public final SQLStmt UpdateCheckingBalance =
       new SQLStmt(
@@ -84,19 +84,19 @@ public class Amalgamate extends Procedure {
 
   public final SQLStmt GetAndZeroCheckingBalance =
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_CHECKING +
-                  " AS new SET bal = 0.0, tid = old.tid + 1 FROM " +
+                  " AS new SET bal = 0.0 FROM " +
                   SmallBankConstants.TABLENAME_CHECKING +
                   " AS old WHERE new.custid = ? " +
                   " AND old.custid = new.custid " +
-                  "RETURNING old.bal, new.tid");
+                  "RETURNING old.bal");
 
   public final SQLStmt GetAndZeroSavingsBalance =
           new SQLStmt("UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
-                  " AS new SET bal = 0.0, tid = old.tid + 1 FROM " +
+                  " AS new SET bal = 0.0 FROM " +
                   SmallBankConstants.TABLENAME_SAVINGS +
                   " AS old WHERE new.custid = ? " +
                   " AND old.custid = new.custid " +
-                  "RETURNING old.bal, new.tid");
+                  "RETURNING old.bal");
 
   public final SQLStmt ZeroCheckingBalance =
       new SQLStmt(
@@ -130,9 +130,9 @@ public class Amalgamate extends Procedure {
   public List<TemplateSQLMeta> getTemplateSQLMetas() {
     List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
     templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 0, SmallBankConstants.TABLENAME_ACCOUNTS,
-            0, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?"));
+            0, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE custid = ?"));
     templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 0, SmallBankConstants.TABLENAME_ACCOUNTS,
-            1, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?"));
+            1, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE custid = ?"));
     templateSQLMetas.add(new TemplateSQLMeta("Amalgamate", 1, SmallBankConstants.TABLENAME_SAVINGS,
             2, "UPDATE " + SmallBankConstants.TABLENAME_SAVINGS +
             " AS new SET bal = 0.0 FROM " + SmallBankConstants.TABLENAME_SAVINGS +
@@ -149,7 +149,7 @@ public class Amalgamate extends Procedure {
     return templateSQLMetas;
   }
 
-  public void run(Worker worker, Connection conn, long custId0, long custId1, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
+  public void run(Worker worker, Connection conn, long custId0, long custId1, CCType type) throws SQLException {
     if (type == CCType.RC_ELT) {
       try (PreparedStatement stmtc0 = this.getPreparedStatement(conn, writeConflict, custId0)) {
         try (ResultSet r0 = stmtc0.executeQuery()) {
@@ -169,18 +169,25 @@ public class Amalgamate extends Procedure {
       }
     }
 
-    if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR || type == CCType.DYNAMIC) {
+    if (worker.useTxnSailsServer()) {
       try{
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(0, GetAccount, custId0)).sync();
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(1, GetAccount, custId1)).sync();
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(2, GetAndZeroSavingsBalance, custId0)).sync();
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(3, GetAndZeroCheckingBalance, custId0)).sync();
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 0, custId0));
+        List<List<String>> results = worker.parseExecutionResults();
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 1, custId1));
+        worker.parseExecutionResults();
         // TODO: read results from middleware
         double checkingBalance = 0.0, savingsBalance = 0.0;
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 2, GetAndZeroSavingsBalance, custId0));
+        results = worker.parseExecutionResults();
+        savingsBalance = Double.parseDouble(results.get(0).get(0));
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 3, GetAndZeroCheckingBalance, custId0));
+        results = worker.parseExecutionResults();
+        checkingBalance = Double.parseDouble(results.get(0).get(0));
         double total = checkingBalance + savingsBalance;
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(4, UpdateSavingsBalance, total, custId1)).sync();
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 4, UpdateSavingsBalance, total, custId1));
+        worker.parseExecutionResults();
       } catch (InterruptedException ex) {
-        // pass
+        System.out.println("InterruptedException on sending or receiving message");
       }
     } else {
       try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custId0)) {
@@ -209,7 +216,6 @@ public class Amalgamate extends Procedure {
             throw new UserAbortException(msg);
           }
           savingsBalance = balRes0.getDouble(1);
-          versions[0] = balRes0.getLong(2);
         } 
       } catch (SQLException ex) {
         throw ex;
@@ -225,117 +231,18 @@ public class Amalgamate extends Procedure {
           }
 
           checkingBalance = balRes1.getDouble(1);
-          versions[1] = balRes1.getLong(2);
         } 
-      } catch (SQLException ex) {
-        throw ex;
       }
 
       double total = checkingBalance + savingsBalance;
 
       try (PreparedStatement updateStmt1 =
         this.getPreparedStatement(conn, UpdateSavingsBalance, total, custId1)) {
-        try (ResultSet res = updateStmt1.executeQuery()) {
-          if (!res.next()) {
-            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId1);
-            throw new UserAbortException(msg);
-          }
-
-          versions[2] = res.getLong(1);
-        } 
-      } catch (SQLException ex) {
-        throw ex;
+        int status = updateStmt1.executeUpdate();
       }
     }
-
-    while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-      // set current thread ready, block for all thread to ready
-      if (!worker.isSwitchPhaseReady()) {
-        worker.setSwitchPhaseReady(true);
-        System.out.println(Thread.currentThread().getName() + " is ready for switch");
-      } else {
-        try {
-          Thread.sleep(1);
-        } catch (InterruptedException e) {
-        }
-      }
-    }
-    if (TAdapter.getInstance().isInSwitchPhase()) {
-      type = TAdapter.getInstance().getSwitchPhaseCCType();
-    }
   }
 
-  private void releaseTailorLock(int phase, long custId0, long custId1, long tid) {
-    if (phase == 1) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid);
-    } else if (phase == 2) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid);
-    } else if (phase == 3) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId1, tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, tid);
-    }
-  }
-
-  private void releaseTailorValidationLock(int phase, long custId0, long custId1, long tid) {
-    if (phase == 1) {
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, LockType.EX);
-      LOG.debug("Amalgamate #" + tid + " release EX validation lock - savings #"+custId0);
-    } else if (phase == 2) {
-      if (custId0 < custId1) {
-        LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId0, LockType.EX);
-        LOG.debug("Amalgamate #" + tid + " release EX validation lock - checking #"+custId0);
-      } else {
-        LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId1, LockType.EX);
-        LOG.debug("Amalgamate #" + tid + " release EX validation lock - checking #"+custId1);
-      }
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, LockType.EX);
-      LOG.debug("Amalgamate #" + tid + " release EX validation lock - savings #"+custId0);
-    } else if (phase == 3) {
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId1, LockType.EX);
-      LOG.debug("Amalgamate #" + tid + " release EX validation lock - checking #"+custId1);
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId0, LockType.EX);
-      LOG.debug("Amalgamate #" + tid + " release EX validation lock - checking #"+custId0);
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId0, LockType.EX);
-      LOG.debug("Amalgamate #" + tid + " release EX validation lock - savings #"+custId0);
-    }
-  }
-
-  public void doAfterCommit(long custId0, long custId1, CCType type, boolean success, long[] versions, long tid, int[] checkout, long latency) {
-    if (TransactionCollector.getInstance().isSample()) {
-      TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("Amalgamate").getId(),
-              new RWRecord[]{},
-              new RWRecord[]{new RWRecord(1, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId0),
-                            new RWRecord(2, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId0),
-                            new RWRecord(3, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId1)},
-              success?1:0, latency);
-    }
-
-    if (!success) {
-      return;
-    }
-  }
-
-
-  public static String joinValuesWithHash(Object... values) {
-    // If input is empty, return an empty string
-    if (values == null || values.length == 0) {
-        return "";
-    }
-    
-    // Use StringBuilder to efficiently concatenate strings
-    StringBuilder result = new StringBuilder();
-    
-    // Iterate through each value and join them with #
-    for (int i = 0; i < values.length; i++) {
-        result.append(String.valueOf(values[i]));  // Convert to string
-        // If it's not the last value, append a # separator
-        if (i < values.length - 1) {
-            result.append("#");
-        }
-    }
-    
-    return result.toString();
+  public void doAfterCommit() {
   }
 }

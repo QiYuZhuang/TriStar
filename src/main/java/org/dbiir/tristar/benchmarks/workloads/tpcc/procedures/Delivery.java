@@ -28,8 +28,10 @@
  import org.dbiir.tristar.adapter.TAdapter;
  import org.dbiir.tristar.adapter.TransactionCollector;
  import org.dbiir.tristar.benchmarks.api.SQLStmt;
+ import org.dbiir.tristar.benchmarks.api.Worker;
  import org.dbiir.tristar.benchmarks.catalog.RWRecord;
  import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
+ import org.dbiir.tristar.benchmarks.util.StringUtil;
  import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
@@ -52,11 +54,10 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
        new SQLStmt(
            """
          UPDATE %s
-            SET O_STATUS = ?, vid = vid + 1
+            SET O_STATUS = ?
           WHERE O_ID = ?
             AND O_D_ID = ?
             AND O_W_ID = ?
-            RETURNING vid
      """
                .formatted(TPCCConstants.TABLENAME_OPENORDER));
  
@@ -64,11 +65,10 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
            new SQLStmt(
                    """
                  UPDATE %s
-                    SET ol_delivery_info = ?, vid = vid + 1
+                    SET ol_delivery_info = ?
                   WHERE OL_O_ID = ?
                     AND OL_D_ID = ?
                     AND OL_W_ID = ?
-                    RETURNING vid
              """
                            .formatted(TPCCConstants.TABLENAME_ORDERLINE));
  
@@ -76,11 +76,10 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
        new SQLStmt(
            """
          UPDATE %s
-            SET C_BALANCE = C_BALANCE - ?, vid = vid + 1
+            SET C_BALANCE = C_BALANCE - ?
           WHERE C_W_ID = ?
             AND C_D_ID = ?
             AND C_ID = ?
-            RETURNING vid
      """
                .formatted(TPCCConstants.TABLENAME_CUSTOMER));
  
@@ -127,14 +126,10 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
        int terminalDistrictLowerID,
        int terminalDistrictUpperID,
        CCType ccType,
-       long tid,
-       long[] versions,
        long[] keys,
        TPCCWorker w)
        throws SQLException {
- 
- 
- 
+
      int d_id1 = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
  
      int customerId;
@@ -147,114 +142,89 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
      }
  
      // Orders
-     updateOrderStatus(conn, w_id, d_id1, no_o_id1, versions, ccType);
+     updateOrderStatus(w, conn, w_id, d_id1, no_o_id1);
      
      // Orderline
-     updateDeliveryInfo(conn, w_id, d_id1, no_o_id1, versions, ccType);
+     updateDeliveryInfo(w, conn, w_id, d_id1, no_o_id1);
  
      float orderLineTotal = (float) (TPCCUtil.randomNumber(100, 500000, gen) / 100.0);
  
      // Customer
-     updateBalance(conn, w_id, d_id1, customerId, orderLineTotal, versions, ccType);
- 
-     if (ccType == CCType.RC_TAILOR) {
-       int validationPhase;
+     updateBalance(w, conn, w_id, d_id1, customerId, orderLineTotal);
 
-       long key1 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
-               + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (no_o_id1 - 1));
-       long key2 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
-               + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (customerId - 1));
-
-       keys[0] = key1;
-       keys[1] = key2;
-
-       LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_OPENORDER, tid, key1, LockType.EX, ccType);
-       validationPhase = 1;
-
-       try {
-         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_ORDERLINE, tid, key1, LockType.EX, ccType);
-         validationPhase = 2;
-       } catch (SQLException ex) {
-         releaseTailorLock(validationPhase, key1);
-         throw ex;
-       }
-
-       try {
-         LockTable.getInstance().tryValidationLock(TPCCConstants.TABLENAME_CUSTOMER, tid, key2, LockType.EX, ccType);
-       } catch (SQLException ex) {
-         releaseTailorLock(validationPhase, key1);
-         throw ex;
-       }
-     }
+//     long key1 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
+//             + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (no_o_id1 - 1));
+//     long key2 = ((long) (w_id - 1) * (long) (TPCCConfig.configDistPerWhse * TPCCConfig.configCustPerDist)
+//             + (long) (d_id1 - 1) * TPCCConfig.configCustPerDist + (customerId - 1));
    }
  
-   private void updateOrderStatus(Connection conn, int w_id, int d_id, int no_o_id, long[] versions, CCType type)
+   private void updateOrderStatus(Worker worker, Connection conn, int w_id, int d_id, int no_o_id)
            throws SQLException {
- 
-     try (PreparedStatement delivUpdateCarrierId =
-                  this.getPreparedStatement(conn, delivUpdateOrderStatusSQL)) {
-       delivUpdateCarrierId.setString(1, "delivered");
-       delivUpdateCarrierId.setInt(2, no_o_id);
-       delivUpdateCarrierId.setInt(3, d_id);
-       delivUpdateCarrierId.setInt(4, w_id);
- 
-       try(ResultSet res = delivUpdateCarrierId.executeQuery()) {
-         if (!res.next()) {
-           String msg =
-                   String.format(
-                           "Failed to update ORDER record [W_ID=%d, D_ID=%d, O_ID=%d]", w_id, d_id, no_o_id);
-           throw new RuntimeException(msg);
-         }
-         if (type == CCType.RC_TAILOR)
-           versions[0] = res.getLong(1);
-       }
-     }
+      if (worker.useTxnSailsServer()) {
+        try {
+          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Delivery", 0, no_o_id, d_id, w_id));
+          worker.parseExecutionResults();
+        } catch (InterruptedException e) {
+          System.out.println("InterruptedException on sending or receiving message");
+        }
+      } else {
+        try (PreparedStatement delivUpdateCarrierId =
+                     this.getPreparedStatement(conn, delivUpdateOrderStatusSQL)) {
+          delivUpdateCarrierId.setString(1, "delivered");
+          delivUpdateCarrierId.setInt(2, no_o_id);
+          delivUpdateCarrierId.setInt(3, d_id);
+          delivUpdateCarrierId.setInt(4, w_id);
+
+          try(ResultSet res = delivUpdateCarrierId.executeQuery()) {
+            if (!res.next()) {
+              String msg =
+                      String.format(
+                              "Failed to update ORDER record [W_ID=%d, D_ID=%d, O_ID=%d]", w_id, d_id, no_o_id);
+              throw new RuntimeException(msg);
+            }
+          }
+        }
+      }
    }
  
-   private void updateDeliveryInfo(Connection conn, int w_id, int d_id, int no_o_id, long[] versions, CCType type)
+   private void updateDeliveryInfo(Worker worker, Connection conn, int w_id, int d_id, int no_o_id)
            throws SQLException {
- 
-     try (PreparedStatement delivUpdateDeliveryDate =
-                  this.getPreparedStatement(conn, delivUpdateDeliveryInfoSQL)) {
-       delivUpdateDeliveryDate.setString(1, "delivered");
-       delivUpdateDeliveryDate.setInt(2, no_o_id);
-       delivUpdateDeliveryDate.setInt(3, d_id);
-       delivUpdateDeliveryDate.setInt(4, w_id);
- 
-       try(ResultSet res = delivUpdateDeliveryDate.executeQuery()) {
-         if (!res.next()) {
-           String msg =
-                   String.format(
-                           "Failed to update ORDER_LINE records [W_ID=%d, D_ID=%d, O_ID=%d]",
-                           w_id, d_id, no_o_id);
-           throw new RuntimeException(msg);
-         }
-         if (type == CCType.RC_TAILOR)
-           versions[1] = res.getLong(1);
-       }
-     }
+      if (worker.useTxnSailsServer()) {
+        try {
+          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Delivery", 1, no_o_id, d_id, w_id));
+          worker.parseExecutionResults();
+        } catch (InterruptedException e) {
+          System.out.println("InterruptedException on sending or receiving message");
+        }
+      } else {
+        try (PreparedStatement delivUpdateDeliveryDate = this.getPreparedStatement(conn, delivUpdateDeliveryInfoSQL)) {
+          delivUpdateDeliveryDate.setString(1, "delivered");
+          delivUpdateDeliveryDate.setInt(2, no_o_id);
+          delivUpdateDeliveryDate.setInt(3, d_id);
+          delivUpdateDeliveryDate.setInt(4, w_id);
+          int status = delivUpdateDeliveryDate.executeUpdate();
+        }
+      }
    }
  
  
-   private void updateBalance(
-       Connection conn, int w_id, int d_id, int c_id, float orderLineTotal, long[] versions, CCType type) throws SQLException {
- 
-     try (PreparedStatement delivUpdateCustBalDelivCnt =
-         this.getPreparedStatement(conn, delivUpdateCustBalSQL)) {
-       delivUpdateCustBalDelivCnt.setBigDecimal(1, BigDecimal.valueOf(orderLineTotal));
-       delivUpdateCustBalDelivCnt.setInt(2, w_id);
-       delivUpdateCustBalDelivCnt.setInt(3, d_id);
-       delivUpdateCustBalDelivCnt.setInt(4, c_id);
- 
-       try(ResultSet res = delivUpdateCustBalDelivCnt.executeQuery()) {
-         if (!res.next()) {
-           String msg =
-                   String.format(
-                           "Failed to update CUSTOMER record [W_ID=%d, D_ID=%d, C_ID=%d]", w_id, d_id, c_id);
-           throw new RuntimeException(msg);
-         }
-         if (type == CCType.RC_TAILOR)
-           versions[2] = res.getLong(1);
+   private void updateBalance(Worker worker, Connection conn, int w_id, int d_id, int c_id, float orderLineTotal) throws SQLException {
+     if (worker.useTxnSailsServer()) {
+       try {
+         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Delivery", 2,
+                 BigDecimal.valueOf(orderLineTotal), w_id, d_id, c_id));
+         worker.parseExecutionResults();
+       } catch (InterruptedException e) {
+         System.out.println("InterruptedException on sending or receiving message");
+       }
+     } else {
+       try (PreparedStatement delivUpdateCustBalDelivCnt =
+                    this.getPreparedStatement(conn, delivUpdateCustBalSQL)) {
+         delivUpdateCustBalDelivCnt.setBigDecimal(1, BigDecimal.valueOf(orderLineTotal));
+         delivUpdateCustBalDelivCnt.setInt(2, w_id);
+         delivUpdateCustBalDelivCnt.setInt(3, d_id);
+         delivUpdateCustBalDelivCnt.setInt(4, c_id);
+        int status = delivUpdateCustBalDelivCnt.executeUpdate();
        }
      }
    }
@@ -272,40 +242,10 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
      }
    }
  
-   private void releaseTailorLock(int phase, long key1) {
- 
-     if (phase == 1) {
-       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
-     } else if (phase == 2) {
-       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, key1, LockType.EX);
-       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
-     }
+   public void doAfterCommit() {
+//       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, key2, LockType.EX);
+//       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, key1, LockType.EX);
+//       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
    }
- 
-   public void doAfterCommit(long key1, long key2, CCType type, boolean success, long[] versions) {
-
-     if (TransactionCollector.getInstance().isSample()) {
-       TransactionCollector.getInstance().addTransactionSample(1,
-               new RWRecord[]{},
-               new RWRecord[]{new RWRecord(TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_OPENORDER), (int) key1),
-                       new RWRecord(TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_ORDERLINE), (int) key1),
-                       new RWRecord(TPCCConstants.TABLENAME_TO_INDEX.get(TPCCConstants.TABLENAME_CUSTOMER), (int) key2)},
-               success?1:0);
-     }
-
-     if (!success)
-       return;
-     if (type == CCType.RC_TAILOR) {
-       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_CUSTOMER, key2, LockType.EX);
-       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_ORDERLINE, key1, LockType.EX);
-       LockTable.getInstance().releaseValidationLock(TPCCConstants.TABLENAME_OPENORDER, key1, LockType.EX);
-
-       // update the
-       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_OPENORDER, key1, versions[0]);
-       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_ORDERLINE, key1, versions[1]);
-       LockTable.getInstance().updateHotspotVersion(TPCCConstants.TABLENAME_CUSTOMER, key2, versions[2]);
-     }
-   }
- 
  }
  

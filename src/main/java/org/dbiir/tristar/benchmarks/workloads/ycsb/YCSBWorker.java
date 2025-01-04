@@ -76,6 +76,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll(";", "!");
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll("\"", ".");
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll("'", "~");
+        this.fixParams[i][j] = this.fixParams[i][j].replaceAll("#", "~");
       }
     }
 
@@ -267,7 +268,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       this.keynames[i] = keyname;
     }
 
-    this.procReadWriteRecord.run(this, conn, this.conn2, keynames, fixParams, ratio1, ratio2, tid, versionBuffer, TAdapter.getInstance().getCCType());
+    this.procReadWriteRecord.run(this, conn, keynames, fixParams, ratio1, ratio2, TAdapter.getInstance().getCCType());
   }
 
   private void buildParameters() {
@@ -276,6 +277,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       this.params[i] = this.params[i].replaceAll(";", "!");
       this.params[i] = this.params[i].replaceAll("\"", ".");
       this.params[i] = this.params[i].replaceAll("'", "~");
+      this.params[i] = this.params[i].replaceAll("#", "~");
     }
   }
 }

@@ -145,20 +145,20 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
     // Amalgamate
     if (procClass.equals(Amalgamate.class)) {
       this.generateCustIds(true);
-      this.procAmalgamate.run(this, conn, this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), versionBuffer, tid, checkout);
+      this.procAmalgamate.run(this, conn, this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType());
 
       // Balance
     } else if (procClass.equals(Balance.class)) {
       this.generateCustIds(false);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
-      this.procBalance.run(this, conn, custName, getBenchmark().getCCType(), versionBuffer, tid);
+      this.procBalance.run(this, conn, custName, getBenchmark().getCCType());
 
       // DepositChecking
     } else if (procClass.equals(DepositChecking.class)) {
       this.generateCustIds(false);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
       this.procDepositChecking.run(
-          this, conn, custName, SmallBankConstants.PARAM_DEPOSIT_CHECKING_AMOUNT, getBenchmark().getCCType(), versionBuffer, tid, checkout);
+          this, conn, custName, SmallBankConstants.PARAM_DEPOSIT_CHECKING_AMOUNT, getBenchmark().getCCType());
 
       // SendPayment
     } else if (procClass.equals(SendPayment.class)) {
@@ -169,13 +169,13 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
       this.generateCustIds(false);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
       this.procTransactSavings.run(
-          this, conn, custName, SmallBankConstants.PARAM_TRANSACT_SAVINGS_AMOUNT, getBenchmark().getCCType(), versionBuffer, tid, checkout);
+          this, conn, custName, SmallBankConstants.PARAM_TRANSACT_SAVINGS_AMOUNT, getBenchmark().getCCType());
 
       // WriteCheck
     } else if (procClass.equals(WriteCheck.class)) {
       this.generateCustIds(false);
       String custName = String.format(this.custNameFormat, this.custIdsBuffer[0]);
-      this.procWriteCheck.run(this, conn, custName, custIdsBuffer[0], SmallBankConstants.PARAM_WRITE_CHECK_AMOUNT, getBenchmark().getCCType(), conn2, versionBuffer, tid, checkout);
+      this.procWriteCheck.run(this, conn, custName, SmallBankConstants.PARAM_WRITE_CHECK_AMOUNT, getBenchmark().getCCType());
     }
 
     return TransactionStatus.SUCCESS;
@@ -186,42 +186,30 @@ public final class SmallBankWorker extends Worker<SmallBankBenchmark> {
           throws UserAbortException, SQLException {
     Class<? extends Procedure> procClass = txnType.getProcedureClass();
     // System.out.println("Transaction end #" + tid);
-    // TODO: SIGMOD
     // Amalgamate
     if (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
       switchPhaseReady = true;
     }
     if (procClass.equals(Amalgamate.class)) {
-      this.procAmalgamate.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[1], getBenchmark().getCCType(), success, versionBuffer, tid, checkout, latency);
+      this.procAmalgamate.doAfterCommit();
 
       // Balance
     } else if (procClass.equals(Balance.class)) {
-      this.procBalance.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, latency);
+      this.procBalance.doAfterCommit();
 
       // DepositChecking
     } else if (procClass.equals(DepositChecking.class)) {
-      this.procDepositChecking.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout, latency);
+      this.procDepositChecking.doAfterCommit();
 
       // SendPayment
     } else if (procClass.equals(SendPayment.class)) {
       // TransactSavings
     } else if (procClass.equals(TransactSavings.class)) {
-      this.procTransactSavings.doAfterCommit(this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout, latency);
+      this.procTransactSavings.doAfterCommit();
 
       // WriteCheck
     } else if (procClass.equals(WriteCheck.class)) {
-      this.procWriteCheck.doAfterCommit(this.custIdsBuffer[0], this.custIdsBuffer[0], getBenchmark().getCCType(), success, versionBuffer, tid, checkout, latency);
-    }
-
-    while(TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-      if (!this.switchPhaseReady) {
-        this.switchPhaseReady = true;
-      }
-
-      try {
-        Thread.sleep(1L);
-      } catch (InterruptedException var5) {
-      }
+      this.procWriteCheck.doAfterCommit();
     }
   }
 }

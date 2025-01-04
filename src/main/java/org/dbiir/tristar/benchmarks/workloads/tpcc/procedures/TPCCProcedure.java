@@ -37,8 +37,6 @@
        int terminalDistrictLowerID,
        int terminalDistrictUpperID,
        CCType ccType,
-       long tid,
-       long[] versions,
        long[] keys,
        TPCCWorker w)
        throws SQLException;

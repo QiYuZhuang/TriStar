@@ -39,6 +39,7 @@ import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
@@ -81,9 +82,8 @@ public class WriteCheck extends Procedure {
       new SQLStmt(
           "UPDATE "
               + SmallBankConstants.TABLENAME_CHECKING
-              + "   SET bal = bal - ?, tid = tid + 1"
-              + " WHERE custid = ?"
-              + " RETURNING tid");
+              + "   SET bal = bal - ?"
+              + " WHERE custid = ?");
 
   static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
   static {
@@ -113,7 +113,7 @@ public class WriteCheck extends Procedure {
     return templateSQLMetas;
   }
 
-  public void run(Worker worker, Connection conn, String custName, long custId1, double amount, CCType type, Connection conn2, long[] versions, long tid, int[] checkout) throws SQLException {
+  public void run(Worker worker, Connection conn, String custName, double amount, CCType type) throws SQLException {
     // First convert the custName to the custId
     long custId;
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
@@ -127,22 +127,27 @@ public class WriteCheck extends Procedure {
       }
     }
 
-    if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR || type == CCType.DYNAMIC) {
+    if (worker.useTxnSailsServer()) {
       try{
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(0, GetAccount, custName)).sync();
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(1, GetAccount, custId1)).sync();
-        // TODO: read custId  checkingBalance and savingsBalance from middleware
-        custId = 0;
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(2, GetCheckingBalanceForUpdate, custId)).sync();
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 0, custName));
+        List<List<String>> result = worker.parseExecutionResults();
+        custId = Long.parseLong(result.get(0).get(0));
+        // read checkingBalance and savingsBalance from middleware
         double checkingBalance = 0.0, savingsBalance = 0.0;
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 1, custId));
+        result = worker.parseExecutionResults();
+        checkingBalance = Double.parseDouble(result.get(0).get(0));
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 2, custId));
+        result = worker.parseExecutionResults();
+        savingsBalance = Double.parseDouble(result.get(0).get(0));
         double total = checkingBalance + savingsBalance;
         if (total < amount) {
-          worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(3, UpdateCheckingBalanceDel, amount - 1, custId)).sync();
+          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 3, amount - 1, custId));
         } else {
-          worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(3, UpdateCheckingBalanceDel, amount, custId)).sync();
+          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 3, amount, custId));
         }
       } catch (InterruptedException ex) {
-        // pass
+        System.out.println("InterruptedException on sending or receiving message");
       }
     } else {
       try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custName)) {
@@ -158,12 +163,12 @@ public class WriteCheck extends Procedure {
       // Then get their account balances
       double savingsBalance;
       try (PreparedStatement balStmt0 = switch (type) {
-        case RC_FOR_UPDATE, SI_FOR_UPDATE -> this.getPreparedStatement(conn, GetSavingsBalanceForUpdate, custId1);
-        default -> this.getPreparedStatement(conn, GetSavingsBalance, custId1);
+        case RC_FOR_UPDATE, SI_FOR_UPDATE -> this.getPreparedStatement(conn, GetSavingsBalanceForUpdate, custId);
+        default -> this.getPreparedStatement(conn, GetSavingsBalance, custId);
       }) {
         try (ResultSet balRes0 = balStmt0.executeQuery()) {
           if (!balRes0.next()) {
-            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId1);
+            String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId);
             throw new UserAbortException(msg);
           }
   
@@ -183,8 +188,6 @@ public class WriteCheck extends Procedure {
           }
           checkingBalance = balRes1.getDouble(1);
         } 
-      } catch (SQLException ex) {
-        throw ex;
       }
 
       double total = checkingBalance + savingsBalance;
@@ -192,107 +195,17 @@ public class WriteCheck extends Procedure {
       if (total < amount) {
         try (PreparedStatement updateStmt =
             this.getPreparedStatement(conn, UpdateCheckingBalanceDel, amount - 1, custId)) {
-          try (ResultSet res = updateStmt.executeQuery()) {
-            if (!res.next()) {
-              throw new UserAbortException("unknown exception");
-            }
-            versions[2] = res.getLong(1);
-          }
-        } catch (SQLException ex) {
-          throw ex;
+          int status = updateStmt.executeUpdate();
         }
       } else {
         try (PreparedStatement updateStmt =
             this.getPreparedStatement(conn, UpdateCheckingBalanceDel, amount, custId)) {
-          try (ResultSet res = updateStmt.executeQuery()) {
-            if (!res.next()) {
-              throw new UserAbortException("unknown exception");
-            }
-            versions[2] = res.getLong(1);
-          }
-        } catch (SQLException ex) {;
-          throw ex;
+          int status = updateStmt.executeUpdate();
         }
       }
     }
-
-    while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-      // set current thread ready, block for all thread to ready
-      if (!worker.isSwitchPhaseReady()) {
-        worker.setSwitchPhaseReady(true);
-        System.out.println(Thread.currentThread().getName() + " is ready for switch");
-      } else {
-        try {
-          Thread.sleep(1);
-        } catch (InterruptedException e) {
-        }
-      }
-    }
-    if (TAdapter.getInstance().isInSwitchPhase()) {
-      type = TAdapter.getInstance().getSwitchPhaseCCType();
-    }
   }
 
-  private void releaseTailorLock(int phase, long custId0, long custId1, long tid) {
-    if (phase == 1) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid);
-    } else if (phase == 2) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid);
-    }
+  public void doAfterCommit() {
   }
-
-  public void doAfterCommit(long custId0, long custId1, CCType type, boolean success, long[] versions, long tid, int[] checkout, long latency) {
-    if (TransactionCollector.getInstance().isSample()) {
-      TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("WriteCheck").getId(),
-              new RWRecord[]{new RWRecord(1, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId1)},
-              new RWRecord[]{new RWRecord(2, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId0)},
-              success?1:0, latency);
-    }
-
-    /*
-     * there still some optimization space in write-after-read, it may be better that change the rw-dependency
-     * into ww-dependency
-     */
-    if (!success) {
-      return;
-    }
-
-    if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId0, tid);
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, tid);
-    }
-
-    if (type == CCType.RC_TAILOR) {
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId0, LockType.EX);
-      LOG.debug("WriteCheck #" + tid + " release validation lock on checking #" + custId0);
-      LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId0, versions[2]);
-    }
-    if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_SAVINGS, custId1, LockType.SH);
-      LOG.debug("WriteCheck #" + tid + " release validation lock on savings #" + custId1);
-    }
-  }
-
-  public static String joinValuesWithHash(Object... values) {
-    // If input is empty, return an empty string
-    if (values == null || values.length == 0) {
-        return "";
-    }
-    
-    // Use StringBuilder to efficiently concatenate strings
-    StringBuilder result = new StringBuilder();
-    
-    // Iterate through each value and join them with #
-    for (int i = 0; i < values.length; i++) {
-        result.append(String.valueOf(values[i]));  // Convert to string
-        // If it's not the last value, append a # separator
-        if (i < values.length - 1) {
-            result.append("#");
-        }
-    }
-    
-    return result.toString();
-  }
-
 }

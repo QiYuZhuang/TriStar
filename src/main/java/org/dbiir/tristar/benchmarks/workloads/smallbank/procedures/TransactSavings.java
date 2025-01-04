@@ -39,6 +39,7 @@ import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
@@ -67,9 +68,8 @@ public class TransactSavings extends Procedure {
       new SQLStmt(
           "UPDATE "
               + SmallBankConstants.TABLENAME_SAVINGS
-              + "   SET bal = bal + ?, tid = tid + 1 "
-              + " WHERE custid = ? "
-              + " RETURNING tid");
+              + "   SET bal = bal + ? "
+              + " WHERE custid = ?");
 
   static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
   static {
@@ -93,7 +93,7 @@ public class TransactSavings extends Procedure {
     return templateSQLMetas;
   }
 
-  public void run(Worker worker, Connection conn, String custName, double amount, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
+  public void run(Worker worker, Connection conn, String custName, double amount, CCType type) throws SQLException {
     // First convert the custName to the acctId
     long custId;
 
@@ -108,14 +108,15 @@ public class TransactSavings extends Procedure {
       }
     }
 
-    if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR || type == CCType.DYNAMIC) {
+    if (worker.useTxnSailsServer()) {
       try{
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(0, GetAccount, custName)).sync();
-        // TODO: read custId from middleware
-        custId = 0;
-        worker.getChannelFuture().channel().writeAndFlush(joinValuesWithHash(1, UpdateSavingsBalance, amount, custId)).sync();;
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "TransactSavings", 0, custName));
+        List<List<String>> result = worker.parseExecutionResults();
+        custId = Long.parseLong(result.get(0).get(0));
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "TransactSavings", 1, amount, custId));
+        worker.parseExecutionResults();
       } catch (InterruptedException ex) {
-        // pass
+        System.out.println("InterruptedException on sending or receiving message");
       }
     } else {
       try (PreparedStatement stmt = this.getPreparedStatement(conn, GetAccount, custName)) {
@@ -129,70 +130,15 @@ public class TransactSavings extends Procedure {
       }
   
       // Get Balance Information
-  
       try (PreparedStatement stmt =
           this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
         // TODO: return the savings version for validation
-        try (ResultSet res = stmt.executeQuery()) {
-          if (!res.next()) {
-            String msg = "can not find the checking version for customer #%d".formatted(custId);
-            throw new UserAbortException(msg);
-          }
-          versions[0] = res.getLong(1);
-        } 
-      } catch (SQLException ex) {
-        throw ex;
+        int status = stmt.executeUpdate();
       }
-    }
-
-
-    while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-      // set current thread ready, block for all thread to ready
-      if (!worker.isSwitchPhaseReady()) {
-        worker.setSwitchPhaseReady(true);
-        System.out.println(Thread.currentThread().getName() + " is ready for switch");
-      } else {
-        try {
-          Thread.sleep(1);
-        } catch (InterruptedException e) {
-        }
-      }
-    }
-    if (TAdapter.getInstance().isInSwitchPhase()) {
-      type = TAdapter.getInstance().getSwitchPhaseCCType();
     }
   }
 
-  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, int[] checkout, long latency) {
-    if (TransactionCollector.getInstance().isSample()) {
-      TransactionCollector.getInstance().addTransactionSample(TAdapter.getInstance().getTypesByName("TransactSavings").getId(),
-              new RWRecord[]{},
-              new RWRecord[]{new RWRecord(1, SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_SAVINGS), (int) custId)},
-              success?1:0, latency);
-    }
-    if (!success) {
-      return;
-    }
-  }
+  public void doAfterCommit() {
 
-  public static String joinValuesWithHash(Object... values) {
-    // If input is empty, return an empty string
-    if (values == null || values.length == 0) {
-        return "";
-    }
-    
-    // Use StringBuilder to efficiently concatenate strings
-    StringBuilder result = new StringBuilder();
-    
-    // Iterate through each value and join them with #
-    for (int i = 0; i < values.length; i++) {
-        result.append(String.valueOf(values[i]));  // Convert to string
-        // If it's not the last value, append a # separator
-        if (i < values.length - 1) {
-            result.append("#");
-        }
-    }
-    
-    return result.toString();
   }
 }

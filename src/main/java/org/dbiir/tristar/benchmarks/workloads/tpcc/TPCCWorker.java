@@ -21,15 +21,11 @@
  import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
  import org.dbiir.tristar.benchmarks.api.TransactionType;
  import org.dbiir.tristar.benchmarks.api.Worker;
- import org.dbiir.tristar.benchmarks.distributions.Generator;
- import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
  import org.dbiir.tristar.benchmarks.workloads.tpcc.procedures.*;
  import org.dbiir.tristar.benchmarks.types.TransactionStatus;
- import org.dbiir.tristar.common.CCType;
  import org.slf4j.Logger;
  import org.slf4j.LoggerFactory;
- 
- import java.awt.*;
+
  import java.sql.Connection;
  import java.sql.SQLException;
  import java.util.Random;
@@ -82,8 +78,6 @@
                      terminalDistrictLowerID,
                      terminalDistrictUpperID,
                      getBenchmark().getCCType(),
-                     tid,
-                     versionBuffer,
                      keyBuffer,
                      this);
          } catch (ClassCastException ex) {
@@ -115,33 +109,33 @@
      }
      
      @Override
-     protected void executeAfterWork(TransactionType txnType, boolean success)
+     protected void executeAfterWork(TransactionType txnType, boolean success, long latency)
              throws UserAbortException, SQLException {
          Class<? extends Procedure> procClass = txnType.getProcedureClass();
  
          // Delivery
          if (procClass.equals(Delivery.class)) {
-             this.getProcedure(Delivery.class).doAfterCommit(keyBuffer[0], keyBuffer[1], getBenchmark().getCCType(), success, versionBuffer);
+             this.getProcedure(Delivery.class).doAfterCommit();
          }
  
          // NewOrder
          if (procClass.equals(NewOrder.class)) {
-             this.getProcedure(NewOrder.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer);
+             this.getProcedure(NewOrder.class).doAfterCommit();
          }
  
          // Payment
          if (procClass.equals(Payment.class)) {
-             this.getProcedure(Payment.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer);
+             this.getProcedure(Payment.class).doAfterCommit();
          }
  
          // OrderStatus
          if (procClass.equals(OrderStatus.class)) {
-             this.getProcedure(OrderStatus.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer);
+             this.getProcedure(OrderStatus.class).doAfterCommit();
          }
  
          // Stock
          if (procClass.equals(StockLevel.class)) {
-             this.getProcedure(StockLevel.class).doAfterCommit(keyBuffer, getBenchmark().getCCType(),success, versionBuffer);
+             this.getProcedure(StockLevel.class).doAfterCommit();
          }
      }
  }
