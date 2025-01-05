@@ -151,9 +151,9 @@ public class TriStar {
         // Execute Workload
         if (isBooleanOptionSet(argsLine, "execute")) {
             try {
-                createFlushThread(argsLine, wrkld.getConcurrencyControlType());
+//                createFlushThread(argsLine, wrkld.getConcurrencyControlType());
                 Results r = runWorkload(benchList, intervalMonitor);
-                finishFlushThread();
+//                finishFlushThread();
                 writeOutputs(r, activeTXTypes, argsLine, xmlConfig);
                 writeHistograms(r);
 

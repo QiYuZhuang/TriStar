@@ -48,6 +48,7 @@ def generate_mysql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrtup: f
     ElementTree.SubElement(root, "isolation").text = "TRANSACTION_SERIALIZABLE"
     ElementTree.SubElement(root, "batchsize").text = "128"
     ElementTree.SubElement(root, "concurrencyControlType").text = cc_type
+    ElementTree.SubElement(root, "txnSailsServer").text = txnSailsServerIp
 
     ElementTree.SubElement(root, "zipf").text = str(zipf)
     ElementTree.SubElement(root, "wrtup").text = str(wrtup)
@@ -178,10 +179,11 @@ if __name__ == '__main__':
     if not os.path.exists("../config"):
         os.mkdir("../config")
 
-    scaleFactor = 100
+    txnSailsServerIp = "21.6.66.164"
+    scaleFactor = 1000
     warmupTime = 10
     execTime = 30
-    # ycsb_scalability()
-    # ycsb_skew(128)
-    # ycsb_wr(128)
-    ycsb_random(terminal=128, cnt=100)
+    ycsb_scalability()
+    ycsb_skew(128)
+    ycsb_wr(128)
+    # ycsb_random(terminal=128, cnt=100)

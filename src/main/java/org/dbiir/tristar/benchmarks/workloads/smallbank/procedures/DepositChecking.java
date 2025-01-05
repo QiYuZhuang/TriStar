@@ -43,7 +43,6 @@ import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
