@@ -181,8 +181,8 @@ if __name__ == '__main__':
 
     txnSailsServerIp = "21.6.66.164"
     scaleFactor = 1000
-    warmupTime = 10
-    execTime = 30
+    warmupTime = 20
+    execTime = 60
     ycsb_scalability()
     ycsb_skew(128)
     ycsb_wr(128)

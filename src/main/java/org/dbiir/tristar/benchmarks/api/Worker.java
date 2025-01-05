@@ -620,7 +620,9 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           if (needRecord) {
             System.out.println(Thread.currentThread().getName() + "-<586> block time: " + (System.currentTimeMillis() - start) + " ms");
           }
-        
+
+          status = this.executeWork(conn, transactionType);
+
           if (LOG.isDebugEnabled()) {
             LOG.debug(
                 String.format(
@@ -630,15 +632,8 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("%s %s committing...", this, transactionType));
           }
-          if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
-            try{
-              channelFuture.channel().writeAndFlush("commit").sync();
-            } catch (InterruptedException ex) {
-              // pass
-            }
-          } else {
-            commitOnConnection();
-          }
+
+          commitOnConnection();
           break;
         } catch (Procedure.UserAbortException ex) {
           try {
@@ -813,14 +808,14 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
               LOG.error("Connection couldn't be closed.", e);
             }
           }
-          
+
           switch (status) {
-            case UNKNOWN : this.txnUnknown.put(transactionType);
-            case SUCCESS : this.txnSuccess.put(transactionType);
-            case USER_ABORTED : this.txnAbort.put(transactionType);
-            case RETRY : this.txnRetry.put(transactionType);
-            case RETRY_DIFFERENT : this.txtRetryDifferent.put(transactionType);
-            case ERROR : this.txnErrors.put(transactionType);
+            case UNKNOWN -> this.txnUnknown.put(transactionType);
+            case SUCCESS -> this.txnSuccess.put(transactionType);
+            case USER_ABORTED -> this.txnAbort.put(transactionType);
+            case RETRY -> this.txnRetry.put(transactionType);
+            case RETRY_DIFFERENT -> this.txtRetryDifferent.put(transactionType);
+            case ERROR -> this.txnErrors.put(transactionType);
           }
         }
       }
