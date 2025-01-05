@@ -786,13 +786,13 @@ public class TriStar {
 //            sendMsgToTxnSailsServer(ctx, "register_end#" + entry.getKey().getName() + "\n");
         }
 
-        lockWaitForResponse();
-        ctx.close();
-        unlockWaitForResponse();
     }
 
     private static void analyseTemplates(Channel ctx) throws InterruptedException {
         sendMsgToTxnSailsServer(ctx, "analysis\n");
+        lockWaitForResponse();
+        ctx.close();
+        unlockWaitForResponse();
     }
 
     private static void updateTheServerSideIndex(Procedure proc, TemplateSQLMeta t) {

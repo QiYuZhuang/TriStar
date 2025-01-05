@@ -126,7 +126,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
     if (useTxnSailsServer()) {
       EventLoopGroup eventExecutors = new NioEventLoopGroup();
-      System.out.println("connect to txnSails server");
+      System.out.println(Thread.currentThread().getName() + " connect to txnSails server");
       Bootstrap bootstrap =  new Bootstrap();
       bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new TxnSailsClientHandler());
         try {
