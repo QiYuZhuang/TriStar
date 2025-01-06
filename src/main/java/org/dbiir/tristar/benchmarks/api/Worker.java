@@ -35,6 +35,7 @@ import io.netty.channel.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.dbiir.tristar.adapter.Adapter;
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.LatencyRecord;
 import org.dbiir.tristar.benchmarks.Phase;
@@ -565,7 +566,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             }
             this.conn = this.benchmark.makeConnection();
             this.conn.setAutoCommit(false);
-            switchIsolation(this.conn);
+            if (TAdapter.getInstance().isInSwitchPhase() && !switchFinish) {
+              switchIsolation(this.conn);
+            } else {
+              setIsolation(this.conn);
+            }
           } catch (SQLException ex) {
             if (LOG.isDebugEnabled()) {
               LOG.debug(String.format("%s failed to open a connection...", this));
