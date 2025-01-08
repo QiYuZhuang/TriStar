@@ -60,9 +60,9 @@ public class ReadWriteRecord extends Procedure {
     @Override
     public List<TemplateSQLMeta> getTemplateSQLMetas() {
         List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
-        templateSQLMetas.add(new TemplateSQLMeta("ReadWrite", 0, TABLE_NAME,
+        templateSQLMetas.add(new TemplateSQLMeta("ReadWriteRecord", 0, TABLE_NAME,
                 0, "SELECT FIELD1 FROM " + TABLE_NAME + " WHERE YCSB_KEY=?;"));
-        templateSQLMetas.add(new TemplateSQLMeta("ReadWrite", 1, TABLE_NAME,
+        templateSQLMetas.add(new TemplateSQLMeta("ReadWriteRecord", 1, TABLE_NAME,
                 1, "UPDATE " + TABLE_NAME + " SET FIELD1=? WHERE YCSB_KEY=?;"));
         return templateSQLMetas;
     }

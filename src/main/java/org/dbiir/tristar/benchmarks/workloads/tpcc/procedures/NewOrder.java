@@ -17,7 +17,6 @@
 
   package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
-  import java.sql.*;
   import java.util.Random;
   import java.util.HashMap;
   import java.util.LinkedList;
@@ -32,20 +31,13 @@
   import java.sql.ResultSet;
   import java.sql.SQLException;
   import java.util.Arrays;
-  import java.util.Random;
 
-  import org.dbiir.tristar.adapter.TAdapter;
-  import org.dbiir.tristar.adapter.TransactionCollector;
   import org.dbiir.tristar.benchmarks.api.SQLStmt;
-  import org.dbiir.tristar.benchmarks.catalog.RWRecord;
-  import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
   import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
   import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
   import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
   import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
   import org.dbiir.tristar.common.CCType;
-  import org.dbiir.tristar.common.LockType;
-  import org.dbiir.tristar.transaction.concurrency.LockTable;
   import org.slf4j.Logger;
   import org.slf4j.LoggerFactory;
 
@@ -207,7 +199,7 @@
       templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 0, TPCCConstants.TABLENAME_WAREHOUSE,
               0, "SELECT W_INFO FROM " + TPCCConstants.TABLENAME_WAREHOUSE + " WHERE W_ID = ?"));
       templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 1, TPCCConstants.TABLENAME_ORDERLINE,
-              1, "UPDATE " + TPCCConstants.TABLENAME_DISTRICT + " SET D_NEXT_O_ID = D_NEXT_O_ID + 1 WHERE D_W_ID = ? AND D_ID = ?"));
+              1, "UPDATE " + TPCCConstants.TABLENAME_DISTRICT + " SET D_NEXT_O_ID = D_NEXT_O_ID + 1 WHERE D_W_ID = ? AND D_ID = ? RETURNING D_NEXT_O_ID, D_INFO"));
       templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 0, TPCCConstants.TABLENAME_CUSTOMER,
               2, "SELECT C_INFO FROM " + TPCCConstants.TABLENAME_CUSTOMER +" WHERE C_W_ID = ? AND C_D_ID = ? AND C_ID = ?"));
       templateSQLMetas.add(new TemplateSQLMeta("NewOrder", 1, TPCCConstants.TABLENAME_OPENORDER,

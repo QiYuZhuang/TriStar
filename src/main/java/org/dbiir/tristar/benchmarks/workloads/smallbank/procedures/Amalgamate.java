@@ -177,14 +177,14 @@ public class Amalgamate extends Procedure {
         worker.parseExecutionResults();
         // TODO: read results from middleware
         double checkingBalance = 0.0, savingsBalance = 0.0;
-        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 2, GetAndZeroSavingsBalance, custId0));
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 2, custId0));
         results = worker.parseExecutionResults();
         savingsBalance = Double.parseDouble(results.get(0).get(0));
-        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 3, GetAndZeroCheckingBalance, custId0));
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 3, custId0));
         results = worker.parseExecutionResults();
         checkingBalance = Double.parseDouble(results.get(0).get(0));
         double total = checkingBalance + savingsBalance;
-        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 4, UpdateSavingsBalance, total, custId1));
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 4, total, custId1));
         worker.parseExecutionResults();
       } catch (InterruptedException ex) {
         System.out.println("InterruptedException on sending or receiving message");

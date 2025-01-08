@@ -89,7 +89,7 @@ public class TransactSavings extends Procedure {
             0, "SELECT * FROM " + SmallBankConstants.TABLENAME_ACCOUNTS + " WHERE name = ?"));
     templateSQLMetas.add(new TemplateSQLMeta("TransactSavings", 1, SmallBankConstants.TABLENAME_SAVINGS,
             1, "UPDATE " + SmallBankConstants.TABLENAME_SAVINGS
-            + " SET bal = bal + ?, WHERE custid = ? "));
+            + " SET bal = bal + ? WHERE custid = ? "));
     return templateSQLMetas;
   }
 

@@ -32,9 +32,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.string.StringDecoder;
+import io.netty.handler.codec.string.StringEncoder;
+import io.netty.util.CharsetUtil;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.dbiir.tristar.TriStar;
 import org.dbiir.tristar.adapter.Adapter;
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.LatencyRecord;
@@ -129,9 +136,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       EventLoopGroup eventExecutors = new NioEventLoopGroup();
       System.out.println(Thread.currentThread().getName() + " connect to txnSails server");
       Bootstrap bootstrap =  new Bootstrap();
-      bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new TxnSailsClientHandler());
+      bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new TxnSailsClientInitializer());
         try {
+          System.out.println("server ip: " + benchmark.workConf.getTxnSailsServerIp());
           channelFuture = bootstrap.connect(benchmark.workConf.getTxnSailsServerIp(), 9876).sync();
+          System.out.println(channelFuture);
         } catch (InterruptedException e) {
           System.out.println("Failed to connect to txnSails server");
           throw new RuntimeException(e);
@@ -925,11 +934,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   private void rollbackOnConnection() throws SQLException {
-    if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
+    if (useTxnSailsServer()) {
       try{
-        channelFuture.channel().writeAndFlush("rollback").sync();
+        sendMsgToTxnSailsServer("rollback");
       } catch (InterruptedException e) {
         // TODO: parse the exception
+        System.out.println(e);
       }
     } else {
       conn.rollback();
@@ -937,9 +947,9 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   private void commitOnConnection() throws SQLException {
-    if (benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR || benchmark.getCCType() == CCType.DYNAMIC) {
+    if (useTxnSailsServer()) {
       try{
-        channelFuture.channel().writeAndFlush("commit").sync();
+        sendMsgToTxnSailsServer("commit");
       } catch (InterruptedException e) {
         // TODO: parse the exception
       }
@@ -959,6 +969,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     ByteBuf resp = channelFuture.channel().alloc().buffer(msg.length());
     resp.writeBytes(msg.getBytes(StandardCharsets.UTF_8));
     channelFuture.channel().writeAndFlush(resp).sync();
+    System.out.println("send msg to txnSails server: " + msg);
   }
 
   public List<List<String>> parseExecutionResults(String rawResult) {
@@ -972,14 +983,18 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   public List<List<String>> parseExecutionResults() throws SQLException {
     lockWaitForResponse();
     String[] parts = buffer.split("#");
-    for (int i = 0; i < parts.length; i++) {
-      parts[i] = parts[i].trim();
-    }
+//    for (int i = 0; i < parts.length; i++) {
+//      parts[i] = parts[i].trim();
+//    }
     unlockWaitForResponse();
     if (parts[0].equals("ERROR")) {
       throw new SQLException(parts[1], parts[2], Integer.parseInt(parts[3]));
     } else if (parts[0].equals("OK")) {
-      return parseResults(parts[1]);
+      System.out.println("buffer: " + buffer);
+      if (buffer.length() == 2) {
+        return null;
+      }
+      return parseResults(buffer.substring(3));
     } else {
       System.out.println("Unknown status, " + parts[0]);
       return null;
@@ -987,9 +1002,10 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   private List<List<String>> parseResults(String results) {
+    System.out.println("result: " + results);
     List<List<String>> rows = new ArrayList<>();
     int index = 0;
-
+    System.out.println("results.length(): " + results.length());
     while (index < results.length()) {
       // decode the number of columns in this row
       int count = Integer.parseInt(results.substring(index, index + 2), 16);
@@ -998,10 +1014,9 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       List<String> row = new ArrayList<>();
       for (int i = 0; i < count; i++) {
         // read 4 char as the column length (2 bytes)
-        String lengthHex = results.substring(index, index + 4);
-        int length = Integer.parseInt(lengthHex, 16);
+        int length = Integer.parseInt(results.substring(index, index + 4), 16);
         index += 4;
-
+        System.out.println("length: " + length);
         String value = results.substring(index, index + length); // fetch column value
         index += length; // remove to next index
 
@@ -1066,12 +1081,25 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     return type.getPostExecutionWait();
   }
 
+  private class TxnSailsClientInitializer extends ChannelInitializer<SocketChannel> {
+    @Override
+    protected void initChannel(SocketChannel ch) throws Exception {
+      ChannelPipeline pipeline = ch.pipeline();
+      // Decoder
+      pipeline.addLast(new LengthFieldBasedFrameDecoder(4096, 0, 4, 0, 4));
+      // Encoder
+      pipeline.addLast(new LengthFieldPrepender(4));
+      pipeline.addLast(new StringEncoder(CharsetUtil.UTF_8));
+      pipeline.addLast(new StringDecoder(CharsetUtil.UTF_8));
+      pipeline.addLast(new TxnSailsClientHandler());
+    }
+  }
+
   private class TxnSailsClientHandler extends SimpleChannelInboundHandler<String> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
       System.out.println("response: " + msg);
 //            ctx.writeAndFlush("from client " + System.currentTimeMillis());
-      // TODO: record the sql index for execution
       buffer = msg;
       // unlock the `waitForResponse` lock
       unlockWaitForResponse();
