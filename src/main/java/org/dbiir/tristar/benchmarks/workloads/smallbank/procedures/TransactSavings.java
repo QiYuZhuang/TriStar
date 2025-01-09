@@ -95,7 +95,7 @@ public class TransactSavings extends Procedure {
 
   public void run(Worker worker, Connection conn, String custName, double amount, CCType type) throws SQLException {
     // First convert the custName to the acctId
-    long custId;
+    long custId = -1;
 
     if (type == CCType.RC_ELT || type == CCType.SI_ELT) {
       try (PreparedStatement stmtc = this.getPreparedStatement(conn, writeConflict, custName)) {
@@ -112,7 +112,12 @@ public class TransactSavings extends Procedure {
       try{
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "TransactSavings", 0, custName));
         List<List<String>> result = worker.parseExecutionResults();
-        custId = Long.parseLong(result.get(0).get(0));
+        try {
+          custId = Long.parseLong(result.get(0).get(0));
+        } catch (Exception ex) {
+          String msg = "Invalid account '" + custName + "'";
+          throw new UserAbortException(msg);
+        }
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "TransactSavings", 1, amount, custId));
         worker.parseExecutionResults();
       } catch (InterruptedException ex) {
@@ -130,9 +135,7 @@ public class TransactSavings extends Procedure {
       }
   
       // Get Balance Information
-      try (PreparedStatement stmt =
-          this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
-        // TODO: return the savings version for validation
+      try (PreparedStatement stmt = this.getPreparedStatement(conn, UpdateSavingsBalance, amount, custId)) {
         int status = stmt.executeUpdate();
       }
     }

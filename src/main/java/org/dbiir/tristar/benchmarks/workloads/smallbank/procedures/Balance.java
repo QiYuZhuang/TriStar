@@ -99,7 +99,7 @@ public class Balance extends Procedure {
 
   public double run(Worker worker, Connection conn, String custName, CCType type) throws SQLException {
     // First convert the acctName to the acctId
-    long custId;
+    long custId = -1;
     double savingsBalance = 0;
     double checkingBalance = 0;
     if (type == CCType.RC_ELT) {
@@ -115,17 +115,35 @@ public class Balance extends Procedure {
 
     if (worker.useTxnSailsServer()) {
       try{
-        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Balance", 0, custName));
+        List<List<String>> result;
         // get custId from above result
-        List<List<String>> result = worker.parseExecutionResults();
-        custId = Long.parseLong(result.get(0).get(0));
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Balance", 0, custName));
+        result = worker.parseExecutionResults();
+        try {
+          custId = Long.parseLong(result.get(0).get(0));
+        } catch (Exception ex) {
+          String msg = "Invalid account '" + custName + "'";
+          throw new UserAbortException(msg);
+        }
+
         // get savingsBalance and savingsBalance from above result
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Balance", 1, custId));
         result = worker.parseExecutionResults();
-        savingsBalance = Double.parseDouble(result.get(0).get(0));
+        try {
+          savingsBalance = Double.parseDouble(result.get(0).get(0));
+        } catch (Exception ex) {
+          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId);
+          throw new UserAbortException(msg);
+        }
+
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Balance", 2, custId));
         result = worker.parseExecutionResults();
-        checkingBalance = Double.parseDouble(result.get(0).get(0));
+        try {
+          checkingBalance = Double.parseDouble(result.get(0).get(0));
+        } catch (Exception ex) {
+          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
+          throw new UserAbortException(msg);
+        }
       } catch (InterruptedException ex) {
         System.out.println("InterruptedException on sending or receiving message");
       }

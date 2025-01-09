@@ -170,19 +170,46 @@ public class Amalgamate extends Procedure {
     }
 
     if (worker.useTxnSailsServer()) {
+      List<List<String>> results = null;
       try{
+        // get cust0's info
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 0, custId0));
-        List<List<String>> results = worker.parseExecutionResults();
+        results = worker.parseExecutionResults();
+        if (results.isEmpty()) {
+          String msg = "Invalid account '" + custId1 + "'";
+          throw new UserAbortException(msg);
+        }
+
+        // get cust1's info
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 1, custId1));
-        worker.parseExecutionResults();
-        // TODO: read results from middleware
+        results = worker.parseExecutionResults();
+        if (results.isEmpty()) {
+          String msg = "Invalid account '" + custId1 + "'";
+          throw new UserAbortException(msg);
+        }
+
         double checkingBalance = 0.0, savingsBalance = 0.0;
+        // get the cust0's remained balance in checking table and reset to zero
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 2, custId0));
         results = worker.parseExecutionResults();
-        savingsBalance = Double.parseDouble(results.get(0).get(0));
+        try {
+          savingsBalance = Double.parseDouble(results.get(0).get(0));
+        } catch (Exception ex) {
+          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
+          throw new UserAbortException(msg);
+        }
+
+        // get the cust0's remained balance in saving table and reset to zero
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 3, custId0));
         results = worker.parseExecutionResults();
-        checkingBalance = Double.parseDouble(results.get(0).get(0));
+        try {
+          checkingBalance = Double.parseDouble(results.get(0).get(0));
+        } catch (Exception ex){
+          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId0);
+          throw new UserAbortException(msg);
+        }
+
+        // add to cust1's checking account
         double total = checkingBalance + savingsBalance;
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 4, total, custId1));
         worker.parseExecutionResults();

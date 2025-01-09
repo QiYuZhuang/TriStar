@@ -104,10 +104,15 @@ public class DepositChecking extends Procedure {
     if (worker.useTxnSailsServer()) {
       try{
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "DepositChecking", clientServerIndexMap.get(0), custName));
-        // TODO: read custId from above result
         List<List<String>> result = worker.parseExecutionResults();
-        custId = Long.parseLong(result.get(0).get(0));
+        try {
+          custId = Long.parseLong(result.get(0).get(0));
+        } catch (Exception ex) {
+          String msg = "Invalid account '" + custName + "'";
+          throw new UserAbortException(msg);
+        }
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "DepositChecking", clientServerIndexMap.get(1), amount, custId));
+        worker.parseExecutionResults();
       } catch (InterruptedException ex) {
         System.out.println("InterruptedException on sending or receiving message");
       }

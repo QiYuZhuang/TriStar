@@ -18,8 +18,8 @@
     -->
     <concurrencyControlType>DYNAMIC</concurrencyControlType>
     <!--  hotspot  -->
-<!--    <hotspotNumber>1000</hotspotNumber>-->
-<!--    <hotspotPercentage>0.1</hotspotPercentage>-->
+    <hotspotNumber>5</hotspotNumber>
+    <hotspotPercentage>0.5</hotspotPercentage>
     <!--  zipfain  -->
 <!--    <zipf>0.9</zipf>-->
 
@@ -31,7 +31,7 @@
     <works>
         <work>
             <warmup>5</warmup>
-            <time>15</time>
+            <time>10</time>
             <rate>unlimited</rate>
             <weights>20,20,20,0,20,20</weights>
 <!--            <weights>0,0,0,0,0,100</weights>-->

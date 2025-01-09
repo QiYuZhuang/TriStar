@@ -40,7 +40,7 @@ build/
 ### Custom ###
 results/
 targets/
-config/
+config/**
 metas/
 tristar_adapter/
 scripts/

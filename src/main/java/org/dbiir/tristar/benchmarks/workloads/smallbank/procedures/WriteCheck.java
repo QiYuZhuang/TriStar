@@ -131,21 +131,39 @@ public class WriteCheck extends Procedure {
       try{
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 0, custName));
         List<List<String>> result = worker.parseExecutionResults();
-        custId = Long.parseLong(result.get(0).get(0));
+        try {
+          custId = Long.parseLong(result.get(0).get(0));
+        } catch (Exception ex) {
+          String msg = "Invalid account '" + custName + "'";
+          throw new UserAbortException(msg);
+        }
         // read checkingBalance and savingsBalance from middleware
         double checkingBalance = 0.0, savingsBalance = 0.0;
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 1, custId));
         result = worker.parseExecutionResults();
-        checkingBalance = Double.parseDouble(result.get(0).get(0));
+        try {
+          savingsBalance = Double.parseDouble(result.get(0).get(0));
+        } catch (Exception  ex) {
+          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_SAVINGS, custId);
+          throw new UserAbortException(msg);
+        }
+
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 2, custId));
         result = worker.parseExecutionResults();
-        savingsBalance = Double.parseDouble(result.get(0).get(0));
+        try {
+          checkingBalance = Double.parseDouble(result.get(0).get(0));
+        } catch (Exception ex) {
+          String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
+          throw new UserAbortException(msg);
+        }
+
         double total = checkingBalance + savingsBalance;
         if (total < amount) {
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 3, amount - 1, custId));
         } else {
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 3, amount, custId));
         }
+        worker.parseExecutionResults();
       } catch (InterruptedException ex) {
         System.out.println("InterruptedException on sending or receiving message");
       }

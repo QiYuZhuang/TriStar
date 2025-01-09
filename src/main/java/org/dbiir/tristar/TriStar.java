@@ -55,7 +55,6 @@ import org.dbiir.tristar.benchmarks.util.TimeUtil;
 import org.dbiir.tristar.common.CCType;
 
 import lombok.Setter;
-import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 public class TriStar {
@@ -133,19 +132,24 @@ public class TriStar {
         }
 
         // register and analyse transaction templates
-        EventLoopGroup eventExecutors = new NioEventLoopGroup();
-        try {
-            System.out.println("connect to txnSails server");
-            Bootstrap bootstrap =  new Bootstrap();
-            bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new NettyClientInitializer());
-            ChannelFuture channelFuture = bootstrap.connect(wrkld.getTxnSailsServerIp(),9876).sync();
-            for (BenchmarkModule benchmark : benchList) {
-                registerTemplateSQLs(channelFuture.channel(), benchmark.getProcedures());
+        if (wrkld.getConcurrencyControlType() == CCType.RC_TAILOR ||
+                wrkld.getConcurrencyControlType() == CCType.SI_TAILOR ||
+                wrkld.getConcurrencyControlType() == CCType.DYNAMIC) {
+            EventLoopGroup eventExecutors = new NioEventLoopGroup();
+            try {
+                System.out.println("connect to txnSails server");
+                Bootstrap bootstrap =  new Bootstrap();
+                bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new NettyClientInitializer());
+                ChannelFuture channelFuture = bootstrap.connect(wrkld.getTxnSailsServerIp(),9876).sync();
+                for (BenchmarkModule benchmark : benchList) {
+                    registerTemplateSQLs(channelFuture.channel(), benchmark.getProcedures());
+                }
+                analyseTemplates(channelFuture.channel());
+                channelFuture.channel().closeFuture().sync();
+                channelFuture.channel().close();
+            } finally {
+                eventExecutors.shutdownGracefully();
             }
-            analyseTemplates(channelFuture.channel());
-            channelFuture.channel().closeFuture().sync();
-        } finally {
-            eventExecutors.shutdownGracefully();
         }
 
         // Execute Workload
@@ -176,6 +180,26 @@ public class TriStar {
         } else {
             logger.info("Skipping benchmark workload execution");
         }
+
+        // close remote server
+        if (wrkld.getConcurrencyControlType() == CCType.RC_TAILOR ||
+                wrkld.getConcurrencyControlType() == CCType.SI_TAILOR ||
+                wrkld.getConcurrencyControlType() == CCType.DYNAMIC) {
+            EventLoopGroup eventExecutors = new NioEventLoopGroup();
+            try {
+                System.out.println("close txnSails server");
+                Bootstrap bootstrap =  new Bootstrap();
+                bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new NettyClientInitializer());
+                ChannelFuture channelFuture = bootstrap.connect(wrkld.getTxnSailsServerIp(),9876).sync();
+                channelFuture.channel().writeAndFlush("close").sync();
+                channelFuture.channel().closeFuture().sync(); // wait for server closing the channel
+                channelFuture.channel().close();
+            } finally {
+                eventExecutors.shutdownGracefully();
+            }
+        }
+
+        return;
     }
 
     private static WorkloadConfiguration loadBenchmark(XMLConfiguration xmlConfig,
@@ -736,9 +760,8 @@ public class TriStar {
     public static class NettyClientHandler extends SimpleChannelInboundHandler<String> {
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
-            System.out.println("response: " + msg);
+//            System.out.println("response: " + msg);
 //            ctx.writeAndFlush("from client " + System.currentTimeMillis());
-            // TODO: record the sql index for execution
             buffer = msg;
             // unlock the `waitForResponse` lock
             unlockWaitForResponse();

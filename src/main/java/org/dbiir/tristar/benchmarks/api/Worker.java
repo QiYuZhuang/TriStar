@@ -123,6 +123,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   protected ChannelFuture channelFuture;
   protected AtomicBoolean waitForRespond = new AtomicBoolean(false);
   protected String buffer = null; // buffer the response (the execution result) from the txnSails server
+  private EventLoopGroup eventExecutors;
 
   public Worker(T benchmark, int id) {
     this.id = id;
@@ -133,14 +134,13 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     this.transactionTypes = this.configuration.getTransTypes();
 
     if (useTxnSailsServer()) {
-      EventLoopGroup eventExecutors = new NioEventLoopGroup();
+      eventExecutors = new NioEventLoopGroup();
       System.out.println(Thread.currentThread().getName() + " connect to txnSails server");
       Bootstrap bootstrap =  new Bootstrap();
       bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new TxnSailsClientInitializer());
         try {
           System.out.println("server ip: " + benchmark.workConf.getTxnSailsServerIp());
           channelFuture = bootstrap.connect(benchmark.workConf.getTxnSailsServerIp(), 9876).sync();
-          System.out.println(channelFuture);
         } catch (InterruptedException e) {
           System.out.println("Failed to connect to txnSails server");
           throw new RuntimeException(e);
@@ -969,15 +969,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     ByteBuf resp = channelFuture.channel().alloc().buffer(msg.length());
     resp.writeBytes(msg.getBytes(StandardCharsets.UTF_8));
     channelFuture.channel().writeAndFlush(resp).sync();
-    System.out.println("send msg to txnSails server: " + msg);
-  }
-
-  public List<List<String>> parseExecutionResults(String rawResult) {
-    // unused
-    List<List<String>> result = new LinkedList<>();
-
-    lockWaitForResponse();
-    return result;
+//    System.out.println("send msg to txnSails server: " + msg);
   }
 
   public List<List<String>> parseExecutionResults() throws SQLException {
@@ -990,7 +982,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     if (parts[0].equals("ERROR")) {
       throw new SQLException(parts[1], parts[2], Integer.parseInt(parts[3]));
     } else if (parts[0].equals("OK")) {
-      System.out.println("buffer: " + buffer);
+//      System.out.println("buffer: " + buffer);
       if (buffer.length() == 2) {
         return null;
       }
@@ -1002,10 +994,10 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   private List<List<String>> parseResults(String results) {
-    System.out.println("result: " + results);
+//    System.out.println("result: " + results);
     List<List<String>> rows = new ArrayList<>();
     int index = 0;
-    System.out.println("results.length(): " + results.length());
+//    System.out.println("results.length(): " + results.length());
     while (index < results.length()) {
       // decode the number of columns in this row
       int count = Integer.parseInt(results.substring(index, index + 2), 16);
@@ -1016,7 +1008,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
         // read 4 char as the column length (2 bytes)
         int length = Integer.parseInt(results.substring(index, index + 4), 16);
         index += 4;
-        System.out.println("length: " + length);
+//        System.out.println("length: " + length);
         String value = results.substring(index, index + length); // fetch column value
         index += length; // remove to next index
 
@@ -1081,6 +1073,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     return type.getPostExecutionWait();
   }
 
+  public void closeTxnSailsServerConnection() {
+    System.out.println("close server connection");
+    eventExecutors.shutdownGracefully();
+    channelFuture.channel().close();
+  }
+
   private class TxnSailsClientInitializer extends ChannelInitializer<SocketChannel> {
     @Override
     protected void initChannel(SocketChannel ch) throws Exception {
@@ -1098,7 +1096,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private class TxnSailsClientHandler extends SimpleChannelInboundHandler<String> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
-      System.out.println("response: " + msg);
+//      System.out.println("response: " + msg);
 //            ctx.writeAndFlush("from client " + System.currentTimeMillis());
       buffer = msg;
       // unlock the `waitForResponse` lock
