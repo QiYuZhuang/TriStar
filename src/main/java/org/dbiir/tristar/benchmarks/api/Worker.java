@@ -19,6 +19,8 @@ package org.dbiir.tristar.benchmarks.api;
 
 import static org.dbiir.tristar.benchmarks.types.State.MEASURE;
 
+import java.io.*;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -60,9 +62,6 @@ import org.dbiir.tristar.common.CCType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioSocketChannel;
 
 public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(Worker.class);
@@ -120,10 +119,9 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   @Setter
   @Getter
   protected boolean needAbort = false;
-  protected ChannelFuture channelFuture;
-  protected AtomicBoolean waitForRespond = new AtomicBoolean(false);
-  protected String buffer = null; // buffer the response (the execution result) from the txnSails server
-  private EventLoopGroup eventExecutors;
+  protected BufferedReader in;
+  protected PrintWriter out;
+  protected Socket socket;
 
   public Worker(T benchmark, int id) {
     this.id = id;
@@ -134,17 +132,16 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     this.transactionTypes = this.configuration.getTransTypes();
 
     if (useTxnSailsServer()) {
-      eventExecutors = new NioEventLoopGroup();
       System.out.println(Thread.currentThread().getName() + " connect to txnSails server");
-      Bootstrap bootstrap =  new Bootstrap();
-      bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new TxnSailsClientInitializer());
-        try {
-          System.out.println("server ip: " + benchmark.workConf.getTxnSailsServerIp());
-          channelFuture = bootstrap.connect(benchmark.workConf.getTxnSailsServerIp(), 9876).sync();
-        } catch (InterruptedException e) {
-          System.out.println("Failed to connect to txnSails server");
-          throw new RuntimeException(e);
-        }
+      try {
+        socket = new Socket(benchmark.workConf.getTxnSailsServerIp(), 9876);
+        System.out.println("server ip: " + benchmark.workConf.getTxnSailsServerIp());
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
+      } catch (IOException e) {
+        System.out.println(List.of(e.getStackTrace()));
+        throw new RuntimeException(e);
+      }
     } else {
       try {
         this.conn = this.benchmark.makeConnection();
@@ -937,6 +934,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     if (useTxnSailsServer()) {
       try{
         sendMsgToTxnSailsServer("rollback");
+        parseControlResults();
       } catch (InterruptedException e) {
         // TODO: parse the exception
         System.out.println(e);
@@ -950,6 +948,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     if (useTxnSailsServer()) {
       try{
         sendMsgToTxnSailsServer("commit");
+        parseControlResults();
       } catch (InterruptedException e) {
         // TODO: parse the exception
       }
@@ -965,31 +964,55 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   public void sendMsgToTxnSailsServer(String msg) throws InterruptedException {
-    lockWaitForResponse();
-    ByteBuf resp = channelFuture.channel().alloc().buffer(msg.length());
-    resp.writeBytes(msg.getBytes(StandardCharsets.UTF_8));
-    channelFuture.channel().writeAndFlush(resp).sync();
-//    System.out.println("send msg to txnSails server: " + msg);
+    out.println(msg);
+    System.out.println(this.toString() + " send msg to txnSails server: " + msg);
   }
 
   public List<List<String>> parseExecutionResults() throws SQLException {
-    lockWaitForResponse();
-    String[] parts = buffer.split("#");
-//    for (int i = 0; i < parts.length; i++) {
-//      parts[i] = parts[i].trim();
-//    }
-    unlockWaitForResponse();
-    if (parts[0].equals("ERROR")) {
-      throw new SQLException(parts[1], parts[2], Integer.parseInt(parts[3]));
-    } else if (parts[0].equals("OK")) {
-//      System.out.println("buffer: " + buffer);
-      if (buffer.length() == 2) {
+    try {
+      String response = in.readLine();
+      if (response != null) {
+//        response = response.trim();
+        System.out.println(this.toString() + " received from server: " + response);
+        String[] parts = response.split("#");
+        if (parts[0].equals("ERROR")) {
+          throw new SQLException(parts[1], parts[2], Integer.parseInt(parts[3]));
+        } else if (parts[0].equals("OK")) {
+          if (response.length() == 2) {
+            return null;
+          }
+          return parseResults(response.substring(3));
+        } else {
+          System.out.println("Unknown status, " + parts[0]);
+          return null;
+        }
+      } else {
         return null;
       }
-      return parseResults(buffer.substring(3));
-    } else {
-      System.out.println("Unknown status, " + parts[0]);
-      return null;
+    } catch (IOException ex) {
+      System.out.println("The connection is closed");
+      System.out.println(List.of(ex.getStackTrace()));
+      throw new RuntimeException(ex);
+    }
+  }
+
+  public void parseControlResults() throws SQLException {
+    try {
+      String response = in.readLine();
+      if (response != null) {
+//        response = response.trim();
+        System.out.println(this.toString() + " received from server: " + response);
+        String[] parts = response.split("#");
+        if (parts[0].equals("ERROR")) {
+          throw new SQLException(parts[1], parts[2], Integer.parseInt(parts[3]));
+        } else if (!parts[0].equals("OK")) {
+          System.out.println("Unknown status, " + parts[0]);
+        }
+      }
+    } catch (IOException ex) {
+      System.out.println("The connection is closed");
+      System.out.println(List.of(ex.getStackTrace()));
+      throw new RuntimeException(ex);
     }
   }
 
@@ -1018,19 +1041,6 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     }
 
     return rows;
-  }
-
-  private void lockWaitForResponse() {
-      while (!Thread.interrupted() && !waitForRespond.compareAndSet(false, true)) {
-          try {
-              Thread.sleep(1);
-          } catch (InterruptedException e) {
-          }
-      }
-  }
-
-  private void unlockWaitForResponse() {
-      waitForRespond.set(false);
   }
 
   /**
@@ -1074,44 +1084,12 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   public void closeTxnSailsServerConnection() {
-    System.out.println("close server connection");
-    eventExecutors.shutdownGracefully();
-    channelFuture.channel().close();
-  }
-
-  private class TxnSailsClientInitializer extends ChannelInitializer<SocketChannel> {
-    @Override
-    protected void initChannel(SocketChannel ch) throws Exception {
-      ChannelPipeline pipeline = ch.pipeline();
-      // Decoder
-      pipeline.addLast(new LengthFieldBasedFrameDecoder(4096, 0, 4, 0, 4));
-      // Encoder
-      pipeline.addLast(new LengthFieldPrepender(4));
-      pipeline.addLast(new StringEncoder(CharsetUtil.UTF_8));
-      pipeline.addLast(new StringDecoder(CharsetUtil.UTF_8));
-      pipeline.addLast(new TxnSailsClientHandler());
-    }
-  }
-
-  private class TxnSailsClientHandler extends SimpleChannelInboundHandler<String> {
-    @Override
-    protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
-//      System.out.println("response: " + msg);
-//            ctx.writeAndFlush("from client " + System.currentTimeMillis());
-      buffer = msg;
-      // unlock the `waitForResponse` lock
-      unlockWaitForResponse();
-    }
-
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-      cause.printStackTrace();
-      ctx.close();
-    }
-
-    @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-//            System.out.println("connect to the server");
+    try {
+      System.out.println("close server connection");
+      socket.close();
+    } catch (IOException ex) {
+      System.out.println("server seem not exist");
+      throw new RuntimeException(ex);
     }
   }
 }
