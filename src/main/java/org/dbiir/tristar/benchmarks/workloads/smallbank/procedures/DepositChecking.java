@@ -39,10 +39,10 @@ import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
-import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
@@ -62,9 +62,8 @@ public class DepositChecking extends Procedure {
       new SQLStmt(
           "UPDATE "
               + SmallBankConstants.TABLENAME_CHECKING
-              + "   SET bal = bal + ?, tid = tid + 1 "
-              + " WHERE custid = ?"
-              + " RETURNING tid");
+              + "   SET bal = bal + ?"
+              + " WHERE custid = ?");
 
   static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
   static {
@@ -88,7 +87,7 @@ public class DepositChecking extends Procedure {
     return templateSQLMetas;
   }
 
-  public void run(Worker worker, Connection conn, String custName, double amount, CCType type, long[] versions, long tid, int[] checkout) throws SQLException {
+  public void run(Worker worker, Connection conn, String custName, double amount, CCType type) throws SQLException {
     // First convert the custName to the custId
     long custId;
     if (type == CCType.RC_ELT) {
@@ -102,73 +101,41 @@ public class DepositChecking extends Procedure {
       }
     }
 
-    try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custName)) {
-      try (ResultSet r0 = stmt0.executeQuery()) {
-        if (!r0.next()) {
+    if (worker.useTxnSailsServer()) {
+      try{
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "DepositChecking", clientServerIndexMap.get(0), custName));
+        List<List<String>> result = worker.parseExecutionResults();
+        try {
+          custId = Long.parseLong(result.get(0).get(0));
+        } catch (Exception ex) {
           String msg = "Invalid account '" + custName + "'";
           throw new UserAbortException(msg);
         }
-        custId = r0.getLong(1);
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "DepositChecking", clientServerIndexMap.get(1), amount, custId));
+        worker.parseExecutionResults();
+      } catch (InterruptedException ex) {
+        System.out.println("InterruptedException on sending or receiving message");
       }
-    }
+    } else {
+      try (PreparedStatement stmt0 = this.getPreparedStatement(conn, GetAccount, custName)) {
+        try (ResultSet r0 = stmt0.executeQuery()) {
+          if (!r0.next()) {
+            String msg = "Invalid account '" + custName + "'";
+            throw new UserAbortException(msg);
+          }
+          custId = r0.getLong(1);
+        }
+      }
 
-    // Then update their checking balance
-    if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().tryLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid, LockType.EX);
-    }
-    try (PreparedStatement stmt1 =
-        this.getPreparedStatement(conn, UpdateCheckingBalance, amount, custId)) {
-      try (ResultSet res = stmt1.executeQuery()) {
-        if (!res.next()) {
-          throw new UserAbortException("unknown exception");
-        }
-        versions[0] = res.getLong(1);
+      // Then update their checking balance
+      try (PreparedStatement stmt1 =
+          this.getPreparedStatement(conn, UpdateCheckingBalance, amount, custId)) {
+        int status = stmt1.executeUpdate();
       }
-    } catch (SQLException ex) {
-      throw ex;
-    }
-    if (type == CCType.RC_TAILOR && versions[0] < 0)
-      System.out.println("custome error 4");
-    while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-      // set current thread ready, block for all thread to ready
-      if (!worker.isSwitchPhaseReady()) {
-        worker.setSwitchPhaseReady(true);
-        System.out.println(Thread.currentThread().getName() + " is ready for switch");
-      } else {
-        try {
-          Thread.sleep(1);
-        } catch (InterruptedException e) {
-        }
-      }
-    }
-    if (TAdapter.getInstance().isInSwitchPhase()) {
-      type = TAdapter.getInstance().getSwitchPhaseCCType();
-    }
-    if (type == CCType.RC_TAILOR) {
-      LOG.debug("DepositChecking #" + tid + " acquire EX validation lock - checking #"+custId);
-      LockTable.getInstance().tryValidationLock(SmallBankConstants.TABLENAME_CHECKING, tid, custId, LockType.EX, type);
-      LOG.debug("DepositChecking #" + tid + " acquired EX validation lock - checking #"+custId);
     }
   }
 
-  public void doAfterCommit(long custId, CCType type, boolean success, long[] versions, long tid, int[] checkout) {
-    if (TransactionCollector.getInstance().isSample()) {
-      TransactionCollector.getInstance().addTransactionSample(4,
-              new RWRecord[]{},
-              new RWRecord[]{new RWRecord(SmallBankConstants.TABLENAME_TO_INDEX.get(SmallBankConstants.TABLENAME_CHECKING), (int) custId)},
-              success?1:0);
-    }
+  public void doAfterCommit() {
 
-    if (!success) {
-      return;
-    }
-    if (type == CCType.RC_TAILOR_LOCK) {
-      LockTable.getInstance().releaseLock(SmallBankConstants.TABLENAME_CHECKING, custId, tid);
-    }
-    if (type == CCType.RC_TAILOR) {
-      LockTable.getInstance().releaseValidationLock(SmallBankConstants.TABLENAME_CHECKING, custId, LockType.EX);
-      LOG.debug("DepositChecking #" + tid + " release EX validation lock - checking #"+custId);
-      LockTable.getInstance().updateHotspotVersion(SmallBankConstants.TABLENAME_CHECKING, custId, versions[0]);
-    }
   }
 }

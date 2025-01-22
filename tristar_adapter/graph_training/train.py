@@ -36,7 +36,6 @@ class GraphClassificationModel(torch.nn.Module):
         # Define a fully connected layer for classification
         self.fc1 = Linear(hidden_channels, hidden_channels)
         self.fc2 = Linear(hidden_channels, out_channels)
-
         self.dropout = Dropout(0.5)
 
     def forward(self, data):
@@ -48,10 +47,19 @@ class GraphClassificationModel(torch.nn.Module):
         # x = self.dropout(x)  # Apply Dropout after first conv layer
         x = self.conv2(x, edge_index, edge_attr)
         x = F.relu(x)
-        # x = self.dropout(x)
+        # x = self.dropout(x)  
         x = self.conv3(x, edge_index, edge_attr)
         x = F.relu(x)
         # x = self.dropout(x)
+
+        # Global mean pooling
+        x = global_mean_pool(x, batch)
+
+        # Apply fully connected layers
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+
+        return F.log_softmax(x, dim=1)
 
         # Global mean pooling
         x = global_mean_pool(x, batch)

@@ -15,24 +15,31 @@
  *
  */
 
-package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
+ package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
-import org.dbiir.tristar.benchmarks.api.Procedure;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
-
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.Random;
-
-public abstract class TPCCProcedure extends Procedure {
-
-  public abstract void run(
-      Connection conn,
-      Random gen,
-      int terminalWarehouseID,
-      int numWarehouses,
-      int terminalDistrictLowerID,
-      int terminalDistrictUpperID,
-      TPCCWorker w)
-      throws SQLException;
-}
+ import org.dbiir.tristar.benchmarks.api.Procedure;
+ import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
+ import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
+ import org.dbiir.tristar.common.CCType;
+ import org.dbiir.tristar.common.utils.Zip;
+ 
+ import java.sql.Connection;
+ import java.sql.SQLException;
+ import java.util.Random;
+ 
+ public abstract class TPCCProcedure extends Procedure {
+ 
+   public abstract void run(
+       Connection conn,
+       Random gen,
+       int terminalWarehouseID,
+       int numWarehouses,
+       int terminalDistrictLowerID,
+       int terminalDistrictUpperID,
+       CCType ccType,
+       long[] keys,
+       TPCCWorker w)
+       throws SQLException;
+ 
+ 
+ }

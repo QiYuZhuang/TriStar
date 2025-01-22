@@ -91,9 +91,12 @@ public class SmallBank {
             case RC_TAILOR -> "RC+TV";
             case RC_TAILOR_LOCK -> "RC+TL";
             case DYNAMIC -> "DYNAMIC";
+            case DYNAMIC_B -> "DYNAMIC_B";
+            case DYNAMIC_A -> "DYNAMIC_A";
             case RC -> "RC";
             case SI -> "SI";
             case NUM_CC -> null;
+            default -> throw new IllegalArgumentException("Unexpected value: " + type);
         };
     }
 

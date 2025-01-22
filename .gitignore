@@ -45,3 +45,6 @@ metas/
 tristar_adapter/
 scripts/
 project.yaml
+logs/
+running_tests/
+models/

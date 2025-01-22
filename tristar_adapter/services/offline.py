@@ -89,45 +89,46 @@ class OfflineService:
 
     def train(self):
         if self.model is None:
-            self.model = GraphClassificationModelEmbedding(in_channels=2, edge_in_channels=2, hidden_channels=32, out_channels=3)
+            self.model = GraphClassificationModelEmbedding(in_channels=4, edge_in_channels=2, hidden_channels=64, out_channels=3)
             if torch.cuda.is_available():
                 self.device = torch.device('cuda')
             else:
                 self.device = torch.device('cpu')
             self.model.to(self.device)
-            self.optimizer = optim.Adam(self.model.parameters(), lr=0.0005)
+            self.optimizer = optim.Adam(self.model.parameters(), lr=0.005)
         print("len:", len(self.__gs), len(self.__g_labels))
         for i in range(len(self.__gs)):
+            # if i > 200:
+            #     continue
             idx=0
             for g in self.__gs[i]:
                 x = torch.tensor(g.nodes, dtype=torch.float).to(self.device)
-                # print(f"Graph {i}, Node features shape: {x.size()}")
                 edge_index = torch.tensor(g.edges, dtype=torch.long).to(self.device)
-                # print(f"Graph {i}, Edge index shape: {edge_index.size()}")
                 edge_attr = torch.tensor(g.edge_feature, dtype=torch.float).to(self.device)
-                # print(f"Graph {i}, Edge attributes shape: {edge_attr.size()}")
                 y = torch.tensor(self.__g_labels[i], dtype=torch.float16).to(self.device)
                 x = F.normalize(x, p=2, dim=1)
                 if edge_attr.dim() == 1:
                     edge_attr = F.normalize(edge_attr, p=2, dim=0)
                 else:
                     edge_attr = F.normalize(edge_attr, p=2, dim=1)
-
                 self.__graph_batch.append(
                     Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
                 )
                 idx += 1
-        # return
-        train_data, test_data = train_test_split(self.__graph_batch, test_size=0.2, random_state=37)
-        train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
-        test_loader = DataLoader(test_data, batch_size=32, shuffle=True)
+                # if idx >= 2:
+                #     break;
+
+        train_data, test_data = train_test_split(self.__graph_batch, test_size=0.01, random_state=37)
+        train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
+        test_loader = DataLoader(test_data, batch_size=16, shuffle=False)
         self.scaler = GradScaler()
 
         for epoch in range(1, self.epoch_size + 1):
             self.train_epoch(train_loader)
-            train_acc, test_f1 = self.test_epoch(test_loader)
-            print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Test F1: {test_f1:.4f}')
-        torch.save(self.model, self.__model_prefix + "model" + self.__model_postfix)
+            train_acc = self.test_epoch(test_loader)
+            print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}')
+        
+        # torch.save(self.model, self.__model_prefix + "ycsb04" + self.__model_postfix)
 
     def train2(self):
         if self.model is None:
@@ -215,24 +216,24 @@ class OfflineService:
                 out, embed = self.model(data)
                 out = out.flatten()
                 loss = F.cross_entropy(out, data.y)
-            # print(loss)
-            loss.backward()
-            self.optimizer.step()
-            # self.scaler.scale(loss).backward()
-            # self.scaler.step(self.optimizer)
-            # self.scaler.update()
+            print(loss)
+            # loss.backward()
+            # self.optimizer.step()
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
         torch.cuda.empty_cache()
 
     def test_epoch(self, loader: DataLoader) -> float:
         self.model.eval()
         correct = 0
-        test_targets, test_predictions = [], []
         for data in loader:
             out, _ = self.model(data)
             max_values, _ = torch.max(out, dim=1)
-            # print("max_values: ", max_values)
             result = torch.where(out == max_values.unsqueeze(1), 1.0, 0)
             pred = result.flatten()
+            # print("data.y", data.y)
+            # print("pred", pred)
+            # TODO:
             correct += ((pred == 1.0) & (data.y == 1.0)).sum().item()
-        test_f1 = f1_score(test_targets, test_predictions, average='macro')
-        return correct / len(loader.dataset), test_f1
+        return correct / len(loader.dataset)

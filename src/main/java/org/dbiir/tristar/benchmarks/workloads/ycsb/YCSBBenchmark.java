@@ -32,7 +32,6 @@ import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.Table;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.procedures.InsertRecord;
-import org.dbiir.tristar.transaction.concurrency.FlowRate;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,10 +52,6 @@ public final class YCSBBenchmark extends BenchmarkModule {
 
   public YCSBBenchmark(WorkloadConfiguration workConf) throws SQLException {
     super(workConf);
-    List<Connection> connectionList = new LinkedList<>();
-    makeConnections(connectionList);
-    LockTable.getInstance().initHotspot("ycsb", connectionList);
-    FlowRate.getInstance().init("ycsb");
 
     int fieldSize = YCSBConstants.MAX_FIELD_SIZE;
     if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("fieldSize")) {

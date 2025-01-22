@@ -464,4 +464,25 @@ public abstract class StringUtil {
     }
     return retList;
   }
+
+  public static String joinValuesWithHash(Object... values) {
+    // If input is empty, return an empty string
+    if (values == null || values.length == 0) {
+      return "";
+    }
+
+    // Use StringBuilder to efficiently concatenate strings
+    StringBuilder result = new StringBuilder();
+
+    // Iterate through each value and join them with #
+    for (int i = 0; i < values.length; i++) {
+      result.append(String.valueOf(values[i]));  // Convert to string
+      // If it's not the last value, append a # separator
+      if (i < values.length - 1) {
+        result.append("#");
+      }
+    }
+
+    return result.toString();
+  }
 }

@@ -205,14 +205,15 @@ def sb_random(terminal=128, cnt=80):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-    cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR"]
+    cc = ["SERIALIZABLE", "RC_TAILOR", "SI_TAILOR"]
     for i in range(cnt):
         rf1, rf2 = random.uniform(0, 1), random.uniform(0, 1)
         skew = random.uniform(0.1, 1.3)
         hsn = random.randint(10, 5000)
         hsp = random.uniform(0.1, 0.9)
         rate = random.randint(5000, 20000)
-        if rf2 < 0.75:
+        if rf2 < 1:
             rate = "unlimited"
         weight = rand_weight()
         if rf1 < 0.5:
@@ -246,11 +247,11 @@ if __name__ == '__main__':
     # warmupTime = 10
     # execTime = 30
     sb_scalability()
-    warmupTime = 20
-    execTime = 60
-    sb_hotspot(256)
-    sb_zip_fain(128)
-    sb_bal_ratio(256)
-    sb_wc_ratio(256)
+    warmupTime = 5
+    execTime = 15
+    # sb_hotspot(256)
+    # sb_zip_fain(128)
+    # sb_bal_ratio(256)
+    # sb_wc_ratio(256)
     # sb_rate(128)
-
+    sb_random(128, 200)

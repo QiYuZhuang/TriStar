@@ -17,19 +17,34 @@
 
 package org.dbiir.tristar.benchmarks.api;
 
+import static org.dbiir.tristar.benchmarks.types.State.MEASURE;
+
+import java.io.*;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLRecoverableException;
 import java.sql.Statement;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.*;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.string.StringDecoder;
+import io.netty.handler.codec.string.StringEncoder;
+import io.netty.util.CharsetUtil;
 import lombok.Getter;
 import lombok.Setter;
+
+import org.dbiir.tristar.TriStar;
+import org.dbiir.tristar.adapter.Adapter;
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.LatencyRecord;
 import org.dbiir.tristar.benchmarks.Phase;
@@ -39,7 +54,7 @@ import org.dbiir.tristar.benchmarks.WorkloadState;
 import org.dbiir.tristar.benchmarks.api.Procedure.UserAbortException;
 import org.dbiir.tristar.benchmarks.types.DatabaseType;
 import org.dbiir.tristar.benchmarks.types.State;
-import static org.dbiir.tristar.benchmarks.types.State.MEASURE;
+
 import org.dbiir.tristar.benchmarks.types.TransactionStatus;
 import org.dbiir.tristar.benchmarks.util.Histogram;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
@@ -47,10 +62,12 @@ import org.dbiir.tristar.common.CCType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(Worker.class);
   private static final Logger ABORT_LOG =
       LoggerFactory.getLogger("com.oltpbenchmark.api.ABORT_LOG");
+  private static final double THINK_TIME_PROBABILITY = 0.01;
 
   private WorkloadState workloadState;
   private LatencyRecord latencies;
@@ -86,7 +103,25 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   protected boolean switchPhaseReady = false; // validation transaction common, set it to true
   @Getter
   @Setter
-  protected String buffer = null; // buffer the response (the execution result) from the txnSails server
+  protected CCType realTimeCCType = CCType.NUM_CC; 
+  @Setter
+  @Getter
+  protected boolean validationFinish = false;
+  @Setter
+  @Getter
+  protected boolean executionFinish = false;
+  @Setter
+  @Getter
+  protected boolean preSleep = false;
+  @Setter
+  @Getter
+  protected boolean postSleep = false;
+  @Setter
+  @Getter
+  protected boolean needAbort = false;
+  protected BufferedReader in;
+  protected PrintWriter out;
+  protected Socket socket;
 
   public Worker(T benchmark, int id) {
     this.id = id;
@@ -96,7 +131,18 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     this.currStatement = null;
     this.transactionTypes = this.configuration.getTransTypes();
 
-    if (!this.configuration.getNewConnectionPerTxn()) {
+    if (useTxnSailsServer()) {
+      System.out.println(Thread.currentThread().getName() + " connect to txnSails server");
+      try {
+        socket = new Socket(benchmark.workConf.getTxnSailsServerIp(), 9876);
+        System.out.println("server ip: " + benchmark.workConf.getTxnSailsServerIp());
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
+      } catch (IOException e) {
+        System.out.println(List.of(e.getStackTrace()));
+        throw new RuntimeException(e);
+      }
+    } else {
       try {
         this.conn = this.benchmark.makeConnection();
         this.conn.setAutoCommit(false);
@@ -104,30 +150,20 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           case RC:
           case RC_ELT:
           case RC_FOR_UPDATE:
-          case RC_TAILOR:
-          case RC_TAILOR_LOCK:
             this.conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
             break;
           case SI:
           case SI_ELT:
           case SI_FOR_UPDATE:
-          case SI_TAILOR:
             this.conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
             break;
           case SER:
             this.conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
         }
-        // read the lasted version
-        this.conn2 = this.benchmark.makeConnection();
-        this.conn2.setAutoCommit(true);
-        this.conn2.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
-
-//        this.conn.setTransactionIsolation(this.configuration.getIsolationMode());
       } catch (SQLException ex) {
         throw new RuntimeException("Failed to connect to database", ex);
       }
     }
-
     // Generate all the Procedures that we're going to need
     this.procedures.putAll(this.benchmark.getProcedures());
     for (Entry<TransactionType, Procedure> e : this.procedures.entrySet()) {
@@ -137,8 +173,32 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     }
   }
 
+  public boolean oldTransaction() {
+    return !switchFinish;
+  }
+
   protected void switchIsolation(Connection conn) throws SQLException {
     switch (TAdapter.getInstance().getNextCCType()) {
+      case RC:
+      case RC_ELT:
+      case RC_FOR_UPDATE:
+      case RC_TAILOR:
+      case RC_TAILOR_LOCK:
+        conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        break;
+      case SI:
+      case SI_ELT:
+      case SI_FOR_UPDATE:
+      case SI_TAILOR:
+        conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        break;
+      case SER:
+        conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    }
+  }
+
+  protected void switchIsolation(Connection conn, CCType ccType) throws SQLException {
+    switch (ccType) {
       case RC:
       case RC_ELT:
       case RC_FOR_UPDATE:
@@ -282,7 +342,6 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     while (true) {
 
       // PART 1: Init and check if done
-
       State preState = workloadState.getGlobalState();
 
       // Do nothing
@@ -296,7 +355,6 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           break;
         }
       }
-
       // PART 2: Wait for work
 
       // Sleep if there's nothing to do.
@@ -326,10 +384,10 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           LOG.warn("preState is {}? will continue...", preState);
           continue;
         }
-        default -> {}
-          // Do nothing
+        default -> {
+        }
+        // Do nothing
       }
-
       // PART 3: Execute work
 
       TransactionType transactionType =
@@ -341,18 +399,29 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
         // weird because if you add more simultaneous clients, you will
         // increase latency (queue delay) but we do this anyway since it is
         // useful sometimes
+        validationFinish = false;
+        executionFinish = false;
 
         // Wait before transaction if specified
+        boolean preDelay = rng().nextDouble() < THINK_TIME_PROBABILITY;
         long preExecutionWaitInMillis = getPreExecutionWaitInMillis(transactionType);
 
-        if (preExecutionWaitInMillis > 0) {
+        if (preExecutionWaitInMillis > 0 && preDelay) {
           try {
             LOG.debug(
                 "{} will sleep for {} ms before executing",
                 transactionType.getName(),
                 preExecutionWaitInMillis);
-
+            preSleep = true;
             Thread.sleep(preExecutionWaitInMillis);
+            preSleep = false;
+            if (needAbort) {
+              needAbort = false;
+              System.out.println("abort for switch");
+              if (rng().nextDouble() < THINK_TIME_PROBABILITY) {
+                Thread.sleep(preExecutionWaitInMillis);
+              }
+            }
           } catch (InterruptedException e) {
             LOG.error("Pre-execution sleep interrupted", e);
           }
@@ -408,15 +477,21 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
         // wait after transaction if specified
         long postExecutionWaitInMillis = getPostExecutionWaitInMillis(transactionType);
+        preDelay = rng().nextDouble() < THINK_TIME_PROBABILITY;
 
-        if (postExecutionWaitInMillis > 0) {
+        if (postExecutionWaitInMillis > 0 && preDelay) {
           try {
             LOG.debug(
-                "{} will sleep for {} ms after executing",
-                transactionType.getName(),
-                postExecutionWaitInMillis);
-
+                    "{} will sleep for {} ms after executing",
+                    transactionType.getName(),
+                    postExecutionWaitInMillis);
+            postSleep = true;
             Thread.sleep(postExecutionWaitInMillis);
+            postSleep = false;
+            if (needAbort) {
+              needAbort = false;
+              System.out.println("abort for switch");
+            }
           } catch (InterruptedException e) {
             LOG.error("Post-execution sleep interrupted", e);
           }
@@ -429,6 +504,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     LOG.debug("worker calling teardown");
 
     tearDown();
+  
   }
 
   private TransactionType getTransactionType(
@@ -496,7 +572,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             }
             this.conn = this.benchmark.makeConnection();
             this.conn.setAutoCommit(false);
-            switchIsolation(this.conn);
+            if (TAdapter.getInstance().isInSwitchPhase() && !switchFinish) {
+              switchIsolation(this.conn);
+            } else {
+              setIsolation(this.conn);
+            }
           } catch (SQLException ex) {
             if (LOG.isDebugEnabled()) {
               LOG.debug(String.format("%s failed to open a connection...", this));
@@ -508,18 +588,48 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
 //        this.conn.setTransactionIsolation(transactionType.getTransactionIsolation());
 //        System.out.println("set transaction benchmark: " + transactionType.getTransactionIsolation());
+        long start = System.currentTimeMillis();
 
         try {
-
           if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("%s %s attempting...", this, transactionType));
           }
 
           if (TAdapter.getInstance().isInSwitchPhase() && TAdapter.getInstance().isAllWorkersReadyForSwitch() && !switchFinish) {
-            switchIsolation(conn);
+            switchIsolation(conn, TAdapter.getInstance().getNextCCType());
             switchFinish = true;
             conn.setAutoCommit(false);
             System.out.println(Thread.currentThread().getName() + "switch finish: " + TAdapter.getInstance().getNextCCType());
+          }
+
+          boolean needRecord = false;
+          while (TAdapter.getInstance().blockForSwitch()) {
+            if (!switchFinish) {
+              switchIsolation(conn, TAdapter.getInstance().getNextCCType());
+              switchFinish = true;
+            }
+            try {
+              Thread.sleep(1);
+            } catch (InterruptedException ex) {
+              // pass
+            }
+            needRecord = true;
+          }
+
+          while (TAdapter.getInstance().abortForSwitch()) {
+            if (!switchFinish) {
+              switchIsolation(conn, TAdapter.getInstance().getNextCCType());
+              switchFinish = true;
+            }
+            try {
+              Thread.sleep(1);
+            } catch (InterruptedException ex) {
+              // pass
+            }
+            needRecord = true;
+          }
+          if (needRecord) {
+            System.out.println(Thread.currentThread().getName() + "-<586> block time: " + (System.currentTimeMillis() - start) + " ms");
           }
 
           status = this.executeWork(conn, transactionType);
@@ -534,13 +644,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             LOG.debug(String.format("%s %s committing...", this, transactionType));
           }
 
-          conn.commit();
-
+          commitOnConnection();
           break;
-
         } catch (Procedure.UserAbortException ex) {
           try {
-            conn.rollback();
+            rollbackOnConnection();
           } catch (SQLException ex2) {
             LOG.error("SQLException caught while rolling back transaction.", ex2);
             // force a reconnection
@@ -599,7 +707,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
                       ex.getErrorCode()),
                   ex);
               try {
-                conn.rollback();
+                rollbackOnConnection();
               } catch (SQLException ex2) {
                 LOG.error("SQLException caught while attempting to rollback transaction.", ex2);
                 // force a reconnection
@@ -632,7 +740,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
                       ex.getErrorCode()),
                   ex);
               try {
-                conn.rollback();
+                rollbackOnConnection();
               } catch (SQLException ex2) {
                 LOG.error("SQLException caught while attempting to rollback transaction.", ex2);
                 // force a reconnection
@@ -694,11 +802,14 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             break;
           }
         } finally {
-          if (status == TransactionStatus.SUCCESS) {
-            executeAfterWork(transactionType, true);
-          } else {
-            executeAfterWork(transactionType, false);
-          }
+//          long executeLatency = System.currentTimeMillis() - start;
+//          if (status == TransactionStatus.SUCCESS) {
+//            executeAfterWork(transactionType, true, executeLatency);
+//            // System.out.println("SUCCESS-758");
+//          } else {
+//            executeAfterWork(transactionType, false, executeLatency);
+//            // System.out.println("ERROR-761");
+//          }
 
           if (this.configuration.getNewConnectionPerTxn() && this.conn != null) {
             try {
@@ -707,8 +818,6 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             } catch (SQLException e) {
               LOG.error("Connection couldn't be closed.", e);
             }
-          } else if (this.conn == null) {
-            LOG.warn("Connection error detected.");
           }
 
           switch (status) {
@@ -821,6 +930,119 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     return false;
   }
 
+  private void rollbackOnConnection() throws SQLException {
+    if (useTxnSailsServer()) {
+      try{
+        sendMsgToTxnSailsServer("rollback");
+        parseControlResults();
+      } catch (InterruptedException e) {
+        // TODO: parse the exception
+        System.out.println(e);
+      }
+    } else {
+      conn.rollback();
+    }
+  }
+
+  private void commitOnConnection() throws SQLException {
+    if (useTxnSailsServer()) {
+      try{
+        sendMsgToTxnSailsServer("commit");
+        parseControlResults();
+      } catch (InterruptedException e) {
+        // TODO: parse the exception
+      }
+    } else {
+      conn.commit();
+    }
+  }
+
+  public boolean useTxnSailsServer() {
+    return benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR
+            || benchmark.getCCType() == CCType.DYNAMIC || benchmark.getCCType() == CCType.DYNAMIC_A
+            || benchmark.getCCType() == CCType.DYNAMIC_B;
+  }
+
+  public void sendMsgToTxnSailsServer(String msg) throws InterruptedException {
+    out.println(msg);
+    System.out.println(this.toString() + " send msg to txnSails server: " + msg);
+  }
+
+  public List<List<String>> parseExecutionResults() throws SQLException {
+    try {
+      String response = in.readLine();
+      if (response != null) {
+//        response = response.trim();
+        System.out.println(this.toString() + " received from server: " + response);
+        String[] parts = response.split("#");
+        if (parts[0].equals("ERROR")) {
+          throw new SQLException(parts[1], parts[2], Integer.parseInt(parts[3]));
+        } else if (parts[0].equals("OK")) {
+          if (response.length() == 2) {
+            return null;
+          }
+          return parseResults(response.substring(3));
+        } else {
+          System.out.println("Unknown status, " + parts[0]);
+          return null;
+        }
+      } else {
+        return null;
+      }
+    } catch (IOException ex) {
+      System.out.println("The connection is closed");
+      System.out.println(List.of(ex.getStackTrace()));
+      throw new RuntimeException(ex);
+    }
+  }
+
+  public void parseControlResults() throws SQLException {
+    try {
+      String response = in.readLine();
+      if (response != null) {
+//        response = response.trim();
+        System.out.println(this.toString() + " received from server: " + response);
+        String[] parts = response.split("#");
+        if (parts[0].equals("ERROR")) {
+          throw new SQLException(parts[1], parts[2], Integer.parseInt(parts[3]));
+        } else if (!parts[0].equals("OK")) {
+          System.out.println("Unknown status, " + parts[0]);
+        }
+      }
+    } catch (IOException ex) {
+      System.out.println("The connection is closed");
+      System.out.println(List.of(ex.getStackTrace()));
+      throw new RuntimeException(ex);
+    }
+  }
+
+  private List<List<String>> parseResults(String results) {
+//    System.out.println("result: " + results);
+    List<List<String>> rows = new ArrayList<>();
+    int index = 0;
+//    System.out.println("results.length(): " + results.length());
+    while (index < results.length()) {
+      // decode the number of columns in this row
+      int count = Integer.parseInt(results.substring(index, index + 2), 16);
+      index += 2;
+
+      List<String> row = new ArrayList<>();
+      for (int i = 0; i < count; i++) {
+        // read 4 char as the column length (2 bytes)
+        int length = Integer.parseInt(results.substring(index, index + 4), 16);
+        index += 4;
+//        System.out.println("length: " + length);
+        String value = results.substring(index, index + length); // fetch column value
+        index += length; // remove to next index
+
+        row.add(value);
+      }
+      rows.add(row);
+    }
+
+    return rows;
+  }
+
   /**
    * Optional callback that can be used to initialize the Worker right before the benchmark
    * execution begins
@@ -835,7 +1057,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   protected abstract TransactionStatus executeWork(Connection conn, TransactionType txnType)
       throws UserAbortException, SQLException;
 
-  protected abstract void executeAfterWork(TransactionType txnType, boolean success)
+  protected abstract void executeAfterWork(TransactionType txnType, boolean success, long latency)
           throws UserAbortException, SQLException;
 
   /** Called at the end of the test to do any clean up that may be required. */
@@ -854,10 +1076,22 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   protected long getPreExecutionWaitInMillis(TransactionType type) {
-    return 0;
+    return type.getPreExecutionWait();
   }
 
   protected long getPostExecutionWaitInMillis(TransactionType type) {
-    return 0;
+    return type.getPostExecutionWait();
+  }
+
+  public void closeTxnSailsServerConnection() {
+    if (useTxnSailsServer()) {
+      try {
+        System.out.println("close server connection");
+        socket.close();
+      } catch (IOException ex) {
+        System.out.println("server seem not exist");
+        throw new RuntimeException(ex);
+      }
+    }
   }
 }

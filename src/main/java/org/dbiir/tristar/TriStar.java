@@ -1,24 +1,11 @@
 package org.dbiir.tristar;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
+import java.io.*;
+import java.net.Socket;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.handler.codec.string.StringDecoder;
-import io.netty.handler.codec.string.StringEncoder;
-import io.netty.util.CharsetUtil;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -36,6 +23,8 @@ import org.apache.commons.configuration2.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.dbiir.tristar.adapter.Flusher;
+import org.dbiir.tristar.adapter.TAdapter;
+import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.Phase;
 import org.dbiir.tristar.benchmarks.Results;
 import org.dbiir.tristar.benchmarks.ThreadBench;
@@ -50,9 +39,9 @@ import org.dbiir.tristar.benchmarks.util.JSONUtil;
 import org.dbiir.tristar.benchmarks.util.ResultWriter;
 import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.util.TimeUtil;
+import org.dbiir.tristar.common.CCType;
 
 import lombok.Setter;
-import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 public class TriStar {
@@ -62,7 +51,6 @@ public class TriStar {
     private static final String SINGLE_LINE = StringUtil.repeat("=", 70);
     private static Thread flushThread;
     private static final AtomicBoolean waitForRespond = new AtomicBoolean(false);
-    private static String buffer;
 
     /* variable and set functions for test */
     @Setter
@@ -129,29 +117,35 @@ public class TriStar {
             benchmark.refreshCatalog();
         }
 
-        // register transaction templates
-        for (BenchmarkModule benchmark : benchList) {
-            NettyClientInitializer.benchmark = benchmark;
-            EventLoopGroup eventExecutors = new NioEventLoopGroup();
+        // register and analyse transaction templates
+        if (wrkld.getConcurrencyControlType() == CCType.RC_TAILOR ||
+                wrkld.getConcurrencyControlType() == CCType.SI_TAILOR ||
+                wrkld.getConcurrencyControlType() == CCType.DYNAMIC) {
+            Socket socket = null;
+            BufferedReader in;
+            PrintWriter out;
             try {
                 System.out.println("connect to txnSails server");
-                Bootstrap bootstrap =  new Bootstrap();
-                bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new NettyClientInitializer());
-                ChannelFuture channelFuture = bootstrap.connect(wrkld.getTxnSailsServerIp(),9876).sync();
-
-                registerTemplateSQLs(channelFuture.channel(), benchmark.getProcedures());
-                channelFuture.channel().closeFuture().sync();
-            }finally {
-                eventExecutors.shutdownGracefully();
+                socket = new Socket(wrkld.getTxnSailsServerIp(), 9876);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
+                for (BenchmarkModule benchmark : benchList) {
+                    registerTemplateSQLs(in, out, benchmark.getProcedures());
+                }
+                analyseTemplates(in, out);
+            } finally {
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
             }
         }
 
         // Execute Workload
         if (isBooleanOptionSet(argsLine, "execute")) {
             try {
-                createFlushThread(argsLine, wrkld.getConcurrencyControlType());
+//                createFlushThread(argsLine, wrkld.getConcurrencyControlType());
                 Results r = runWorkload(benchList, intervalMonitor);
-                finishFlushThread();
+//                finishFlushThread();
                 writeOutputs(r, activeTXTypes, argsLine, xmlConfig);
                 writeHistograms(r);
 
@@ -174,6 +168,25 @@ public class TriStar {
         } else {
             logger.info("Skipping benchmark workload execution");
         }
+
+        // close remote server
+        if (wrkld.getConcurrencyControlType() == CCType.RC_TAILOR ||
+                wrkld.getConcurrencyControlType() == CCType.SI_TAILOR ||
+                wrkld.getConcurrencyControlType() == CCType.DYNAMIC) {
+            Socket socket = null;
+            PrintWriter out;
+            try {
+                System.out.println("connect to txnSails server");
+                socket = new Socket(wrkld.getTxnSailsServerIp(), 9876);
+                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
+                out.println("close");
+            } finally {
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
+            }
+        }
+
     }
 
     private static WorkloadConfiguration loadBenchmark(XMLConfiguration xmlConfig,
@@ -189,6 +202,8 @@ public class TriStar {
         WorkloadConfiguration wrkld = new WorkloadConfiguration();
         wrkld.setBenchmarkName(targetBenchmark);
         wrkld.setXmlConfig(xmlConfig);
+        // init TransactionCollecter
+        TransactionCollector.getInstance().setWorkload(targetBenchmark.toLowerCase());
 
         if (targetBenchmark.contains("smallbank")) {
             // load smallbank variables
@@ -233,7 +248,8 @@ public class TriStar {
         wrkld.setScaleFactor(xmlConfig.getDouble("scalefactor", 1.0));
         wrkld.setDataDir(xmlConfig.getString("datadir", "."));
         wrkld.setDDLPath(xmlConfig.getString("ddlpath", null));
-        String type = !type_.equals("default") ? type_ : xmlConfig.getString("concurrencyControlType", "SERIALIZABLE");
+        String type = xmlConfig.getString("concurrencyControlType", "SERIALIZABLE");
+        System.out.println("concurrencyControlType: " + type);
         wrkld.setConcurrencyControlType(type);
         wrkld.setTxnSailsServerIp(xmlConfig.getString("txnSailsServer", "127.0.0.1"));
 
@@ -310,6 +326,7 @@ public class TriStar {
         // Wrap the list of transactions and save them
         TransactionTypes tt = new TransactionTypes(ttypes);
         wrkld.setTransTypes(tt);
+        TAdapter.getInstance().initTransactionTypes(ttypes);
         logger.debug("Using the following transaction types: %s".formatted(tt));
         benchList.add(bench);
 
@@ -644,10 +661,6 @@ public class TriStar {
             logger.info("Output summary data into file: %s".formatted(summaryFileName));
             rw.writeSummary(ps);
         }
-        try (PrintStream ps = new PrintStream(FileUtil.joinPath(metaDirectory, summaryFileName))) {
-            logger.info("Output {meta directory} summary data into file: %s".formatted(summaryFileName));
-            rw.writeSummary(ps);
-        }
 
         String paramsFileName = baseFileName + ".params.json";
         try (PrintStream ps = new PrintStream(FileUtil.joinPath(outputDirectory, paramsFileName))) {
@@ -711,58 +724,14 @@ public class TriStar {
         return (false);
     }
 
-    // interact with txnSails server
-    public static class NettyClientInitializer extends ChannelInitializer<SocketChannel> {
-        public static BenchmarkModule benchmark = null;
-        @Override
-        protected void initChannel(SocketChannel ch) throws Exception {
-            if (benchmark != null) {
-                NettyClientHandler.b = benchmark;
-            }
-            ChannelPipeline pipeline = ch.pipeline();
-            // Decoder
-            pipeline.addLast(new LengthFieldBasedFrameDecoder(1024, 0, 4, 0, 4));
-            // Encoder
-            pipeline.addLast(new LengthFieldPrepender(4));
-            pipeline.addLast(new StringEncoder(CharsetUtil.UTF_8));
-            pipeline.addLast(new StringDecoder(CharsetUtil.UTF_8));
-            pipeline.addLast(new NettyClientHandler());
-        }
-    }
-
-
-    public static class NettyClientHandler extends SimpleChannelInboundHandler<String> {
-        public static BenchmarkModule b = null;
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
-            System.out.println("response: " + msg);
-//            ctx.writeAndFlush("from client " + System.currentTimeMillis());
-            // TODO: record the sql index for execution
-            buffer = msg;
-            // unlock the `waitForResponse` lock
-            unlockWaitForResponse();
-        }
-
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            cause.printStackTrace();
-            ctx.close();
-        }
-
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-//            System.out.println("connect to the server");
-        }
-    }
-
-    private static void registerTemplateSQLs(Channel ctx,
+    private static void registerTemplateSQLs(BufferedReader in, PrintWriter out,
                                              Map<TransactionType, Procedure> procedures) throws InterruptedException {
         // register sql apis
         for (Map.Entry<TransactionType, Procedure> entry: procedures.entrySet()) {
             if (entry.getKey().equals(TransactionType.INVALID)) {
                 continue;
             }
-            sendMsgToTxnSailsServer(ctx, "register_begin#" + entry.getKey().getName() + "\n");
+//            sendMsgToTxnSailsServer(ctx, "register_begin#" + entry.getKey().getName() + "\n");
             if (entry.getValue().getTemplateSQLMetas() == null) {
                 continue;
             }
@@ -778,49 +747,36 @@ public class TriStar {
                     sb.append(t.getOriginSQL()).append("#");
                     sb.append(t.getSkipIndex());
                 }
-                sendMsgToTxnSailsServer(ctx, sb.toString() + "\n");
+                out.println(sb.toString());
                 // update the server side index
-                updateTheServerSideIndex(entry.getValue(), t);
+                try {
+                    String response = in.readLine();
+                    String[] parts = response.split("#");
+                    if (parts.length < 2) {
+                        System.out.println("response not includes  " + response);
+                    }
+                    entry.getValue().updateClientServerIndexMap(t.getIndexInClientSide(), Integer.parseInt(parts[1]));
+                } catch (IOException ex) {
+                    System.out.println("The connection seems to be closed.");
+                    System.out.println(List.of(ex.getStackTrace()));
+                    throw new InterruptedException(ex.getMessage());
+                }
             }
-            sendMsgToTxnSailsServer(ctx, "register_end#" + entry.getKey().getName() + "\n");
         }
-
-        lockWaitForResponse();
-        ctx.close();
-        unlockWaitForResponse();
     }
 
-    private static void updateTheServerSideIndex(Procedure proc, TemplateSQLMeta t) {
-        lockWaitForResponse();
-        String[] parts = buffer.split("#");
-        if (parts.length < 2) {
-            System.out.println("response not includes  " + buffer);
+    private static void analyseTemplates(BufferedReader in, PrintWriter out) throws InterruptedException {
+        out.println("analysis");
+        try {
+            in.readLine();
+        } catch (IOException ex) {
+            System.out.println("The connection seems to be closed.");
+            System.out.println(List.of(ex.getStackTrace()));
+            throw new InterruptedException(ex.getMessage());
         }
-        proc.updateClientServerIndexMap(t.getIndexInClientSide(), Integer.parseInt(parts[1]));
-        unlockWaitForResponse();
     }
 
     private static List<TemplateSQLMeta> getTemplateSQLMeta(Procedure p) {
         return p.getTemplateSQLMetas();
-    }
-
-    private static void sendMsgToTxnSailsServer(Channel ctx, String msg) throws InterruptedException {
-        lockWaitForResponse();
-        ByteBuf resp = ctx.alloc().buffer(msg.length());
-        resp.writeBytes(msg.getBytes(StandardCharsets.UTF_8));
-        ctx.writeAndFlush(resp).sync();
-    }
-
-    private static void lockWaitForResponse() {
-        while (!Thread.interrupted() && !waitForRespond.compareAndSet(false, true)) {
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-            }
-        }
-    }
-
-    private static void unlockWaitForResponse() {
-        waitForRespond.set(false);
     }
 }

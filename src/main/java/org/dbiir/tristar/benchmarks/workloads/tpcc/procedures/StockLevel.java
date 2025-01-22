@@ -17,120 +17,136 @@
 
 package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
-import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
-import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Random;
+
+import org.dbiir.tristar.adapter.TAdapter;
+import org.dbiir.tristar.adapter.TransactionCollector;
+import org.dbiir.tristar.benchmarks.api.SQLStmt;
+import org.dbiir.tristar.benchmarks.api.Worker;
+import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.distributions.ZipfianGenerator;
+import org.dbiir.tristar.benchmarks.util.StringUtil;
+import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConfig;
+import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCConstants;
+import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCUtil;
+import org.dbiir.tristar.benchmarks.workloads.tpcc.TPCCWorker;
+import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 public class StockLevel extends TPCCProcedure {
 
-  private static final Logger LOG = LoggerFactory.getLogger(StockLevel.class);
+  public final SQLStmt stmtUpdateConflictSSQL =
+          new SQLStmt(
+                  """
+                SELECT *
+                 FROM %s
+                 WHERE ol_w_id = ?
+                   AND ol_i_id = ?
+                 FOR UPDATE
+            """
+                          .formatted(TPCCConstants.TABLENAME_CONFLICT_STOCK));
 
-  public SQLStmt stockGetDistOrderIdSQL =
-      new SQLStmt(
-          """
-        SELECT D_NEXT_O_ID
-          FROM  %s
-         WHERE D_W_ID = ?
-           AND D_ID = ?
-    """
-              .formatted(TPCCConstants.TABLENAME_DISTRICT));
+  public SQLStmt stockGetStockSQL =
+          new SQLStmt(
+                  """
+                SELECT S_QUANTITY
+                 FROM  %s
+                 WHERE s_w_id = ?
+                 AND s_i_id = ?
+            """
+                          .formatted(TPCCConstants.TABLENAME_STOCK));
 
-  public SQLStmt stockGetCountStockSQL =
-      new SQLStmt(
-          """
-        SELECT COUNT(DISTINCT (S_I_ID)) AS STOCK_COUNT
-         FROM  %s, %s
-         WHERE OL_W_ID = ?
-         AND OL_D_ID = ?
-         AND OL_O_ID < ?
-         AND OL_O_ID >= ?
-         AND S_W_ID = ?
-         AND S_I_ID = OL_I_ID
-         AND S_QUANTITY < ?
-    """
-              .formatted(TPCCConstants.TABLENAME_ORDERLINE, TPCCConstants.TABLENAME_STOCK));
+  static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+  static {
+    clientServerIndexMap.put(0, -1);
+  }
+  @Override
+  public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+    clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+  }
+  @Override
+  public List<TemplateSQLMeta> getTemplateSQLMetas() {
+    List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+    templateSQLMetas.add(new TemplateSQLMeta("StockLevel", 0, TPCCConstants.TABLENAME_STOCK,
+            0, "SELECT S_QUANTITY FROM " + TPCCConstants.TABLENAME_STOCK + "WHERE s_w_id = ? AND s_i_id = ?"));
+    return templateSQLMetas;
+  }
 
   public void run(
-      Connection conn,
-      Random gen,
-      int w_id,
-      int numWarehouses,
-      int terminalDistrictLowerID,
-      int terminalDistrictUpperID,
-      TPCCWorker w)
-      throws SQLException {
+          Connection conn,
+          Random gen,
+          int w_id,
+          int numWarehouses,
+          int terminalDistrictLowerID,
+          int terminalDistrictUpperID,
+          CCType ccType,
+          long[] keys,
+          TPCCWorker w)
+          throws SQLException {
 
-    int threshold = TPCCUtil.randomNumber(10, 20, gen);
-    int d_id = TPCCUtil.randomNumber(terminalDistrictLowerID, terminalDistrictUpperID, gen);
+    int i_id = TPCCUtil.getItemID(gen);
 
-    int o_id = getOrderId(conn, w_id, d_id);
-
-    int stock_count = getStockCount(conn, w_id, threshold, d_id, o_id);
-
-    if (LOG.isTraceEnabled()) {
-      String terminalMessage =
-          "\n+-------------------------- STOCK-LEVEL --------------------------+"
-              + "\n Warehouse: "
-              + w_id
-              + "\n District:  "
-              + d_id
-              + "\n\n Stock Level Threshold: "
-              + threshold
-              + "\n Low Stock Count:       "
-              + stock_count
-              + "\n+-----------------------------------------------------------------+\n\n";
-      LOG.trace(terminalMessage);
+    if (ccType == CCType.RC_ELT) {
+      setConflictC(conn, w_id, i_id);
     }
+
+    getStock(w, conn, w_id, i_id);
+    keys[0] = (long) (w_id - 1) * TPCCConfig.configItemCount + (long) (i_id - 1);
   }
 
-  private int getOrderId(Connection conn, int w_id, int d_id) throws SQLException {
-    try (PreparedStatement stockGetDistOrderId =
-        this.getPreparedStatement(conn, stockGetDistOrderIdSQL)) {
-      stockGetDistOrderId.setInt(1, w_id);
-      stockGetDistOrderId.setInt(2, d_id);
 
-      try (ResultSet rs = stockGetDistOrderId.executeQuery()) {
+  private int getStock(Worker worker, Connection conn, int w_id, int i_id)
+          throws SQLException {
+    if (worker.useTxnSailsServer()) {
+      int quantity = 0;
+      try {
+        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "StockLevel", w_id, i_id));
+        List<List<String>> results = worker.parseExecutionResults();
+        quantity = Integer.parseInt(results.get(0).get(0));
+      } catch (InterruptedException e) {
+        System.out.println("InterruptedException on sending or receiving message");
+      }
+      return quantity;
+    } else {
+      try (PreparedStatement stockGetCountStock =
+                   this.getPreparedStatement(conn, stockGetStockSQL)) {
+        stockGetCountStock.setInt(1, w_id);
+        stockGetCountStock.setInt(2, i_id);
 
-        if (!rs.next()) {
-          throw new RuntimeException("D_W_ID=" + w_id + " D_ID=" + d_id + " not found!");
+        try (ResultSet rs = stockGetCountStock.executeQuery()) {
+          if (!rs.next()) {
+            String msg =
+                    String.format(
+                            "Failed to get StockLevel result for query [W_ID=%d, I_ID=%d]",
+                            w_id, i_id);
+
+            throw new RuntimeException(msg);
+          }
+          return rs.getInt("S_QUANTITY");
         }
-        return rs.getInt("D_NEXT_O_ID");
       }
     }
   }
 
-  private int getStockCount(Connection conn, int w_id, int threshold, int d_id, int o_id)
-      throws SQLException {
-    try (PreparedStatement stockGetCountStock =
-        this.getPreparedStatement(conn, stockGetCountStockSQL)) {
-      stockGetCountStock.setInt(1, w_id);
-      stockGetCountStock.setInt(2, d_id);
-      stockGetCountStock.setInt(3, o_id);
-      stockGetCountStock.setInt(4, o_id - 20);
-      stockGetCountStock.setInt(5, w_id);
-      stockGetCountStock.setInt(6, threshold);
-
-      try (ResultSet rs = stockGetCountStock.executeQuery()) {
+  private void setConflictC(Connection conn, int w_id, int i_id) throws SQLException {
+    try (PreparedStatement stmtSetConfC = this.getPreparedStatement(conn, stmtUpdateConflictSSQL)) {
+      stmtSetConfC.setInt(1, w_id);
+      stmtSetConfC.setInt(2, i_id);
+      try (ResultSet rs = stmtSetConfC.executeQuery()) {
         if (!rs.next()) {
-          String msg =
-              String.format(
-                  "Failed to get StockLevel result for COUNT query [W_ID=%d, D_ID=%d, O_ID=%d]",
-                  w_id, d_id, o_id);
-
-          throw new RuntimeException(msg);
+          throw new RuntimeException("ol_w_id=" + w_id + " ol_i_id=" + i_id + " not found!");
         }
-
-        return rs.getInt("STOCK_COUNT");
       }
     }
+  }
+
+  public void doAfterCommit() {
   }
 }

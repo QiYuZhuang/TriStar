@@ -19,11 +19,13 @@ class Graph:
 
     def process_node_and_edge_list(self, row: list[str], delim: str) -> None:
         # process the node
-        # self.nodes.append([int(row[0].split(delim)[1])])
+        self.nodes.append([])
+        # self.nodes[-1].append(int(row[0].split(delim)[1]))
         src = int(row[0].split(delim)[0])
         read_cnt, write_cnt = int(row[0].split(delim)[1]), int(row[0].split(delim)[2])
-        success = int(row[0].split(delim)[3])
-        self.nodes.append([read_cnt, write_cnt])
+        latency = float(row[0].split(delim)[3])
+        success = int(row[0].split(delim)[4])
+        self.nodes[-1].append([read_cnt, write_cnt, latency, success])
         # process edge
         edges = row[1:]
         for edge in edges:

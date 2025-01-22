@@ -1,42 +1,42 @@
 package org.dbiir.tristar.benchmarks.workloads.ycsb.procedures;
 
+import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Random;
+import java.util.*;
 
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.adapter.TransactionCollector;
 import org.dbiir.tristar.benchmarks.api.Procedure;
 import org.dbiir.tristar.benchmarks.api.SQLStmt;
-import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
-
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.RWRecord;
+import org.dbiir.tristar.benchmarks.util.StringUtil;
 import org.dbiir.tristar.benchmarks.workloads.smallbank.SmallBankConstants;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants;
 import org.dbiir.tristar.common.CCType;
 import org.dbiir.tristar.common.LockType;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
+import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
 
 public class ReadWriteRecord extends Procedure {
     public final SQLStmt readStmt = new SQLStmt(
-        "SELECT vid, FIELD1 FROM " + TABLE_NAME + " WHERE YCSB_KEY=?;"
+        "SELECT FIELD1 FROM " + TABLE_NAME + " WHERE YCSB_KEY=?;"
     );
 
     public final SQLStmt selectForUpdate = new SQLStmt(
         "UPDATE " + TABLE_NAME +
-                " AS new SET FIELD1=old.FIELD1 FROM " +
+                " AS new SET FIELD1=old.FIELD1, vid = old.vid + 1 FROM " +
                 TABLE_NAME +
                 " AS old WHERE new.YCSB_KEY = ? " +
-                " AND old.YCSB_KEY=new.YCSB_KEY RETURNING new.vid, new.FIELD1;"
+                " AND old.YCSB_KEY=new.YCSB_KEY RETURNING new.FIELD1;"
     );
 
     public final SQLStmt updateStmt = new SQLStmt(
-        "UPDATE " + TABLE_NAME + " SET vid=vid+1, FIELD1=?,FIELD2=?,FIELD3=?,FIELD4=?,FIELD5=?," +
-            "FIELD6=?,FIELD7=?,FIELD8=?,FIELD9=?,FIELD10=? WHERE YCSB_KEY=?;"
+        "UPDATE " + TABLE_NAME + " SET FIELD1=? WHERE YCSB_KEY=?;"
     );
 
     public final SQLStmt conflictStmt = new SQLStmt(
@@ -46,11 +46,32 @@ public class ReadWriteRecord extends Procedure {
 
     private int[] ops = new int[10];
 
+    static HashMap<Integer, Integer> clientServerIndexMap = new HashMap<>();
+    static {
+        clientServerIndexMap.put(0, -1);
+        clientServerIndexMap.put(1, -1);
+    }
+
+    @Override
+    public void updateClientServerIndexMap(int clientSideIndex, int serverSideIndex) {
+        clientServerIndexMap.put(clientSideIndex, serverSideIndex);
+    }
+
+    @Override
+    public List<TemplateSQLMeta> getTemplateSQLMetas() {
+        List<TemplateSQLMeta> templateSQLMetas = new LinkedList<>();
+        templateSQLMetas.add(new TemplateSQLMeta("ReadWriteRecord", 0, TABLE_NAME,
+                0, "SELECT FIELD1 FROM " + TABLE_NAME + " WHERE YCSB_KEY=?;"));
+        templateSQLMetas.add(new TemplateSQLMeta("ReadWriteRecord", 1, TABLE_NAME,
+                1, "UPDATE " + TABLE_NAME + " SET FIELD1=? WHERE YCSB_KEY=?;"));
+        return templateSQLMetas;
+    }
+
     /*
      * @param ratio1: <read transaction : write transaction> (read transaction represents read-only)
      * @param ratio2: <read operation : write operation> (in write transaction)
      */
-    public void run(Worker worker, Connection conn, Connection conn2, int[] keyname, String[][] vals, double ratio1, double ratio2, long tid, long[] versions, CCType type) throws SQLException {
+    public void run(Worker worker, Connection conn, int[] keyname, String[][] vals, double ratio1, double ratio2, CCType type) throws SQLException {
         /*
          * if ratio1 = 0, it is a read-only transaction;
          * if ratio2 = 0, the transaction's operations are read operation;
@@ -60,6 +81,8 @@ public class ReadWriteRecord extends Procedure {
         for (int i = 0; i < keyname.length; i++) {
             sortedKeyname[i] = keyname[keyname.length - i - 1];
         }
+
+        System.arraycopy(sortedKeyname, 0, keyname, 0, keyname.length);
 
         int len = keyname.length;
         StringBuilder finalStmt = new StringBuilder();
@@ -102,194 +125,62 @@ public class ReadWriteRecord extends Procedure {
             }
         }
 
-        int phase = 0;
-        if (type == CCType.RC_TAILOR_LOCK) {
-            for (int i = 0; i < len; i++) {
+        for (int i = 0; i < len; i++) {
+            if (worker.useTxnSailsServer()) {
                 try {
-                    if (ops[i] == 1)
-                        LockTable.getInstance().tryLock(TABLE_NAME, sortedKeyname[i], tid, LockType.SH);
-                    else
-                        LockTable.getInstance().tryLock(TABLE_NAME, sortedKeyname[i], tid, LockType.EX);
-                    phase++;
-                } catch (SQLException ex) {
-                    releaseTailorCCLock(phase, sortedKeyname, tid);
-                    throw ex;
-                }
-            }
-        }
-
-        SQLStmt sqlStmt = new SQLStmt(finalStmt.toString());
-        try (PreparedStatement stmt = conn.prepareStatement(sqlStmt.getSQL())) {
-            // fill the field
-            int idx = 1;
-            for (int i = 0; i < len; i++) {
-                if (ops[i] == 1) {
-                    stmt.setInt(idx++, sortedKeyname[i]);
-                } else if (ops[i] == 2) {
-                    for (int j = 0; j < vals[i].length; j++) {
-                        stmt.setString(idx++, vals[i][j]);
-                    }
-                    stmt.setInt(idx++, sortedKeyname[i]);
-                }
-            }
-
-            boolean resultsAvailable = stmt.execute();
-            idx = 0;
-            while (true) {
-                if (resultsAvailable) {
-                    ResultSet rs = stmt.getResultSet();
-                    rs.next();
-                    versions[idx++] = rs.getLong(1);
-                } else if (stmt.getUpdateCount() < 0) {
-                    idx++;
-                    break;
-                }
-
-                resultsAvailable = stmt.getMoreResults();
-            }
-        } catch (SQLException ex) {
-            releaseTailorCCLock(phase, sortedKeyname, tid);
-            throw ex;
-        }
-
-        while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-            // set current thread ready, block for all thread to ready
-            if (!worker.isSwitchPhaseReady()) {
-                worker.setSwitchPhaseReady(true);
-                System.out.println(Thread.currentThread().getName() + " is ready for switch");
-            } else {
-                try {
-                    Thread.sleep(1);
-                } catch (InterruptedException e) {
-                }
-            }
-        }
-
-        if (TAdapter.getInstance().isInSwitchPhase()) {
-            type = TAdapter.getInstance().getSwitchPhaseCCType();
-        }
-
-        if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
-            int validationPhase = 0;
-            while (TAdapter.getInstance().isInSwitchPhase() && !TAdapter.getInstance().isAllWorkersReadyForSwitch()) {
-                // set current thread ready, block for all thread to ready
-                worker.setSwitchPhaseReady(true);
-            }
-            for (int i = 0; i < len; i++) {
-                try {
-                    if (ops[i] == 1)
-                        LockTable.getInstance().tryValidationLock(TABLE_NAME, tid, sortedKeyname[i], LockType.SH, type);
-                    else
-                        LockTable.getInstance().tryValidationLock(TABLE_NAME, tid, sortedKeyname[i], LockType.EX, type);
-                    validationPhase++;
                     if (ops[i] == 1) {
-                        long v = LockTable.getInstance().getHotspotVersion(TABLE_NAME, (long) sortedKeyname[i]);
-                        if (v >= 0) {
-                            if (v != versions[i]) {
-                                releaseTailorValidationLock(validationPhase, sortedKeyname);
-                                String msg = String.format("Validation failed for ycsb_key #%d, usertable", sortedKeyname[i]);
-                                throw new SQLException(msg, "500");
-                            }
-                        } else {
-                            try (PreparedStatement balStmt1 = this.getPreparedStatement(conn, readStmt, sortedKeyname[i])) {
-                                try (ResultSet balRes1 = balStmt1.executeQuery()) {
-                                    if (!balRes1.next()) {
-                                        releaseTailorValidationLock(validationPhase, sortedKeyname);
-                                        String msg = String.format("Validation failed for ycsb_key #%d, usertable", sortedKeyname[i]);
-                                        throw new UserAbortException(msg);
-                                    }
-                                    v = balRes1.getLong(2);
-                                    LockTable.getInstance().updateHotspotVersion(TABLE_NAME, sortedKeyname[i], v);
-                                    if (v != versions[i]) {
-                                        releaseTailorValidationLock(validationPhase, sortedKeyname);
-                                        String msg = String.format("Validation failed for ycsb_key #%d, usertable", sortedKeyname[i]);
-                                        throw new SQLException(msg, "500");
-                                    }
+                        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i]));
+                    } else if (ops[i] == 2) {
+                        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i]));
+                    }
+                    worker.parseExecutionResults();
+                } catch (InterruptedException ex) {
+                    System.out.println("InterruptedException on sending or receiving message");
+                }
+            } else {
+                if (ops[i] == 1) {
+                    try (PreparedStatement stmt = switch (type) {
+                        case SI_FOR_UPDATE, RC_FOR_UPDATE -> conn.prepareStatement(selectForUpdate.getSQL());
+                        default -> conn.prepareStatement(readStmt.getSQL());
+                    }) {
+                        stmt.setInt(1, sortedKeyname[i]);
+                        boolean rs = stmt.execute();
+                        if (rs) {
+                            try (ResultSet r = stmt.getResultSet()) {
+                                while (r.next()) {
+                                    // do nothing
                                 }
                             }
                         }
+                        stmt.getResultSet().close();
                     }
-                } catch (SQLException ex) {
-                    releaseTailorValidationLock(validationPhase, sortedKeyname);
-                    throw ex;
+                } else if (ops[i] == 2) {
+                    try (PreparedStatement stmt = conn.prepareStatement(updateStmt.getSQL())) {
+                        stmt.setString(1, vals[i][0]);
+                        stmt.setInt(2, sortedKeyname[i]);
+                        boolean rs = stmt.execute();
+                        if (rs) {
+                            stmt.getResultSet().close();
+                        }
+                    }
                 }
             }
         }
     }
 
-    private void releaseTailorCCLock(int phase, int[] keynames, long tid) {
-        if (phase == 0)
-            return;
-        for (int i = phase; i > 0; i--) {
-            LockTable.getInstance().releaseLock(TABLE_NAME, keynames[i - 1], tid);
-        }
-    }
-
-    private void releaseTailorValidationLock(int phase, int[] keynames) {
-        if (phase == 0)
-            return;
-        for (int i = phase; i > 0; i--) {
-            if (ops[i - 1] == 1)
-                LockTable.getInstance().releaseValidationLock(TABLE_NAME, keynames[i - 1], LockType.SH);
-            else
-                LockTable.getInstance().releaseValidationLock(TABLE_NAME, keynames[i - 1], LockType.EX);
-        }
-    }
-
-    public void doAfterCommit(int[] keynames, CCType type, boolean success, long[] versions, long tid) {
-        if (TransactionCollector.getInstance().isSample()) {
-            int rset_idx = 0;
-            int wset_idx = 0;
-            int write_cnt = 0;
-            for (int i = 0; i < ops.length; i++) {
-                if (ops[i] == 2) write_cnt++;
-            }
-
-            RWRecord[] reads = new RWRecord[ops.length - write_cnt];
-//                    {new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), (int) custId)};
-            RWRecord[] writes = new RWRecord[write_cnt];
-            for (int i = 0; i < ops.length; i++) {
-                if (ops[i] == 1) {
-                    reads[rset_idx++] = new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
-                } else {
-                    writes[wset_idx++] = new RWRecord(YCSBConstants.TABLENAME_TO_INDEX.get(TABLE_NAME), keynames[i]);
-                }
-            }
-            TransactionCollector.getInstance().addTransactionSample(1, reads, writes, success?1:0);
-        }
-        if (!success)
-            return;
-        if (type == CCType.RC_TAILOR_LOCK) {
-            // todo:
-            for (int i = ops.length - 1; i >= 0; i--) {
-                if (ops[i] == 1) {
-                    LockTable.getInstance().releaseLock(TABLE_NAME, keynames[i], tid);
-                }
-            }
-        }
-        if (type == CCType.RC_TAILOR || type == CCType.SI_TAILOR) {
-            for (int i = ops.length - 1; i >= 0; i--) {
-                if (ops[i] == 1) {
-                    LockTable.getInstance().releaseValidationLock(TABLE_NAME, keynames[i], LockType.SH);
-                } else {
-                    LockTable.getInstance().releaseValidationLock(TABLE_NAME, keynames[i], LockType.EX);
-                    LockTable.getInstance().updateHotspotVersion(TABLE_NAME, keynames[i], versions[i]);
-                }
-            }
-        }
+    public void doAfterCommit(int[] keynames, CCType type, boolean success, boolean validateFinished, long[] versions, long tid, boolean old, long latency) {
+        return;
     }
 
     private void doConflictOperations(Connection conn, int[] keynames) throws SQLException {
         StringBuilder stringBuilder = new StringBuilder();
 
-        for (int i = 0; i < keynames.length; i++) {
-            stringBuilder.append(conflictStmt.getSQL());
-        }
+        stringBuilder.append(String.valueOf(conflictStmt.getSQL()).repeat(keynames.length));
 
         try (PreparedStatement stmt = conn.prepareStatement(stringBuilder.toString())) {
             int idx = 1;
-            for (int i = 0; i < keynames.length; i++) {
-                stmt.setInt(idx++, keynames[i]);
+            for (int keyname : keynames) {
+                stmt.setInt(idx++, keyname);
             }
             boolean rs = stmt.execute();
             if (rs) {
