@@ -41,7 +41,7 @@ def generate_mysql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrtup: f
     # 添加子节点
     ElementTree.SubElement(root, 'type').text = "POSTGRES"
     ElementTree.SubElement(root, 'driver').text = "org.postgresql.Driver"
-    ElementTree.SubElement(root, "url").text = ("jdbc:postgresql://localhost:5432/osprey?sslmode=disable&amp"
+    ElementTree.SubElement(root, "url").text = ("jdbc:postgresql://"+ txnSailsServerIp + ":5432/osprey?sslmode=disable&amp"
                                                 ";ApplicationName=smallbank&amp;reWriteBatchedInserts=true")
     ElementTree.SubElement(root, "username").text = "postgres"
     ElementTree.SubElement(root, "password").text = "Ss123!@#"
@@ -179,7 +179,7 @@ if __name__ == '__main__':
     if not os.path.exists("../config"):
         os.mkdir("../config")
 
-    txnSailsServerIp = "21.6.66.164"
+    txnSailsServerIp = "21.6.66.164" # your server ip
     scaleFactor = 1000
     warmupTime = 20
     execTime = 60

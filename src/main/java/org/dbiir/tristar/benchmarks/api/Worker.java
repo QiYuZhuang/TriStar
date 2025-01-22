@@ -1084,12 +1084,14 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   }
 
   public void closeTxnSailsServerConnection() {
-    try {
-      System.out.println("close server connection");
-      socket.close();
-    } catch (IOException ex) {
-      System.out.println("server seem not exist");
-      throw new RuntimeException(ex);
+    if (useTxnSailsServer()) {
+      try {
+        System.out.println("close server connection");
+        socket.close();
+      } catch (IOException ex) {
+        System.out.println("server seem not exist");
+        throw new RuntimeException(ex);
+      }
     }
   }
 }
