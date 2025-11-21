@@ -94,14 +94,9 @@ public class ReadWriteRecord extends Procedure {
             if (rand1 >= ratio1 || rand2 >= ratio2) {
                 // read operation
                 ops[i] = 1;
-                // if (type == CCType.RC_FOR_UPDATE || type == CCType.SI_FOR_UPDATE)
-                //     finalStmt.append(selectForUpdate.getSQL());
-                // else
-                //     finalStmt.append(readStmt.getSQL());
             } else {
                 // write operation
                 ops[i] = 2;
-                // finalStmt.append(updateStmt.getSQL());
             }
         }
         Arrays.sort(ops);
@@ -129,9 +124,19 @@ public class ReadWriteRecord extends Procedure {
             if (worker.useTxnSailsServer()) {
                 try {
                     if (ops[i] == 1) {
-                        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i]));
+                        if (i == len - 1) {
+                          // last operation
+                          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i], 1));
+                        } else {
+                          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i]));
+                        }
                     } else if (ops[i] == 2) {
-                        worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i]));
+                        if (i == len - 1) {
+                          // last operation
+                          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i], 1));
+                        } else {
+                          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i]));
+                        }
                     }
                     worker.parseExecutionResults();
                 } catch (InterruptedException ex) {

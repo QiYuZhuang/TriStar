@@ -22,6 +22,8 @@ public enum CCType {
     RC("RC"),
     SI("SI"),
     SWITCH("SWITCH"),
+    /* fine serial */
+    FS("FINE_SERIAL"),
     NUM_CC("NUM_CC");
     private final String name;
 

@@ -961,7 +961,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   public boolean useTxnSailsServer() {
     return benchmark.getCCType() == CCType.RC_TAILOR || benchmark.getCCType() == CCType.SI_TAILOR
             || benchmark.getCCType() == CCType.DYNAMIC || benchmark.getCCType() == CCType.DYNAMIC_A
-            || benchmark.getCCType() == CCType.DYNAMIC_B;
+            || benchmark.getCCType() == CCType.DYNAMIC_B || benchmark.getCCType() == CCType.FS;
   }
 
   public void sendMsgToTxnSailsServer(String msg) throws InterruptedException {
