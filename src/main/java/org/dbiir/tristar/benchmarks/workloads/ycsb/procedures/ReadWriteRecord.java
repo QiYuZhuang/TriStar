@@ -120,25 +120,33 @@ public class ReadWriteRecord extends Procedure {
             }
         }
 
+        StringBuilder sqlCommand = new StringBuilder();
+        long start_time = System.nanoTime();
         for (int i = 0; i < len; i++) {
             if (worker.useTxnSailsServer()) {
                 try {
                     if (ops[i] == 1) {
                         if (i == len - 1) {
                           // last operation
-                          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i], 1));
+                          sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i], 1));
+                          worker.sendMsgToTxnSailsServer(sqlCommand.toString());
                         } else {
-                          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i]));
+                          sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i]));
+                          sqlCommand.append("@");
                         }
                     } else if (ops[i] == 2) {
                         if (i == len - 1) {
                           // last operation
-                          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i], 1));
+                          sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i], 1));
+                          worker.sendMsgToTxnSailsServer(sqlCommand.toString());
                         } else {
-                          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i]));
+                          sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i]));
+                          sqlCommand.append("@");
                         }
                     }
-                    worker.parseExecutionResults();
+                    if (i == len - 1) {
+                      worker.parseExecutionResults();
+                    }
                 } catch (InterruptedException ex) {
                     System.out.println("InterruptedException on sending or receiving message");
                 }
@@ -171,6 +179,7 @@ public class ReadWriteRecord extends Procedure {
                 }
             }
         }
+        System.out.println("Execute time: " + (System.nanoTime() - start_time) / 1000 + "us");
     }
 
     public void doAfterCommit(int[] keynames, CCType type, boolean success, boolean validateFinished, long[] versions, long tid, boolean old, long latency) {

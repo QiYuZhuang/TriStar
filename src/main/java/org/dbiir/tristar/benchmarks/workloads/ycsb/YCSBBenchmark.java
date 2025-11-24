@@ -94,26 +94,9 @@ public final class YCSBBenchmark extends BenchmarkModule {
   @Override
   protected List<Worker<? extends BenchmarkModule>> makeWorkersImpl() {
     List<Worker<? extends BenchmarkModule>> workers = new ArrayList<>();
-    try {
-      // LOADING FROM THE DATABASE IMPORTANT INFORMATION
-      // LIST OF USERS
-      Table t = this.getCatalog().getTable("USERTABLE");
-      String userCount = SQLUtil.getMaxColSQL(this.workConf.getDatabaseType(), t, "ycsb_key");
-
-      try (Connection metaConn = this.makeConnection();
-          Statement stmt = metaConn.createStatement();
-          ResultSet res = stmt.executeQuery(userCount)) {
-        int init_record_count = (int)(workConf.getScaleFactor() * 1000);
-//        while (res.next()) {
-//          init_record_count = res.getInt(1);
-//        }
-
-        for (int i = 0; i < workConf.getTerminals(); ++i) {
-          workers.add(new YCSBWorker(this, i, init_record_count));
-        }
-      }
-    } catch (SQLException e) {
-      LOG.error(e.getMessage(), e);
+    int init_record_count = (int)(workConf.getScaleFactor() * 1000);
+    for (int i = 0; i < workConf.getTerminals(); ++i) {
+      workers.add(new YCSBWorker(this, i, init_record_count));
     }
     return workers;
   }

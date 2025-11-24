@@ -1,8 +1,13 @@
 package org.dbiir.tristar;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -134,21 +139,24 @@ public class TriStar {
         // register and analyse transaction templates
         if (wrkld.getConcurrencyControlType() == CCType.RC_TAILOR ||
                 wrkld.getConcurrencyControlType() == CCType.SI_TAILOR ||
-                wrkld.getConcurrencyControlType() == CCType.DYNAMIC) {
-            EventLoopGroup eventExecutors = new NioEventLoopGroup();
+                wrkld.getConcurrencyControlType() == CCType.DYNAMIC ||
+                wrkld.getConcurrencyControlType() == CCType.FS) {
+            Socket socket = null;
+            BufferedReader in;
+            PrintWriter out;
             try {
                 System.out.println("connect to txnSails server");
-                Bootstrap bootstrap =  new Bootstrap();
-                bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new NettyClientInitializer());
-                ChannelFuture channelFuture = bootstrap.connect(wrkld.getTxnSailsServerIp(),9876).sync();
+                socket = new Socket(wrkld.getTxnSailsServerIp(), 9876);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
                 for (BenchmarkModule benchmark : benchList) {
-                    registerTemplateSQLs(channelFuture.channel(), benchmark.getProcedures());
+                    registerTemplateSQLs(in, out, benchmark.getProcedures());
                 }
-                analyseTemplates(channelFuture.channel());
-                channelFuture.channel().closeFuture().sync();
-                channelFuture.channel().close();
+                analyseTemplates(in, out);
             } finally {
-                eventExecutors.shutdownGracefully();
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
             }
         }
 
@@ -184,18 +192,19 @@ public class TriStar {
         // close remote server
         if (wrkld.getConcurrencyControlType() == CCType.RC_TAILOR ||
                 wrkld.getConcurrencyControlType() == CCType.SI_TAILOR ||
-                wrkld.getConcurrencyControlType() == CCType.DYNAMIC) {
-            EventLoopGroup eventExecutors = new NioEventLoopGroup();
+                wrkld.getConcurrencyControlType() == CCType.DYNAMIC ||
+                wrkld.getConcurrencyControlType() == CCType.FS) {
+            Socket socket = null;
+            PrintWriter out;
             try {
-                System.out.println("close txnSails server");
-                Bootstrap bootstrap =  new Bootstrap();
-                bootstrap.group(eventExecutors).channel(NioSocketChannel.class).handler(new NettyClientInitializer());
-                ChannelFuture channelFuture = bootstrap.connect(wrkld.getTxnSailsServerIp(),9876).sync();
-                channelFuture.channel().writeAndFlush("close").sync();
-                channelFuture.channel().closeFuture().sync(); // wait for server closing the channel
-                channelFuture.channel().close();
+                System.out.println("connect to txnSails server");
+                socket = new Socket(wrkld.getTxnSailsServerIp(), 9876);
+                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
+                out.println("close");
             } finally {
-                eventExecutors.shutdownGracefully();
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
             }
         }
 
@@ -649,6 +658,7 @@ public class TriStar {
         }
 
         FileUtil.makeDirIfNotExists(outputDirectory);
+        FileUtil.makeDirIfNotExists(metaDirectory);
         ResultWriter rw = new ResultWriter(r, xmlConfig, argsLine);
 
         String name = StringUtils.join(StringUtils.split(argsLine.getOptionValue("b"), ','), '-');
@@ -741,52 +751,13 @@ public class TriStar {
         return (false);
     }
 
-    // interact with txnSails server
-    public static class NettyClientInitializer extends ChannelInitializer<SocketChannel> {
-        @Override
-        protected void initChannel(SocketChannel ch) throws Exception {
-            ChannelPipeline pipeline = ch.pipeline();
-            // Decoder
-            pipeline.addLast(new LengthFieldBasedFrameDecoder(4096, 0, 4, 0, 4));
-            // Encoder
-            pipeline.addLast(new LengthFieldPrepender(4));
-            pipeline.addLast(new StringEncoder(CharsetUtil.UTF_8));
-            pipeline.addLast(new StringDecoder(CharsetUtil.UTF_8));
-            pipeline.addLast(new NettyClientHandler());
-        }
-    }
-
-
-    public static class NettyClientHandler extends SimpleChannelInboundHandler<String> {
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
-//            System.out.println("response: " + msg);
-//            ctx.writeAndFlush("from client " + System.currentTimeMillis());
-            buffer = msg;
-            // unlock the `waitForResponse` lock
-            unlockWaitForResponse();
-        }
-
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            cause.printStackTrace();
-            ctx.close();
-        }
-
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-//            System.out.println("connect to the server");
-        }
-    }
-
-    private static void registerTemplateSQLs(Channel ctx,
-                                             Map<TransactionType, Procedure> procedures) throws InterruptedException {
+    private static void registerTemplateSQLs(BufferedReader in, PrintWriter out,
+        Map<TransactionType, Procedure> procedures) throws InterruptedException {
         // register sql apis
         for (Map.Entry<TransactionType, Procedure> entry: procedures.entrySet()) {
             if (entry.getKey().equals(TransactionType.INVALID)) {
                 continue;
             }
-//            sendMsgToTxnSailsServer(ctx, "register_begin#" + entry.getKey().getName() + "\n");
             if (entry.getValue().getTemplateSQLMetas() == null) {
                 continue;
             }
@@ -800,55 +771,34 @@ public class TriStar {
                     sb.append(t.getOriginSQL());
                 } else {
                     sb.append(t.getOriginSQL()).append("#");
-                    sb.append(t.getIndexInClientSide());
+                    sb.append(t.getSkipIndex());
                 }
-                sendMsgToTxnSailsServer(ctx, sb.toString() + "\n");
+                out.println(sb.toString());
                 // update the server side index
-                updateTheServerSideIndex(entry.getValue(), t);
-            }
-//            sendMsgToTxnSailsServer(ctx, "register_end#" + entry.getKey().getName() + "\n");
-        }
-
-    }
-
-    private static void analyseTemplates(Channel ctx) throws InterruptedException {
-        sendMsgToTxnSailsServer(ctx, "analysis\n");
-        lockWaitForResponse();
-        ctx.close();
-        unlockWaitForResponse();
-    }
-
-    private static void updateTheServerSideIndex(Procedure proc, TemplateSQLMeta t) {
-        lockWaitForResponse();
-        String[] parts = buffer.split("#");
-        if (parts.length < 2) {
-            System.out.println("response not includes  " + buffer);
-        }
-        proc.updateClientServerIndexMap(t.getIndexInClientSide(), Integer.parseInt(parts[1]));
-        unlockWaitForResponse();
-    }
-
-    private static List<TemplateSQLMeta> getTemplateSQLMeta(Procedure p) {
-        return p.getTemplateSQLMetas();
-    }
-
-    private static void sendMsgToTxnSailsServer(Channel ctx, String msg) throws InterruptedException {
-        lockWaitForResponse();
-        ByteBuf resp = ctx.alloc().buffer(msg.length());
-        resp.writeBytes(msg.getBytes(StandardCharsets.UTF_8));
-        ctx.writeAndFlush(resp).sync();
-    }
-
-    private static void lockWaitForResponse() {
-        while (!Thread.interrupted() && !waitForRespond.compareAndSet(false, true)) {
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
+                try {
+                    String response = in.readLine();
+                    String[] parts = response.split("#");
+                    if (parts.length < 2) {
+                        System.out.println("response not includes  " + response);
+                    }
+                    entry.getValue().updateClientServerIndexMap(t.getIndexInClientSide(), Integer.parseInt(parts[1]));
+                } catch (IOException ex) {
+                    System.out.println("The connection seems to be closed.");
+                    System.out.println(List.of(ex.getStackTrace()));
+                    throw new InterruptedException(ex.getMessage());
+                }
             }
         }
     }
 
-    private static void unlockWaitForResponse() {
-        waitForRespond.set(false);
+    private static void analyseTemplates(BufferedReader in, PrintWriter out) throws InterruptedException {
+        out.println("analysis");
+        try {
+            in.readLine();
+        } catch (IOException ex) {
+            System.out.println("The connection seems to be closed.");
+            System.out.println(List.of(ex.getStackTrace()));
+            throw new InterruptedException(ex.getMessage());
+        }
     }
 }

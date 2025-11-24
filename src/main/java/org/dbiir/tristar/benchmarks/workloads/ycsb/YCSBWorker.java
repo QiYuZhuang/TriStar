@@ -48,10 +48,10 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   private int[] keynames = new int[10];
   private long tid;
   private final int init_record_count;
-   private final int phaseNum = 8;
-   private final double[] zipfPhases = new double[]{0.1, 0.1, 0.1, 1.3, 0.7, 1.3, 0.7, 1.1};
-   private final double[] ratio1Phases = new double[]{1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
-   private final double[] ratio2Phases = new double[]{0.1, 0.1, 0.1, 0.95, 0.05, 0.1, 0.1, 0.1};
+  private final int phaseNum = 8;
+  private final double[] zipfPhases = new double[]{0.1, 0.1, 0.1, 1.3, 0.7, 1.3, 0.7, 1.1};
+  private final double[] ratio1Phases = new double[]{1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+  private final double[] ratio2Phases = new double[]{0.1, 0.1, 0.1, 0.95, 0.05, 0.1, 0.1, 0.1};
 //  private final int phaseNum = 4;
 //  private final double[] zipfPhases = new double[]{0.1, 0.1, 1.3, 0.7};
 //  private final double[] ratio1Phases = new double[]{1.0, 1.0, 1.0, 1.0};
@@ -59,7 +59,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   private final int phaseInterval = 10000;
   private int phaseCount = 0;
   private long lastPhaseTimestamp = 0L;
-  private final boolean dynamic = true;
+  private final boolean dynamic = false;
 
   public YCSBWorker(YCSBBenchmark benchmarkModule, int id, int init_record_count) {
     super(benchmarkModule, id);
@@ -77,6 +77,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll("\"", ".");
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll("'", "~");
         this.fixParams[i][j] = this.fixParams[i][j].replaceAll("#", "~");
+        this.fixParams[i][j] = this.fixParams[i][j].replaceAll("@", "~");
       }
     }
 
@@ -278,6 +279,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       this.params[i] = this.params[i].replaceAll("\"", ".");
       this.params[i] = this.params[i].replaceAll("'", "~");
       this.params[i] = this.params[i].replaceAll("#", "~");
+      this.params[i] = this.params[i].replaceAll("@", "~");
     }
   }
 }
