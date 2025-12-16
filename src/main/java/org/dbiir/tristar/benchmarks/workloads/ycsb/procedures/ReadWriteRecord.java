@@ -2,6 +2,7 @@ package org.dbiir.tristar.benchmarks.workloads.ycsb.procedures;
 
 import static org.dbiir.tristar.benchmarks.workloads.ycsb.YCSBConstants.TABLE_NAME;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -147,7 +148,7 @@ public class ReadWriteRecord extends Procedure {
                     if (i == len - 1) {
                       worker.parseExecutionResults();
                     }
-                } catch (InterruptedException ex) {
+                } catch (IOException ex) {
                     System.out.println("InterruptedException on sending or receiving message");
                 }
             } else {

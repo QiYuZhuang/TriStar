@@ -18,6 +18,7 @@
 
  package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+ import java.io.IOException;
  import java.math.BigDecimal;
  import java.sql.Connection;
  import java.sql.PreparedStatement;
@@ -164,7 +165,7 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
         try {
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Delivery", 0, no_o_id, d_id, w_id));
           worker.parseExecutionResults();
-        } catch (InterruptedException e) {
+        } catch (IOException e) {
           System.out.println("InterruptedException on sending or receiving message");
         }
       } else {
@@ -193,7 +194,7 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
         try {
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Delivery", 1, no_o_id, d_id, w_id));
           worker.parseExecutionResults();
-        } catch (InterruptedException e) {
+        } catch (IOException e) {
           System.out.println("InterruptedException on sending or receiving message");
         }
       } else {
@@ -214,7 +215,7 @@ import org.dbiir.tristar.transaction.isolation.TemplateSQLMeta;
          worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Delivery", 2,
                  BigDecimal.valueOf(orderLineTotal), w_id, d_id, c_id));
          worker.parseExecutionResults();
-       } catch (InterruptedException e) {
+       } catch (IOException e) {
          System.out.println("InterruptedException on sending or receiving message");
        }
      } else {

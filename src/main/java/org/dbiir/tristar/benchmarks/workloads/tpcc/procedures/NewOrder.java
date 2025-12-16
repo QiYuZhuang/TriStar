@@ -17,6 +17,7 @@
 
   package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+  import java.io.IOException;
   import java.util.Random;
   import java.util.HashMap;
   import java.util.LinkedList;
@@ -277,7 +278,7 @@
         try {
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "NewOrder", 0, w_id));
           worker.parseExecutionResults();
-        } catch (InterruptedException e) {
+        } catch (IOException e) {
           System.out.println("InterruptedException on sending or receiving message");
         }
       } else if (type == CCType.RC_FOR_UPDATE) {
@@ -305,7 +306,7 @@
         try {
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "NewOrder", 2, w_id, d_id, c_id));
           worker.parseExecutionResults();
-        } catch (InterruptedException e) {
+        } catch (IOException e) {
           System.out.println("InterruptedException on sending or receiving message");
         }
       } else if (type == CCType.RC_FOR_UPDATE) {
@@ -345,7 +346,7 @@
             worker.parseExecutionResults();
             worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "NewOrder", 5, w_id, d_id, d_next_o_id, ol_number));
             worker.parseExecutionResults();
-          } catch (InterruptedException e) {
+          } catch (IOException e) {
             throw new RuntimeException(e);
           }
         } else {
@@ -371,7 +372,7 @@
         try {
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "NewOrder", 3, w_id, d_id, c_id));
           worker.parseExecutionResults();
-        } catch (InterruptedException e) {
+        } catch (IOException e) {
           System.out.println("InterruptedException on sending or receiving message");
         }
       } else {
@@ -397,7 +398,7 @@
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "NewOrder", 1, w_id, d_id));
           List<List<String>> results = worker.parseExecutionResults();
           next_oid = Integer.parseInt(results.get(0).get(0));
-        } catch (InterruptedException e) {
+        } catch (IOException e) {
           System.out.println("InterruptedException on sending or receiving message");
         }
         return next_oid;

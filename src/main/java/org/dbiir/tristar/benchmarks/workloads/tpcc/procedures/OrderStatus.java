@@ -17,6 +17,7 @@
 
 package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -276,7 +277,7 @@ public class OrderStatus extends TPCCProcedure {
       try {
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "OrderStatus", 0, c_w_id, c_d_id, c_id));
         worker.parseExecutionResults();
-      } catch (InterruptedException e) {
+      } catch (IOException e) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {
@@ -305,7 +306,7 @@ public class OrderStatus extends TPCCProcedure {
       try {
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "OrderStatus", 1, o_w_id, o_d_id, o_id));
         worker.parseExecutionResults();
-      } catch (InterruptedException e) {
+      } catch (IOException e) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {
@@ -334,7 +335,7 @@ public class OrderStatus extends TPCCProcedure {
       try {
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "OrderStatus", 2, ol_w_id, ol_d_id, ol_o_id));
         worker.parseExecutionResults();
-      } catch (InterruptedException e) {
+      } catch (IOException e) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {

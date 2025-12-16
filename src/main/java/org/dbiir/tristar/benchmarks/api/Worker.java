@@ -19,11 +19,7 @@ package org.dbiir.tristar.benchmarks.api;
 
 import static org.dbiir.tristar.benchmarks.types.State.MEASURE;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -127,7 +123,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   @Getter
   protected boolean needAbort = false;
   protected BufferedReader in;
-  protected PrintWriter out;
+  protected BufferedWriter out;
   protected Socket socket;
   
   public Worker(T benchmark, int id) {
@@ -141,8 +137,10 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     if (useTxnSailsServer()) {
       try {
         socket = new Socket(benchmark.workConf.getTxnSailsServerIp(), 9876);
-        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
+        in = new BufferedReader(
+                new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+        out = new BufferedWriter(
+                new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
       } catch (IOException e) {
         System.out.println(List.of(e.getStackTrace()));
         throw new RuntimeException(e);
@@ -940,7 +938,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       try{
         sendMsgToTxnSailsServer("rollback");
         parseControlResults();
-      } catch (InterruptedException e) {
+      } catch (IOException e) {
         // TODO: parse the exception
         System.out.println(e);
       }
@@ -954,7 +952,7 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       try{
         sendMsgToTxnSailsServer("commit");
         parseControlResults();
-      } catch (InterruptedException e) {
+      } catch (IOException e) {
         // TODO: parse the exception
       }
     } else {
@@ -968,8 +966,9 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             || benchmark.getCCType() == CCType.DYNAMIC_B || benchmark.getCCType() == CCType.FS;
   }
 
-  public void sendMsgToTxnSailsServer(String msg) throws InterruptedException {
-    out.println(msg);
+  public void sendMsgToTxnSailsServer(String msg) throws IOException {
+    out.write(msg + "\n");
+    out.flush();
     // System.out.println(this.toString() + " send msg to txnSails server: " + msg);
   }
 

@@ -17,6 +17,7 @@
 
 package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -110,7 +111,7 @@ public class StockLevel extends TPCCProcedure {
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "StockLevel", w_id, i_id));
         List<List<String>> results = worker.parseExecutionResults();
         quantity = Integer.parseInt(results.get(0).get(0));
-      } catch (InterruptedException e) {
+      } catch (IOException e) {
         System.out.println("InterruptedException on sending or receiving message");
       }
       return quantity;

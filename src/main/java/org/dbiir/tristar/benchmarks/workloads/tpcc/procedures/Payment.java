@@ -17,6 +17,7 @@
 
 package org.dbiir.tristar.benchmarks.workloads.tpcc.procedures;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -180,7 +181,7 @@ public class Payment extends TPCCProcedure {
       try {
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Payment", 0, BigDecimal.valueOf(paymentAmount), w_id));
         worker.parseExecutionResults();
-      } catch (InterruptedException e) {
+      } catch (IOException e) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {
@@ -202,7 +203,7 @@ public class Payment extends TPCCProcedure {
       try {
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Payment", 1, BigDecimal.valueOf(paymentAmount), w_id, districtID));
         worker.parseExecutionResults();
-      } catch (InterruptedException e) {
+      } catch (IOException e) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {
@@ -228,7 +229,7 @@ public class Payment extends TPCCProcedure {
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Payment", 2, amount, customerWarehouseID,
                 customerDistrictID, customerID));
         worker.parseExecutionResults();
-      } catch (InterruptedException ex) {
+      } catch (IOException ex) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {

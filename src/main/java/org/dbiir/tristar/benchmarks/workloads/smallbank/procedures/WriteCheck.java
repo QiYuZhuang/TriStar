@@ -25,6 +25,7 @@
  ***************************************************************************/
 package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -164,7 +165,7 @@ public class WriteCheck extends Procedure {
           worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "WriteCheck", 3, amount, custId));
         }
         worker.parseExecutionResults();
-      } catch (InterruptedException ex) {
+      } catch (IOException ex) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {

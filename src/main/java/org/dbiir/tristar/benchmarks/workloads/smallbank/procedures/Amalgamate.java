@@ -25,6 +25,7 @@
  ***************************************************************************/
 package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -213,7 +214,7 @@ public class Amalgamate extends Procedure {
         double total = checkingBalance + savingsBalance;
         worker.sendMsgToTxnSailsServer(StringUtil.joinValuesWithHash("execute", "Amalgamate", 4, total, custId1));
         worker.parseExecutionResults();
-      } catch (InterruptedException ex) {
+      } catch (IOException ex) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {

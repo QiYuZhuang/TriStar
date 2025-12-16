@@ -25,6 +25,7 @@
  ***************************************************************************/
 package org.dbiir.tristar.benchmarks.workloads.smallbank.procedures;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -144,7 +145,7 @@ public class Balance extends Procedure {
           String msg = String.format("No %s for customer #%d", SmallBankConstants.TABLENAME_CHECKING, custId);
           throw new UserAbortException(msg);
         }
-      } catch (InterruptedException ex) {
+      } catch (IOException ex) {
         System.out.println("InterruptedException on sending or receiving message");
       }
     } else {
