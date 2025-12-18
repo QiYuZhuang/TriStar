@@ -25,13 +25,16 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+import lombok.Getter;
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.WorkloadConfiguration;
 import org.dbiir.tristar.benchmarks.api.BenchmarkModule;
+import org.dbiir.tristar.benchmarks.api.TransactionType;
 import org.dbiir.tristar.benchmarks.api.Worker;
 import org.dbiir.tristar.benchmarks.catalog.Table;
 import org.dbiir.tristar.benchmarks.util.SQLUtil;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.procedures.InsertRecord;
+import org.dbiir.tristar.config.Partition;
 import org.dbiir.tristar.transaction.concurrency.LockTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +52,7 @@ public final class YCSBBenchmark extends BenchmarkModule {
   protected final double wrtup;
   protected final double wrtxn;
   protected final double zipf;
+  protected List<Partition> partitions = null;
 
   public YCSBBenchmark(WorkloadConfiguration workConf) throws SQLException {
     super(workConf);
@@ -88,6 +92,21 @@ public final class YCSBBenchmark extends BenchmarkModule {
       this.wrtxn = workConf.getXmlConfig().getDouble("wrtxn");
     } else {
       this.wrtxn = 0.5;
+    }
+
+    // fine-grained partition info
+    if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("partitions")) {
+      int numPartitions = workConf.getXmlConfig().configurationsAt("partitions/partition").size();
+      this.partitions = new ArrayList<>(numPartitions);
+      for (int i = 1; i <= numPartitions; i++) {
+        String key = "partitions/partition[" + i + "]";
+        int partitionId = workConf.getXmlConfig().getInt(key + "/id");
+        int partitionWeight = workConf.getXmlConfig().getInt(key + "/weight");
+        double partitionZipf = workConf.getXmlConfig().getDouble(key + "/zipf");
+        double partitionWrtup = workConf.getXmlConfig().getDouble(key + "/wrtup");
+        double partitionWrtxn = workConf.getXmlConfig().getDouble(key + "/wrtxn");
+        this.partitions.add(new Partition(partitionId, partitionWeight, partitionZipf, partitionWrtup, partitionWrtxn));
+      }
     }
   }
 

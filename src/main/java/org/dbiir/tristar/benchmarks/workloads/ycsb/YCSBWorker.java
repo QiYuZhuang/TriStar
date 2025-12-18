@@ -7,8 +7,7 @@ package org.dbiir.tristar.benchmarks.workloads.ycsb;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Objects;
+import java.util.*;
 
 import org.dbiir.tristar.adapter.TAdapter;
 import org.dbiir.tristar.benchmarks.api.Procedure;
@@ -26,8 +25,12 @@ import org.dbiir.tristar.benchmarks.workloads.ycsb.procedures.ReadWriteRecord;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.procedures.ScanRecord;
 import org.dbiir.tristar.benchmarks.workloads.ycsb.procedures.UpdateRecord;
 import org.dbiir.tristar.common.CCType;
+import org.dbiir.tristar.config.Partition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class YCSBWorker extends Worker<YCSBBenchmark> {
+  private static final Logger logger = LoggerFactory.getLogger(YCSBWorker.class);
   private ZipfianGenerator readRecord;
   private static CounterGenerator insertRecord;
   private final char[] data;
@@ -60,6 +63,10 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   private int phaseCount = 0;
   private long lastPhaseTimestamp = 0L;
   private final boolean dynamic = false;
+  // fine-grained workload generation
+  private final List<ZipfianGenerator> partitionReadGenerators;
+  private int[] operations = new int[10];
+  private int totalWeight;
 
   public YCSBWorker(YCSBBenchmark benchmarkModule, int id, int init_record_count) {
     super(benchmarkModule, id);
@@ -69,6 +76,20 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     this.init_record_count = init_record_count;
     this.readRecord = new ZipfianGenerator(this.rng(), (long)init_record_count, benchmarkModule.zipf);
     this.versionBuffer = new long[10];
+
+    if (benchmarkModule.partitions != null) {
+      this.partitionReadGenerators = new ArrayList<>(benchmarkModule.partitions.size());
+      long eachPartitionSize = this.init_record_count / this.phaseInterval;
+      long idx = 0;
+      for (Partition partition : benchmarkModule.partitions) {
+        this.partitionReadGenerators.add(new ZipfianGenerator(new Random(), idx,
+                Math.min(idx + eachPartitionSize, this.init_record_count), benchmarkModule.zipf));
+        idx += eachPartitionSize;
+        this.totalWeight += partition.getWeight();
+      }
+    } else {
+      this.partitionReadGenerators = new ArrayList<>();
+    }
 
     for(int i = 0; i < 10; ++i) {
       for(int j = 0; j < this.params.length; ++j) {
@@ -119,7 +140,11 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     } else if (procClass.equals(UpdateRecord.class)) {
       this.updateRecord(conn);
     } else if (procClass.equals(ReadWriteRecord.class)) {
-      this.readWriteRead(conn);
+      if (this.getBenchmark().getCCType() == CCType.FS || this.getBenchmark().getCCType() == CCType.SER) {
+        this.readWriteRecordFS(conn);
+      } else {
+        this.readWriteRecord(conn);
+      }
     }
 
     return TransactionStatus.SUCCESS;
@@ -257,7 +282,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     return false;
   }
 
-  private void readWriteRead(Connection conn) throws SQLException {
+  private void readWriteRecord(Connection conn) throws SQLException {
     CCType ccType = CCType.NUM_CC;
     for (int i = 0; i < totalRequest; i++) {
       int keyname = 0;
@@ -270,6 +295,79 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     }
 
     this.procReadWriteRecord.run(this, conn, keynames, fixParams, ratio1, ratio2, TAdapter.getInstance().getCCType());
+  }
+
+  private void readWriteRecordFS(Connection conn) throws SQLException {
+    // generate keys and operations according to partition parameters
+    int[] partitions = this.choosePartition();
+    int l = 0, r = 1;
+    while (r <= totalRequest) {
+      if (r == totalRequest || partitions[r] != partitions[l]) {
+        int partitionId = partitions[l];
+        generateKeyFromPartition(partitionId, l, r - 1);
+        l = r;
+      }
+      r++;
+    }
+    this.procReadWriteRecord.runFS(this, conn, keynames, fixParams, operations);
+  }
+
+  private int[] choosePartition() {
+    int[] partitions = new int[totalRequest];
+    for (int i = 0; i < totalRequest; i++) {
+      int partitionCount = this.partitionReadGenerators.size();
+      // random weight from 1 to 100
+      partitions[i] = -1;
+      int weight = this.rng().nextInt(this.totalWeight) + 1;
+      for (int j = 0; j < partitionCount; j++) {
+        Partition partition = this.getBenchmark().partitions.get(i);
+        if (weight <= partition.getWeight()) {
+          partitions[i] = partition.getId();
+          break;
+        } else {
+          weight -= partition.getWeight();
+        }
+      }
+      if (partitions[i] == -1) {
+        logger.error("Failed to choose partition, partitionCount: {}!", partitionCount);
+      }
+    }
+
+    Arrays.sort(partitions);
+
+    return partitions;
+  }
+
+  private void generateKeyFromPartition(int partitionId, int left, int right) {
+    // generate key name
+    int[] keys = new int[right - left + 1];
+    for (int i = 0; i < keys.length; i++) {
+      keys[i] = this.partitionReadGenerators.get(partitionId).nextInt();
+    }
+    Arrays.sort(keys);
+
+    // generate operations
+    double wrtxn = this.getBenchmark().partitions.get(partitionId).getWrtxn();
+    double wrtup = this.getBenchmark().partitions.get(partitionId).getWrtup();
+    int[] ops = new int[right - left + 1];
+    double rand1 = new Random().nextDouble();
+    for (int i = 0; i < ops.length; i++) {
+      double rand2 = new Random().nextDouble();
+
+      if (rand1 >= wrtxn || rand2 >= wrtup) {
+        // read operation
+        ops[i] = 1;
+      } else {
+        // write operation
+        ops[i] = 2;
+      }
+    }
+    Arrays.sort(ops);
+
+    for (int i = 0; i < right - left + 1; i++) {
+      this.keynames[i + left] = keys[i];
+      this.operations[i + left] = ops[i];
+    }
   }
 
   private void buildParameters() {
