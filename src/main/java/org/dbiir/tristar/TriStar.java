@@ -179,7 +179,8 @@ public class TriStar {
         if (wrkld.getConcurrencyControlType() == CCType.RC_TAILOR ||
                 wrkld.getConcurrencyControlType() == CCType.SI_TAILOR ||
                 wrkld.getConcurrencyControlType() == CCType.DYNAMIC ||
-                wrkld.getConcurrencyControlType() == CCType.FS) {
+                wrkld.getConcurrencyControlType() == CCType.FS ||
+                wrkld.getConcurrencyControlType() == CCType.SER) {
             Socket socket = null;
             PrintWriter out;
             try {
