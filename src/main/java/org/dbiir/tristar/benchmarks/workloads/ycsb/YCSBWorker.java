@@ -314,28 +314,35 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
 
   private int[] choosePartition() {
     int[] partitions = new int[totalRequest];
-    for (int i = 0; i < totalRequest; i++) {
-      int partitionCount = this.partitionReadGenerators.size();
-      // random weight from 1 to 100
-      partitions[i] = -1;
-      int weight = this.rng().nextInt(this.totalWeight) + 1;
-      for (int j = 0; j < partitionCount; j++) {
-        Partition partition = this.getBenchmark().partitions.get(i);
-        if (weight <= partition.getWeight()) {
-          partitions[i] = partition.getId();
-          break;
-        } else {
-          weight -= partition.getWeight();
-        }
+
+    boolean isDistributed = this.rng().nextDouble() < this.getBenchmark().distributed;
+    if (!isDistributed) {
+      int partitionId = this.randGenerateSinglePartition();
+      Arrays.fill(partitions, partitionId);
+    } else {
+      for (int i = 0; i < totalRequest; i++) {
+        partitions[i] = this.randGenerateSinglePartition();
       }
-      if (partitions[i] == -1) {
-        logger.error("Failed to choose partition, partitionCount: {}!", partitionCount);
-      }
+      Arrays.sort(partitions);
     }
 
-    Arrays.sort(partitions);
-
     return partitions;
+  }
+
+  private int randGenerateSinglePartition() {
+    int partitionCount = this.partitionReadGenerators.size();
+    // random weight from 1 to 100
+    int weight = this.rng().nextInt(this.totalWeight) + 1;
+    for (int j = 0; j < partitionCount; j++) {
+      Partition partition = this.getBenchmark().partitions.get(j);
+      if (weight <= partition.getWeight()) {
+        return partition.getId();
+      } else {
+        weight -= partition.getWeight();
+      }
+    }
+    logger.error("Failed to choose partition, partitionCount: {}!", partitionCount);
+    return -1;
   }
 
   private void generateKeyFromPartition(int partitionId, int left, int right) {

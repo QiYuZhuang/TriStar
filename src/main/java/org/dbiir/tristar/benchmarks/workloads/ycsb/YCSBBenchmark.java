@@ -53,6 +53,7 @@ public final class YCSBBenchmark extends BenchmarkModule {
   protected final double wrtxn;
   protected final double zipf;
   protected List<Partition> partitions = null;
+  protected float distributed;
 
   public YCSBBenchmark(WorkloadConfiguration workConf) throws SQLException {
     super(workConf);
@@ -95,7 +96,7 @@ public final class YCSBBenchmark extends BenchmarkModule {
     }
 
     // fine-grained partition info
-    if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("partitions")) {
+    if (workConf.getXmlConfig() != null) {
       int numPartitions = workConf.getXmlConfig().configurationsAt("partitions/partition").size();
       this.partitions = new ArrayList<>(numPartitions);
       for (int i = 1; i <= numPartitions; i++) {
@@ -107,6 +108,12 @@ public final class YCSBBenchmark extends BenchmarkModule {
         double partitionWrtxn = workConf.getXmlConfig().getDouble(key + "/wrtxn");
         this.partitions.add(new Partition(partitionId, partitionWeight, partitionZipf, partitionWrtup, partitionWrtxn));
       }
+    }
+
+    if (workConf.getXmlConfig() != null && workConf.getXmlConfig().containsKey("distributed")) {
+      this.distributed = workConf.getXmlConfig().getFloat("distributed");
+    } else {
+      this.distributed = 0.0f;
     }
   }
 
