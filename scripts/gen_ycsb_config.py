@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/data/TriStar/tristar/bin/python
 import os
 import random
 from xml.etree import ElementTree
@@ -36,7 +36,7 @@ cc_map = {
 
 
 def generate_postgresql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrtup: float, terminals, weight, rate="",
-                               dir="../config", case_name=""):
+                                    dir="../config", case_name=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
@@ -88,14 +88,14 @@ def generate_postgresql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrt
     f.close()
 
 
-def generate_postgresql_ycsb_config_parition(cc_type: str, zipf: list[float], wrtxn: list[float], wrtup: list[float], p_weights: list[float], 
+def generate_postgresql_ycsb_config_parition(cc_type: str, zipf: list[float], wrtxn: list[float], wrtup: list[float], p_weights: list[float],
                                              terminals, weight, rate="", config_dirname="../config", case_name=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
     # 添加子节点
     ElementTree.SubElement(root, 'type').text = "POSTGRES"
     ElementTree.SubElement(root, 'driver').text = "org.postgresql.Driver"
-    ElementTree.SubElement(root, "url").text = ("jdbc:postgresql://localhost:5432/ycsb?sslmode=disable&amp"
+    ElementTree.SubElement(root, "url").text = ("jdbc:postgresql://10.10.10.85:5432/ycsb?sslmode=disable&amp"
                                                 ";ApplicationName=ycsb&amp;reWriteBatchedInserts=true")
     ElementTree.SubElement(root, "username").text = "postgres"
     ElementTree.SubElement(root, "password").text = "Ss123!@#"
@@ -134,7 +134,7 @@ def generate_postgresql_ycsb_config_parition(cc_type: str, zipf: list[float], wr
     filename += "_zipf_" + "_".join([str(f) for f in zipf])
     filename += "_wrtxn_" + "_".join([str(f) for f in wrtxn])
     filename += "_wrtup_" + "_".join([str(f) for f in wrtup])
-    
+
     if len(rate):
         filename += "_rate_" + str(rate)
     if len(case_name) > 0:
@@ -175,17 +175,18 @@ def ycsb_wr_2_partition(terminal=128):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
     p_weights = [50, 50]
-    zipf = [
-        [0.1, 0.7, 1.3],
-        [0.1, 0.7, 1.3]]
-    wrtxn = [[1], 
+    # zipf = [[0.1, 0.7, 1.3],
+    #         [0.1, 0.7, 1.3]]
+    zipf = [[0.1, 1.3],
+            [0.1, 1.3]]
+    wrtxn = [[1],
              [1]]
-    wrtup = [[0.1, 0.3, 0.5, 0.7, 0.9], 
+    wrtup = [[0.9],
              [0.0]]
     cc = ["SERIALIZABLE", "FS"]
     # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
     weight = [0, 0, 0, 0, 0, 0, 100]
-    
+
     partition_zipf = product(*zipf)
     partition_wrtxn = product(*wrtxn)
     partition_wrtup = product(*wrtup)
@@ -259,11 +260,11 @@ if __name__ == '__main__':
     if not os.path.exists("../config"):
         os.mkdir("../config")
 
-    txnSailsServerIp = "21.6.66.164"
+    txnSailsServerIp = "10.10.10.85"
     scaleFactor = 1000
     warmupTime = 30
     execTime = 90
     # ycsb_scalability()
     # ycsb_skew(128)
-    ycsb_wr_2_partition(128)
+    ycsb_wr_2_partition(32)
     # ycsb_random(terminal=128, cnt=100)

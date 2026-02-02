@@ -49,3 +49,4 @@ project.yaml
 logs/
 running_tests/
 models/
+tristar/

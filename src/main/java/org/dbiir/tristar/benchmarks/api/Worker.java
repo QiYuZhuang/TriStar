@@ -125,7 +125,10 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
   protected BufferedReader in;
   protected BufferedWriter out;
   protected Socket socket;
-  
+  @Getter
+  @Setter
+  protected boolean retryTransaction = false;
+
   public Worker(T benchmark, int id) {
     this.id = id;
     this.benchmark = benchmark;
@@ -831,6 +834,8 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             case RETRY_DIFFERENT -> this.txtRetryDifferent.put(transactionType);
             case ERROR -> this.txnErrors.put(transactionType);
           }
+
+          this.retryTransaction = status == TransactionStatus.RETRY;
         }
       }
     } catch (SQLException ex) {

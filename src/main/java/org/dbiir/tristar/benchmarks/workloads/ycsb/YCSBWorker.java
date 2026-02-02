@@ -79,11 +79,11 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
 
     if (benchmarkModule.partitions != null) {
       this.partitionReadGenerators = new ArrayList<>(benchmarkModule.partitions.size());
-      long eachPartitionSize = this.init_record_count / this.phaseInterval;
+      long eachPartitionSize = this.init_record_count / benchmarkModule.partitions.size();
       long idx = 0;
       for (Partition partition : benchmarkModule.partitions) {
         this.partitionReadGenerators.add(new ZipfianGenerator(new Random(), idx,
-                Math.min(idx + eachPartitionSize, this.init_record_count), benchmarkModule.zipf));
+                Math.min(idx + eachPartitionSize, this.init_record_count), partition.getZipf()));
         idx += eachPartitionSize;
         this.totalWeight += partition.getWeight();
       }
@@ -299,16 +299,20 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
 
   private void readWriteRecordFS(Connection conn) throws SQLException {
     // generate keys and operations according to partition parameters
-    int[] partitions = this.choosePartition();
-    int l = 0, r = 1;
-    while (r <= totalRequest) {
-      if (r == totalRequest || partitions[r] != partitions[l]) {
-        int partitionId = partitions[l];
-        generateKeyFromPartition(partitionId, l, r - 1);
-        l = r;
+    if (!retryTransaction) {
+      int[] partitions = this.choosePartition();
+      int l = 0, r = 1;
+      while (r <= totalRequest) {
+        if (r == totalRequest || partitions[r] != partitions[l]) {
+          int partitionId = partitions[l];
+          generateKeyFromPartition(partitionId, l, r - 1);
+          l = r;
+        }
+        r++;
       }
-      r++;
     }
+
+    System.out.println("Generated keys: " + Arrays.toString(this.keynames) + ", operations: " + Arrays.toString(this.operations));
     this.procReadWriteRecord.runFS(this, conn, keynames, fixParams, operations);
   }
 
