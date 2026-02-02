@@ -185,14 +185,6 @@ public class ReadWriteRecord extends Procedure {
 
 
   public void runFS(Worker worker, Connection conn, int[] keyname, String[][] vals, int[] operations) throws SQLException {
-    int[] sortedKeyname = new int[keyname.length];
-    Arrays.sort(keyname);
-    for (int i = 0; i < keyname.length; i++) {
-      sortedKeyname[i] = keyname[keyname.length - i - 1];
-    }
-
-    System.arraycopy(sortedKeyname, 0, keyname, 0, keyname.length);
-
     int len = keyname.length;
 
     StringBuilder sqlCommand = new StringBuilder();
@@ -203,19 +195,19 @@ public class ReadWriteRecord extends Procedure {
           if (operations[i] == 1) {
             if (i == len - 1) {
               // last operation
-              sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i], 1));
+              sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, keyname[i], 1));
               worker.sendMsgToTxnSailsServer(sqlCommand.toString());
             } else {
-              sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, sortedKeyname[i]));
+              sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 0, keyname[i]));
               sqlCommand.append("@");
             }
           } else if (operations[i] == 2) {
             if (i == len - 1) {
               // last operation
-              sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i], 1));
+              sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], keyname[i], 1));
               worker.sendMsgToTxnSailsServer(sqlCommand.toString());
             } else {
-              sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], sortedKeyname[i]));
+              sqlCommand.append(StringUtil.joinValuesWithHash("execute", "ReadWriteRecord", 1, vals[i][0], keyname[i]));
               sqlCommand.append("@");
             }
           }
@@ -228,7 +220,7 @@ public class ReadWriteRecord extends Procedure {
       } else {
         if (operations[i] == 1) {
           try (PreparedStatement stmt = conn.prepareStatement(readStmt.getSQL())) {
-            stmt.setInt(1, sortedKeyname[i]);
+            stmt.setInt(1, keyname[i]);
             boolean rs = stmt.execute();
             if (rs) {
               try (ResultSet r = stmt.getResultSet()) {
@@ -242,7 +234,7 @@ public class ReadWriteRecord extends Procedure {
         } else if (operations[i] == 2) {
           try (PreparedStatement stmt = conn.prepareStatement(updateStmt.getSQL())) {
             stmt.setString(1, vals[i][0]);
-            stmt.setInt(2, sortedKeyname[i]);
+            stmt.setInt(2, keyname[i]);
             boolean rs = stmt.execute();
             if (rs) {
               stmt.getResultSet().close();

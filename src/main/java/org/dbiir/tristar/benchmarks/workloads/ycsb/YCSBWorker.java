@@ -353,7 +353,9 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
     // generate key name
     int[] keys = new int[right - left + 1];
     for (int i = 0; i < keys.length; i++) {
-      keys[i] = this.partitionReadGenerators.get(partitionId).nextInt();
+      do {
+        keys[i] = this.partitionReadGenerators.get(partitionId).nextInt();
+      } while (this.isDuplicatedKey(keys[i], i, keys));
     }
     Arrays.sort(keys);
 
@@ -374,7 +376,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
       }
     }
     Arrays.sort(ops);
-
+    System.out.println("Partition " + partitionId + " generates keys: " + Arrays.toString(keys) + ", operations: " + Arrays.toString(ops));
     for (int i = 0; i < right - left + 1; i++) {
       this.keynames[i + left] = keys[i];
       this.operations[i + left] = ops[i];

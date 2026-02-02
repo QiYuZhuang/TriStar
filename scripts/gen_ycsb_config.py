@@ -88,7 +88,8 @@ def generate_postgresql_ycsb_config(cc_type: str, zipf: float, wrtxn: float, wrt
     f.close()
 
 
-def generate_postgresql_ycsb_config_parition(cc_type: str, zipf: list[float], wrtxn: list[float], wrtup: list[float], p_weights: list[float],
+def generate_postgresql_ycsb_config_parition(cc_type: str, zipf: list[float], wrtxn: list[float], wrtup: list[float],
+                                             p_weights: list[float], distributed: float,
                                              terminals, weight, rate="", config_dirname="../config", case_name=""):
     # 创建根节点
     root = ElementTree.Element('parameters')
@@ -108,6 +109,7 @@ def generate_postgresql_ycsb_config_parition(cc_type: str, zipf: list[float], wr
     for i in range(len(p_weights)):
         generate_partition(partitions, i, p_weights[i], zipf[i], wrtup[i], wrtxn[i])
 
+    ElementTree.SubElement(root, "distributed").text = str(distributed)
     # ElementTree.SubElement(root, "zipf").text = str(zipf)
     # ElementTree.SubElement(root, "wrtup").text = str(wrtup)
     # ElementTree.SubElement(root, "wrtxn").text = str(wrtxn)
@@ -186,16 +188,17 @@ def ycsb_wr_2_partition(terminal=128):
     cc = ["SERIALIZABLE", "FS"]
     # cc = ["SERIALIZABLE", "SI_ELT", "RC_ELT", "SI_FOR_UPDATE", "RC_FOR_UPDATE", "RC_TAILOR", "SI_TAILOR", "RC_TAILOR_LOCK"]
     weight = [0, 0, 0, 0, 0, 0, 100]
+    distributed = [1.0]
 
     partition_zipf = product(*zipf)
     partition_wrtxn = product(*wrtxn)
     partition_wrtup = product(*wrtup)
-    experiments = product(cc, partition_zipf, partition_wrtxn, partition_wrtup, [terminal])
+    experiments = product(cc, partition_zipf, partition_wrtxn, partition_wrtup, distributed, [terminal])
 
     for exp in experiments:
         # print(exp)
-        generate_postgresql_ycsb_config_parition(exp[0], exp[1], exp[2], exp[3],p_weights,
-                                                 exp[4], weight, config_dirname=dir_name)
+        generate_postgresql_ycsb_config_parition(exp[0], exp[1], exp[2], exp[3], p_weights, exp[4],
+                                                 exp[5], weight, config_dirname=dir_name)
 
 
 def ycsb_scalability():
