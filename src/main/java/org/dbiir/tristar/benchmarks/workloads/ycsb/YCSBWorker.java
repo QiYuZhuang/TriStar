@@ -67,6 +67,8 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   private final List<ZipfianGenerator> partitionReadGenerators;
   private int[] operations = new int[10];
   private int totalWeight;
+  private boolean distributed;
+  private int partitionId;
 
   public YCSBWorker(YCSBBenchmark benchmarkModule, int id, int init_record_count) {
     super(benchmarkModule, id);
@@ -86,6 +88,10 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
                 Math.min(idx + eachPartitionSize, this.init_record_count), partition.getZipf()));
         idx += eachPartitionSize;
         this.totalWeight += partition.getWeight();
+      }
+      this.distributed = this.rng().nextDouble() < benchmarkModule.distributed;
+      if (!this.distributed) {
+        partitionId = randGenerateSinglePartition();
       }
     } else {
       this.partitionReadGenerators = new ArrayList<>();
@@ -319,9 +325,7 @@ class YCSBWorker extends Worker<YCSBBenchmark> {
   private int[] choosePartition() {
     int[] partitions = new int[totalRequest];
 
-    boolean isDistributed = this.rng().nextDouble() < this.getBenchmark().distributed;
-    if (!isDistributed) {
-      int partitionId = this.randGenerateSinglePartition();
+    if (!this.distributed) {
       Arrays.fill(partitions, partitionId);
     } else {
       for (int i = 0; i < totalRequest; i++) {
